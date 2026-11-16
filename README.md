@@ -53,6 +53,12 @@ page never shows a broken image.
 go install github.com/tinhnd1902/gitid/cmd/gitid@latest
 ```
 
+If your shell then says `command not found: gitid`, the Go bin directory is not on your `PATH`. Add it once (zsh shown; use `~/.bashrc` for bash):
+
+```bash
+echo 'export PATH="$(go env GOPATH)/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
+```
+
 **Or download a release binary** (macOS and Linux, amd64 and arm64) from the [Releases page](https://github.com/tinhnd1902/gitid/releases):
 
 ```bash

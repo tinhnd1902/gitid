@@ -53,6 +53,12 @@ tồn tại, để trang không bao giờ hiện ảnh lỗi.
 go install github.com/tinhnd1902/gitid/cmd/gitid@latest
 ```
 
+Nếu shell báo `command not found: gitid` thì thư mục bin của Go chưa có trong `PATH`. Thêm một lần là xong (ví dụ cho zsh; với bash dùng `~/.bashrc`):
+
+```bash
+echo 'export PATH="$(go env GOPATH)/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
+```
+
 **Hoặc tải bản nhị phân** (macOS và Linux, amd64 và arm64) ở [trang Releases](https://github.com/tinhnd1902/gitid/releases):
 
 ```bash
