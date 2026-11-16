@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-16
+
+### Fixed
+
+- Release: the cask token must be a bare `{{ .Env.VAR }}` template
+  (0.1.1 binaries were released, but the tap update failed again).
+
 ## [0.1.1] - 2026-11-16
 
 ### Fixed

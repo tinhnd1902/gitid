@@ -81,7 +81,7 @@ homebrew_casks:
       owner: tinhnd1902
       name: homebrew-tap
       branch: main
-      token: '{{ index .Env "HOMEBREW_TAP_GITHUB_TOKEN" }}'
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     commit_author:
       name: gitid-release-bot
       email: noreply@github.com
