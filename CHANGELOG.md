@@ -9,20 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.2] - 2026-11-16
 
-### Fixed
-
-- Release: the cask token must be a bare `{{ .Env.VAR }}` template
-  (0.1.1 binaries were released, but the tap update failed again).
-
-## [0.1.1] - 2026-11-16
-
-### Fixed
-
-- Release: the Homebrew cask is now published to `tinhnd1902/homebrew-tap`
-  (0.1.0 binaries were released, but the tap update failed).
-
-## [0.1.0] - 2026-11-16
-
 First public version.
 
 ### Added
@@ -76,5 +62,5 @@ First public version.
 - Every value written to git or ssh configuration is validated and escaped;
   clone arguments are always passed after `--`.
 
-[Unreleased]: https://github.com/tinhnd1902/gitid/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/tinhnd1902/gitid/releases/tag/v0.1.0
+[Unreleased]: https://github.com/tinhnd1902/gitid/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/tinhnd1902/gitid/releases/tag/v0.1.2

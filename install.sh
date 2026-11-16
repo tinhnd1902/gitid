@@ -10,7 +10,7 @@
 #   less install.sh && sh install.sh
 #
 # Environment variables (all optional):
-#   VERSION         release to install, "0.1.0" or "v0.1.0" (default: latest)
+#   VERSION         release to install, "0.1.2" or "v0.1.2" (default: latest)
 #   INSTALL_DIR     target directory; it must be writable (default: /usr/local/bin
 #                   when writable, otherwise $HOME/.local/bin)
 #   NO_MODIFY_PATH  set to 1 to never touch shell startup files; the installer
