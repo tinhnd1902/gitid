@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-16
+
+### Fixed
+
+- Release: the Homebrew cask is now published to `tinhnd1902/homebrew-tap`
+  (0.1.0 binaries were released, but the tap update failed).
+
 ## [0.1.0] - 2026-11-16
 
 First public version.

@@ -81,12 +81,12 @@ homebrew_casks:
       owner: tinhnd1902
       name: homebrew-tap
       branch: main
-      token: '{{ envOrDefault "HOMEBREW_TAP_GITHUB_TOKEN" "" }}'
+      token: '{{ index .Env "HOMEBREW_TAP_GITHUB_TOKEN" }}'
     commit_author:
       name: gitid-release-bot
       email: noreply@github.com
     commit_msg_template: "gitid {{ .Tag }}"
-    skip_upload: '{{ if eq (envOrDefault "HOMEBREW_TAP_GITHUB_TOKEN" "") "" }}true{{ else }}false{{ end }}'
+    skip_upload: '{{ if index .Env "HOMEBREW_TAP_GITHUB_TOKEN" }}false{{ else }}true{{ end }}'
     # The binary is not code-signed or notarized yet, and Homebrew marks cask
     # downloads as quarantined, so Gatekeeper would block the first run. This
     # clears the flag for the gitid binary only (the archive is verified by the
