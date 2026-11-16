@@ -40,14 +40,35 @@ page never shows a broken image.
 
 ## Quick Start
 
-**Install via Homebrew tap (coming soon):**
+**1. Homebrew (macOS):**
 
 ```bash
-# not published yet; use one of the options below
-# brew install tinhnd1902/tap/gitid
+brew install tinhnd1902/tap/gitid
 ```
 
-**Or via `go install`:**
+**2. Install script (macOS and Linux, amd64 and arm64):**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tinhnd1902/gitid/main/install.sh | sh
+```
+
+The script downloads the latest release, verifies its sha256 against the release's `checksums.txt`, installs `gitid` (into `/usr/local/bin` when you can write there, otherwise `~/.local/bin`) and, if that directory is not on your `PATH` yet, adds it to your shell startup file. Open a new terminal afterwards. Options are environment variables:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tinhnd1902/gitid/main/install.sh | VERSION=0.1.0 sh          # a specific release
+curl -fsSL https://raw.githubusercontent.com/tinhnd1902/gitid/main/install.sh | INSTALL_DIR=$HOME/bin sh   # choose the directory (must be writable)
+curl -fsSL https://raw.githubusercontent.com/tinhnd1902/gitid/main/install.sh | NO_MODIFY_PATH=1 sh        # never edit shell startup files
+```
+
+Prefer to read it before running it?
+
+```bash
+curl -fsSLo install.sh https://raw.githubusercontent.com/tinhnd1902/gitid/main/install.sh
+less install.sh
+sh install.sh
+```
+
+**3. Or via `go install`:**
 
 ```bash
 go install github.com/tinhnd1902/gitid/cmd/gitid@latest
@@ -59,7 +80,7 @@ If your shell then says `command not found: gitid`, the Go bin directory is not 
 echo 'export PATH="$(go env GOPATH)/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
 ```
 
-**Or download a release binary** (macOS and Linux, amd64 and arm64) from the [Releases page](https://github.com/tinhnd1902/gitid/releases):
+**4. Or download a release binary** (macOS and Linux, amd64 and arm64) from the [Releases page](https://github.com/tinhnd1902/gitid/releases):
 
 ```bash
 tar -xzf gitid_<version>_<os>_<arch>.tar.gz
@@ -70,7 +91,9 @@ install -m 0755 gitid /usr/local/bin/gitid   # or any directory on your PATH
 <summary>More install notes</summary>
 
 - gitid needs **git 2.36 or newer** (it relies on `hasconfig:remote.*.url`). Run `git --version` to check.
-- Binaries are not code-signed or notarized yet. If macOS blocks a downloaded binary, remove the quarantine flag once: `xattr -d com.apple.quarantine /usr/local/bin/gitid`.
+- Binaries are not code-signed or notarized yet. Homebrew marks downloaded casks as quarantined, so the gitid cask removes that flag from the `gitid` binary only (a `postflight` step running `xattr -dr com.apple.quarantine`). This skips the Gatekeeper check for this one file; the download is still verified by the sha256 recorded in the cask. If you would rather keep Gatekeeper in the loop, use the install script or `go install` instead. For a binary you downloaded by hand and macOS blocks, remove the flag once: `xattr -d com.apple.quarantine /usr/local/bin/gitid`.
+- The Homebrew install is a cask, so it is for macOS. On Linux use the install script.
+- The install script writes one file (`gitid`) and, when needed, appends one line marked `# added by gitid installer` to one shell startup file (`~/.zshrc`, `~/.bash_profile` on macOS or `~/.bashrc` on Linux, `~/.config/fish/conf.d/gitid.fish`, or `~/.profile`). It never uses `sudo`, sends no telemetry and contacts only GitHub. The checksum protects against a corrupted or tampered download of a release; it cannot protect against a compromised release, because both files come from the same place.
 - Verify a download with the `checksums.txt` file of the release: `shasum -a 256 -c checksums.txt --ignore-missing`.
 - A binary installed with `go install` reports its version as `dev`.
 - To build from source: `git clone https://github.com/tinhnd1902/gitid && cd gitid && make build` (the binary is `bin/gitid`).
@@ -194,7 +217,7 @@ gitid edits files in your home directory, so it is strict about it:
 - **Secrets in URLs:** a password or token pasted inside a URL is dropped and masked everywhere it would be shown.
 - **Injection-safe:** names, emails, hosts and usernames are validated and escaped before they reach git or ssh configuration; clone commands always use `git clone -- <url> <dir>`.
 - **Network:** none, except when you clone or press the opt-in `ssh -T` test. There is no telemetry.
-- **Uninstall:** delete all companies in the TUI and apply; your files return to their original bytes. Or restore by hand (below).
+- **Uninstall:** delete all companies in the TUI and apply; your files return to their original bytes. Or restore by hand (below). To remove the gitid program itself, see [Uninstall the binary](#uninstall-the-binary).
 
 <details>
 <summary>Restore by hand</summary>
@@ -385,6 +408,14 @@ For HTTPS accounts a credential helper must remember one login per username. git
 gitid needs at least 40x10 cells and looks best from 80x24; wide terminals (100+ columns) add a detail pane. If the screen is garbled after a crash, run `reset`. The TUI starts only on a real terminal; in scripts use the subcommands.
 
 </details>
+
+## Uninstall the binary
+
+This removes the `gitid` program itself. It is separate from [removing the configuration gitid manages](#safety) (the **Uninstall** bullet there), which you should do first if you want your git and ssh files back to their original bytes.
+
+- **Homebrew:** `brew uninstall --cask gitid` (optionally `brew untap tinhnd1902/tap`).
+- **Install script:** `rm "$(command -v gitid)"`, then delete the line marked `# added by gitid installer` from your shell startup file (`~/.zshrc`, `~/.bash_profile`, `~/.bashrc` or `~/.profile`), or delete `~/.config/fish/conf.d/gitid.fish` for fish.
+- **`go install`:** `rm "$(go env GOPATH)/bin/gitid"`.
 
 ## Contributing
 

@@ -7,7 +7,7 @@ LDFLAGS := -X main.version=$(VERSION)
 CORE85 := remote gitcfg sshcfg block fsx plan config
 CORE70 := app keys gitops doctor importer
 
-.PHONY: build test cover vet fmt-check lint test-integration check-home install clean
+.PHONY: build test cover vet fmt-check lint test-integration check-home check-install install clean
 
 build:
 	$(GO) build -trimpath -ldflags "$(LDFLAGS)" -o bin/gitid ./cmd/gitid
@@ -50,6 +50,15 @@ check-home:
 	@bad=$$(grep -rnE 'os\.UserHomeDir|os\.Getenv\("(HOME|XDG_CONFIG_HOME)"\)|os\.LookupEnv\("(HOME|XDG_CONFIG_HOME)"\)' --include='*.go' . | grep -vE '^\./(cmd/|internal/env/fromos\.go)' || true); \
 	if [ -n "$$bad" ]; then echo "check-home FAILED: direct HOME/XDG access outside allowed files:"; echo "$$bad"; exit 1; fi; \
 	echo "check-home OK"
+
+# check-install: syntax-check install.sh with every shell available, run ShellCheck
+# when installed, then run the installer tests (fake release server, temp HOME).
+check-install:
+	sh -n install.sh
+	bash -n install.sh
+	@if command -v dash >/dev/null 2>&1; then dash -n install.sh; else echo "dash not found: dash -n skipped"; fi
+	@if command -v shellcheck >/dev/null 2>&1; then shellcheck -s sh install.sh; else echo "shellcheck not found: skipped (this is not a pass)"; fi
+	$(GO) test -count=1 ./internal/installsh/
 
 install:
 	$(GO) install -trimpath -ldflags "$(LDFLAGS)" ./cmd/gitid

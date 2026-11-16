@@ -54,3 +54,90 @@ jobs:
 
       - name: No direct HOME access outside cmd/ and internal/env
         run: make check-home
+
+  install-script:
+    name: install.sh (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Syntax checks (sh, bash, dash)
+        shell: bash
+        run: |
+          sh -n install.sh
+          bash -n install.sh
+          if command -v dash >/dev/null 2>&1; then
+            dash -n install.sh
+          else
+            echo "::notice::dash not installed; dash -n skipped"
+          fi
+
+      - name: ShellCheck
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          if command -v shellcheck >/dev/null 2>&1; then
+            shellcheck -s sh install.sh
+          else
+            echo "::notice::shellcheck not installed on this runner; skipped (not a pass)"
+          fi
+
+      - name: Installer tests (local fake release server, temporary HOME)
+        run: go test -count=1 -v ./internal/installsh/
+
+  goreleaser:
+    name: goreleaser check and snapshot
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: goreleaser check
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: check
+
+      # Nothing is published: --snapshot skips publishing, and the tap token is
+      # not passed to this job.
+      - name: goreleaser snapshot
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --snapshot --clean
+
+      - name: Check the snapshot output
+        shell: bash
+        run: |
+          set -eu
+          ls -1 dist
+          n="$(ls dist/gitid_*_*_*.tar.gz | wc -l | tr -d ' ')"
+          [ "$n" = "4" ] || { echo "expected 4 archives, found $n"; exit 1; }
+          for p in darwin_amd64 darwin_arm64 linux_amd64 linux_arm64; do
+            ls dist/gitid_*_"$p".tar.gz >/dev/null
+            grep -q "_${p}.tar.gz" dist/checksums.txt
+          done
+          cask=dist/homebrew/Casks/gitid.rb
+          for needle in 'postflight_steps' '/usr/bin/xattr' 'com.apple.quarantine' '{{staged_path}}/gitid'; do
+            grep -qF -- "$needle" "$cask" || { echo "cask is missing: $needle"; exit 1; }
+          done
+          ruby -c "$cask"
+          bin="$(find dist -type f -name gitid -path '*linux_amd64*' | head -n 1)"
+          out="$("$bin" version)"
+          echo "$out"
+          case "$out" in "gitid "*SNAPSHOT*) ;; *) echo "unexpected version output"; exit 1 ;; esac

@@ -7,9 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.0] - TBD
+## [0.1.0] - 2026-11-16
 
-First public version. The date is filled in when the tag is created.
+First public version.
 
 ### Added
 
@@ -40,6 +40,15 @@ First public version. The date is filled in when the tag is created.
   `GITID_LANG` environment variable).
 - Open-source project files: README (English and Vietnamese), CI on macOS and
   Linux, GoReleaser configuration, contribution and security guides.
+- Release automation: pushing a `vX.Y.Z` tag runs a GitHub Actions workflow
+  that builds macOS and Linux (amd64 and arm64) archives with
+  `checksums.txt` and publishes a GitHub release.
+- Homebrew: `brew install tinhnd1902/tap/gitid` (macOS cask, updated by the
+  release workflow when the tap token secret is configured).
+- Install script: `curl -fsSL https://raw.githubusercontent.com/tinhnd1902/gitid/main/install.sh | sh`
+  installs the latest release for macOS and Linux (amd64 and arm64), verifies
+  its sha256 and puts `gitid` on your `PATH`. `VERSION`, `INSTALL_DIR` and
+  `NO_MODIFY_PATH=1` are supported.
 
 ### Security
 

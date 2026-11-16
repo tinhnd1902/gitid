@@ -40,14 +40,35 @@ tồn tại, để trang không bao giờ hiện ảnh lỗi.
 
 ## Bắt đầu nhanh
 
-**Cài qua Homebrew tap (sắp có):**
+**1. Homebrew (macOS):**
 
 ```bash
-# chưa phát hành; hãy dùng một trong các cách bên dưới
-# brew install tinhnd1902/tap/gitid
+brew install tinhnd1902/tap/gitid
 ```
 
-**Hoặc dùng `go install`:**
+**2. Script cài đặt (macOS và Linux, amd64 và arm64):**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tinhnd1902/gitid/main/install.sh | sh
+```
+
+Script tải bản phát hành mới nhất, kiểm tra sha256 với `checksums.txt` của bản đó, cài `gitid` (vào `/usr/local/bin` nếu bạn ghi được ở đó, nếu không thì vào `~/.local/bin`) và, khi thư mục đó chưa có trong `PATH`, thêm nó vào tệp khởi động của shell. Sau đó hãy mở một terminal mới. Tùy chọn là các biến môi trường:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tinhnd1902/gitid/main/install.sh | VERSION=0.1.0 sh          # một bản phát hành cụ thể
+curl -fsSL https://raw.githubusercontent.com/tinhnd1902/gitid/main/install.sh | INSTALL_DIR=$HOME/bin sh   # chọn thư mục (phải ghi được)
+curl -fsSL https://raw.githubusercontent.com/tinhnd1902/gitid/main/install.sh | NO_MODIFY_PATH=1 sh        # không bao giờ sửa tệp khởi động của shell
+```
+
+Muốn đọc script trước khi chạy?
+
+```bash
+curl -fsSLo install.sh https://raw.githubusercontent.com/tinhnd1902/gitid/main/install.sh
+less install.sh
+sh install.sh
+```
+
+**3. Hoặc dùng `go install`:**
 
 ```bash
 go install github.com/tinhnd1902/gitid/cmd/gitid@latest
@@ -59,7 +80,7 @@ Nếu shell báo `command not found: gitid` thì thư mục bin của Go chưa c
 echo 'export PATH="$(go env GOPATH)/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
 ```
 
-**Hoặc tải bản nhị phân** (macOS và Linux, amd64 và arm64) ở [trang Releases](https://github.com/tinhnd1902/gitid/releases):
+**4. Hoặc tải bản nhị phân** (macOS và Linux, amd64 và arm64) ở [trang Releases](https://github.com/tinhnd1902/gitid/releases):
 
 ```bash
 tar -xzf gitid_<phiên-bản>_<hệ-điều-hành>_<kiến-trúc>.tar.gz
@@ -70,7 +91,9 @@ install -m 0755 gitid /usr/local/bin/gitid   # hoặc thư mục bất kỳ tron
 <summary>Ghi chú cài đặt</summary>
 
 - gitid cần **git 2.36 trở lên** (dùng `hasconfig:remote.*.url`). Kiểm tra bằng `git --version`.
-- Bản nhị phân chưa được ký số hay notarize. Nếu macOS chặn tệp tải về, hãy gỡ cờ cách ly một lần: `xattr -d com.apple.quarantine /usr/local/bin/gitid`.
+- Bản nhị phân chưa được ký số hay notarize. Homebrew đánh dấu cách ly (quarantine) cho cask tải về, nên cask gitid gỡ cờ đó khỏi riêng tệp `gitid` (bước `postflight` chạy `xattr -dr com.apple.quarantine`). Việc này bỏ qua kiểm tra Gatekeeper cho đúng một tệp này; bản tải về vẫn được kiểm tra bằng sha256 ghi trong cask. Nếu bạn muốn giữ Gatekeeper, hãy dùng script cài đặt hoặc `go install`. Với bản nhị phân tự tải về mà macOS chặn, hãy gỡ cờ cách ly một lần: `xattr -d com.apple.quarantine /usr/local/bin/gitid`.
+- Cài qua Homebrew là cask nên chỉ dành cho macOS. Trên Linux hãy dùng script cài đặt.
+- Script cài đặt ghi một tệp (`gitid`) và, khi cần, thêm một dòng có chú thích `# added by gitid installer` vào một tệp khởi động của shell (`~/.zshrc`, `~/.bash_profile` trên macOS hoặc `~/.bashrc` trên Linux, `~/.config/fish/conf.d/gitid.fish`, hoặc `~/.profile`). Nó không bao giờ dùng `sudo`, không gửi telemetry và chỉ kết nối tới GitHub. Checksum bảo vệ khỏi bản tải bị hỏng hoặc bị can thiệp; nó không chống được trường hợp chính bản phát hành bị xâm phạm, vì cả hai tệp đến từ cùng một nơi.
 - Kiểm tra tệp tải về bằng `checksums.txt` của bản phát hành: `shasum -a 256 -c checksums.txt --ignore-missing`.
 - Bản cài bằng `go install` báo phiên bản là `dev`.
 - Tự build từ mã nguồn: `git clone https://github.com/tinhnd1902/gitid && cd gitid && make build` (tệp chạy là `bin/gitid`).
@@ -194,7 +217,7 @@ gitid sửa tệp trong thư mục home của bạn, nên nó rất chặt chẽ
 - **Bí mật trong URL:** mật khẩu hoặc token dán trong URL bị loại bỏ và che đi ở mọi nơi có thể hiển thị.
 - **Chống chèn lệnh:** tên, email, host và username được kiểm tra và escape trước khi vào cấu hình git hay ssh; lệnh clone luôn dùng `git clone -- <url> <thư mục>`.
 - **Mạng:** không dùng, trừ khi bạn clone hoặc tự bấm bài thử `ssh -T`. Không có telemetry.
-- **Gỡ bỏ:** xóa hết công ty trong TUI rồi áp dụng; tệp của bạn trở về đúng từng byte ban đầu. Hoặc khôi phục thủ công (bên dưới).
+- **Gỡ bỏ:** xóa hết công ty trong TUI rồi áp dụng; tệp của bạn trở về đúng từng byte ban đầu. Hoặc khôi phục thủ công (bên dưới). Để gỡ chính chương trình gitid, xem [Gỡ cài đặt chương trình](#gỡ-cài-đặt-chương-trình).
 
 <details>
 <summary>Khôi phục thủ công</summary>
@@ -385,6 +408,14 @@ Với tài khoản HTTPS, cần một credential helper nhớ riêng từng user
 gitid cần tối thiểu 40x10 ô và đẹp nhất từ 80x24; terminal rộng (từ 100 cột) có thêm khung chi tiết. Nếu màn hình bị rối sau khi chương trình sập, chạy `reset`. TUI chỉ chạy trên terminal thật; trong script hãy dùng các lệnh con.
 
 </details>
+
+## Gỡ cài đặt chương trình
+
+Phần này chỉ gỡ chương trình `gitid`. Nó khác với [gỡ cấu hình do gitid quản lý](#an-toàn) (mục **Gỡ bỏ** ở đó); hãy làm việc đó trước nếu bạn muốn tệp git và ssh trở về đúng như ban đầu.
+
+- **Homebrew:** `brew uninstall --cask gitid` (có thể thêm `brew untap tinhnd1902/tap`).
+- **Script cài đặt:** `rm "$(command -v gitid)"`, rồi xóa dòng có chú thích `# added by gitid installer` khỏi tệp khởi động của shell (`~/.zshrc`, `~/.bash_profile`, `~/.bashrc` hoặc `~/.profile`), hoặc với fish thì xóa `~/.config/fish/conf.d/gitid.fish`.
+- **`go install`:** `rm "$(go env GOPATH)/bin/gitid"`.
 
 ## Đóng góp
 

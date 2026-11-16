@@ -40,6 +40,7 @@ make build            # builds bin/gitid
 | `make fmt-check`        | Fails if `gofmt -l .` lists files                                             |
 | `make lint`             | `golangci-lint run` if installed, otherwise `make vet fmt-check`              |
 | `make check-home`       | Fails if code outside `cmd/` and `internal/env` reads HOME / XDG directly     |
+| `make check-install`    | Syntax-check `install.sh` (sh, bash, dash), ShellCheck if installed, installer tests |
 | `make release-snapshot` | Local GoReleaser dry run (only defined when `goreleaser` is installed)        |
 | `make install`          | `go install` the binary                                                       |
 
@@ -100,6 +101,52 @@ Then uncomment the hero line in `README.md` and `README_VI.md`.
 
 ## Releasing (maintainers)
 
-1. Update `CHANGELOG.md`: move the Unreleased entries under the new version.
-2. Tag `vX.Y.Z` and push the tag.
-3. Run `goreleaser release --clean` (see `.goreleaser.yaml`).
+Releases are built by GitHub Actions ([`release.yml`](.github/workflows/release.yml))
+when a `vX.Y.Z` tag is pushed. Nothing is built or uploaded from a laptop.
+
+**One-time setup (Homebrew tap)**
+
+1. The public repository `tinhnd1902/homebrew-tap` must exist and have a
+   default branch (`main`).
+2. Create a fine-grained personal access token limited to that one
+   repository with **Contents: read and write**, and save it as the secret
+   `HOMEBREW_TAP_GITHUB_TOKEN` in the gitid repository (Settings, Secrets and
+   variables, Actions). Never paste the token anywhere else. Without the
+   secret the release still publishes; the workflow prints a warning and the
+   tap is not updated.
+
+**Every release**
+
+1. Update `CHANGELOG.md`: move the Unreleased entries under the new version and
+   date, commit and push to `main`, and wait for CI to pass.
+2. Tag and push:
+
+   ```bash
+   git tag -a vX.Y.Z -m "gitid vX.Y.Z"
+   git push origin vX.Y.Z
+   ```
+
+3. Watch the **Release** workflow. It runs the tests, then GoReleaser, which
+   publishes the GitHub release (4 archives and `checksums.txt`) and commits
+   `Casks/gitid.rb` to the tap.
+4. Smoke test in a fresh shell:
+
+   ```bash
+   brew install tinhnd1902/tap/gitid && gitid version          # macOS
+   curl -fsSL https://raw.githubusercontent.com/tinhnd1902/gitid/main/install.sh | sh
+   ```
+
+   Casks have no `brew test`, so this is the post-release check.
+
+Try the whole pipeline without publishing anything: `make release-snapshot`
+(needs `goreleaser`; CI runs `goreleaser check` and a snapshot on every
+pull request). `install.sh` builds download URLs from the archive name
+`gitid_<version>_<os>_<arch>.tar.gz`, so change that name template and the
+script together.
+
+**Rollback**
+
+- Delete the bad release and tag: `gh release delete vX.Y.Z --cleanup-tag`.
+- Revert the cask commit in `homebrew-tap`, or ship a fixed patch release.
+- `install.sh` resolves "latest" from GitHub, so it falls back to the previous
+  release as soon as the bad one is deleted.

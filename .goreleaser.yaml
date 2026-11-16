@@ -1,13 +1,16 @@
-# GoReleaser configuration (v2 syntax). Not run by CI yet: releases are cut
-# locally or from a future release workflow with `goreleaser release --clean`.
-# Try it without publishing anything:  make release-snapshot  (needs goreleaser)
+# GoReleaser configuration (v2 syntax).
+#
+# Releases are cut by .github/workflows/release.yml when a `vX.Y.Z` tag is
+# pushed (see "Releasing (maintainers)" in CONTRIBUTING.md). Try the whole
+# pipeline locally without publishing anything:  make release-snapshot
 version: 2
 
 project_name: gitid
 
 before:
   hooks:
-    - go mod tidy
+    # not `go mod tidy`: it can dirty the working tree and make GoReleaser refuse to release
+    - go mod download
 
 builds:
   - id: gitid
@@ -30,6 +33,8 @@ builds:
 archives:
   - id: gitid
     formats: [tar.gz]
+    # install.sh builds the download URL from this exact pattern
+    # (gitid_<version>_<os>_<arch>.tar.gz); change both together.
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
       - LICENSE
@@ -56,30 +61,39 @@ release:
   prerelease: auto
 
 # ---------------------------------------------------------------------------
-# Homebrew tap (disabled until a tap repository exists)
+# Homebrew tap: github.com/tinhnd1902/homebrew-tap, file Casks/gitid.rb
 #
-# To enable it:
-#   1. Create a public GitHub repository named `homebrew-tap` under your
-#      account (for example github.com/tinhnd1902/homebrew-tap).
-#   2. Create a fine-grained personal access token that can write to that
-#      repository and store it as the repository secret HOMEBREW_TAP_GITHUB_TOKEN.
-#   3. Pass it to GoReleaser in the release job:
-#        env:
-#          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
-#   4. Uncomment the block below, then update README.md and README_VI.md
-#      ("coming soon" -> `brew install tinhnd1902/tap/gitid`).
+# GoReleaser deprecated `brews` (formulae) in v2.10; prebuilt binaries are
+# published as casks. Casks are macOS-only: Linux users use install.sh.
 #
-# GoReleaser may rename this block in newer versions (`homebrew_casks`); check
-# `goreleaser check` and the GoReleaser documentation for the current name.
-#
-# brews:
-#   - name: gitid
-#     repository:
-#       owner: tinhnd1902
-#       name: homebrew-tap
-#       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-#     homepage: https://github.com/tinhnd1902/gitid
-#     description: "Manage, switch, clone and check Git identities across hosting platforms"
-#     license: MIT
-#     test: |
-#       system "#{bin}/gitid", "version"
+# The cask is pushed with the secret HOMEBREW_TAP_GITHUB_TOKEN (a fine-grained
+# token with Contents read/write on the tap repository only). When that
+# variable is empty or unset (forks, local snapshot runs), skip_upload is true:
+# the GitHub release is still created and the cask is only written to dist/.
+homebrew_casks:
+  - name: gitid
+    ids: [gitid]
+    directory: Casks
+    binaries: [gitid]
+    homepage: https://github.com/tinhnd1902/gitid
+    description: "Manage, switch, clone and check Git identities across hosting platforms"
+    repository:
+      owner: tinhnd1902
+      name: homebrew-tap
+      branch: main
+      token: '{{ envOrDefault "HOMEBREW_TAP_GITHUB_TOKEN" "" }}'
+    commit_author:
+      name: gitid-release-bot
+      email: noreply@github.com
+    commit_msg_template: "gitid {{ .Tag }}"
+    skip_upload: '{{ if eq (envOrDefault "HOMEBREW_TAP_GITHUB_TOKEN" "") "" }}true{{ else }}false{{ end }}'
+    # The binary is not code-signed or notarized yet, and Homebrew marks cask
+    # downloads as quarantined, so Gatekeeper would block the first run. This
+    # clears the flag for the gitid binary only (the archive is verified by the
+    # sha256 in the cask). Proper fix later: signing and notarization.
+    hooks:
+      post:
+        install_steps: |
+          on_macos do
+            run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/gitid"]
+          end
