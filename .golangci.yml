@@ -1,0 +1,46 @@
+# golangci-lint configuration (v2 format).
+# `make lint` runs golangci-lint when it is installed and falls back to
+# `go vet` + a gofmt check otherwise.
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+  # also lint the files behind the `integration` build tag
+  build-tags:
+    - integration
+
+linters:
+  default: none
+  enable:
+    - errcheck      # unchecked errors
+    - govet         # suspicious constructs
+    - ineffassign   # assignments that are never used
+    - staticcheck   # staticcheck + stylecheck + gosimple checks
+    - unused        # unused code
+    - errorlint     # errors.Is / errors.As instead of == and type assertions
+    - unconvert     # unnecessary conversions
+    - misspell      # common spelling mistakes in comments and strings
+    - nilerr        # returning nil when err is not nil
+    - copyloopvar   # redundant loop variable copies (Go 1.22+)
+  settings:
+    misspell:
+      locale: US
+    errcheck:
+      check-type-assertions: true
+  exclusions:
+    generated: lax
+    rules:
+      # tests may ignore errors of helpers such as Fprintf or Close
+      - path: _test\.go
+        linters:
+          - errcheck
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/tinhnd1902/gitid

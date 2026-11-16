@@ -1,0 +1,46 @@
+# Example configuration used by docs/demo.tape (all values are made up).
+version: 1
+settings:
+  language: en
+  code_root: ~/Code
+companies:
+  - slug: acme
+    name: ACME Corp
+    base_dir: ~/Code/acme/
+    default_account: alice
+    accounts:
+      - id: alice
+        platform: github
+        username: alice
+        name: Alice Example
+        email: alice@example.com
+        auth: https
+      - id: bob
+        platform: github
+        username: bob-acme
+        name: Bob Example
+        email: bob@acme.example
+        auth: ssh
+  - slug: globex
+    name: Globex
+    base_dir: ~/Code/globex/
+    default_account: dave
+    accounts:
+      - id: dave
+        platform: gitlab
+        host: git.example.com
+        username: dave
+        name: Dave Example
+        email: dave@globex.example
+        auth: ssh
+  - slug: oss
+    name: Open source
+    base_dir: ~/Code/oss/
+    default_account: alice
+    accounts:
+      - id: alice
+        platform: github
+        username: alice
+        name: Alice Example
+        email: alice@example.com
+        auth: https

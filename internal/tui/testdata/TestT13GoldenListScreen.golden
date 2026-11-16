@@ -1,0 +1,30 @@
+  gitid   Danh sách                                                                   ~  v0.0.0-test
+╭─────────────────────────────────────────────────────╮╭───────────────────────────────────────────╮
+│ Công ty 3 · Tài khoản 5                             ││ Chi tiết                                  │
+│ / để lọc theo tên, email, host…                     ││ acme                                      │
+│ ▌ acme  ACME Corp                   ~/Code/acme/  3 ││                                           │
+│  ├─ ★ alice           GH https       alice@acme.com ││ Tên         ACME Corp                     │
+│  ├─   bob             GH https         bob@acme.com ││ Thư mục gốc ~/Code/acme/                  │
+│  └─   carol           GH ssh         carol@acme.com ││ Mặc định    alice                         │
+│ ▪ globex  Globex                  ~/Code/globex/  1 ││ Tài khoản   3                             │
+│  └─ ★ dave            GL ssh    dave@globex.example ││                                           │
+│ ▪ beta  Beta                        ~/Code/beta/  1 ││ ★ alice  GH https                         │
+│  └─ ★ alice           GH https        alice@beta.io ││   bob  GH https                           │
+│                                                     ││   carol  GH ssh                           │
+│                                                     ││                                           │
+│                                                     ││                                           │
+│                                                     ││                                           │
+│                                                     ││                                           │
+│                                                     ││                                           │
+│                                                     ││                                           │
+│                                                     ││                                           │
+│                                                     ││                                           │
+│                                                     ││                                           │
+│                                                     ││                                           │
+│                                                     ││                                           │
+│                                                     ││                                           │
+│                                                     ││                                           │
+│                                                     ││                                           │
+╰─────────────────────────────────────────────────────╯╰───────────────────────────────────────────╯
+                                                                ● 11 thay đổi chưa áp dụng (nhấn p) 
+ / lọc  a thêm tài khoản  A thêm công ty  e sửa  d xóa  p áp dụng  c clone  k kiểm tra repo …       

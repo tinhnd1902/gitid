@@ -1,0 +1,48 @@
+name: Feature request
+description: Suggest an improvement or a new capability
+title: "[feature] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Which problem are you trying to solve?
+      description: Describe your situation (for example "three GitLab accounts on one self-hosted host") rather than a solution.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like gitid to do?
+      description: A command, a TUI screen, a config option... whatever you have in mind.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: Workarounds you use today, or other designs.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - TUI
+        - CLI
+        - Git configuration (includeIf / hasconfig)
+        - SSH keys and config
+        - Clone / fix-remote
+        - Doctor / import
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched the existing issues first.
+          required: true
+        - label: I understand gitid must stay safe by default (preview, backup, never read private keys).
+          required: true

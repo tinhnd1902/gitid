@@ -1,0 +1,85 @@
+# GoReleaser configuration (v2 syntax). Not run by CI yet: releases are cut
+# locally or from a future release workflow with `goreleaser release --clean`.
+# Try it without publishing anything:  make release-snapshot  (needs goreleaser)
+version: 2
+
+project_name: gitid
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: gitid
+    main: ./cmd/gitid
+    binary: gitid
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      # `main.version` is what `gitid version` prints
+      - -s -w -X main.version={{ .Version }}
+
+archives:
+  - id: gitid
+    formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+      - README_VI.md
+      - CHANGELOG.md
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+release:
+  github:
+    owner: tinhnd1902
+    name: gitid
+  draft: false
+  prerelease: auto
+
+# ---------------------------------------------------------------------------
+# Homebrew tap (disabled until a tap repository exists)
+#
+# To enable it:
+#   1. Create a public GitHub repository named `homebrew-tap` under your
+#      account (for example github.com/tinhnd1902/homebrew-tap).
+#   2. Create a fine-grained personal access token that can write to that
+#      repository and store it as the repository secret HOMEBREW_TAP_GITHUB_TOKEN.
+#   3. Pass it to GoReleaser in the release job:
+#        env:
+#          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+#   4. Uncomment the block below, then update README.md and README_VI.md
+#      ("coming soon" -> `brew install tinhnd1902/tap/gitid`).
+#
+# GoReleaser may rename this block in newer versions (`homebrew_casks`); check
+# `goreleaser check` and the GoReleaser documentation for the current name.
+#
+# brews:
+#   - name: gitid
+#     repository:
+#       owner: tinhnd1902
+#       name: homebrew-tap
+#       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+#     homepage: https://github.com/tinhnd1902/gitid
+#     description: "Manage, switch, clone and check Git identities across hosting platforms"
+#     license: MIT
+#     test: |
+#       system "#{bin}/gitid", "version"
