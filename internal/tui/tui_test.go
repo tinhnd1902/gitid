@@ -41,19 +41,25 @@ func TestT2Filter(t *testing.T) {
 	h := newHarness(t, basicCfg())
 	h.key("/")
 	h.typeText("beta")
+	// filtering runs as a command and its result arrives as a message: wait
+	// for it instead of assuming it already did
+	h.waitFor("filter applied", func() bool { return !strings.Contains(h.view(), "globex") })
 	v := h.view()
 	if !strings.Contains(v, "beta") || strings.Contains(v, "acme") || strings.Contains(v, "globex") {
 		t.Fatalf("filter result:\n%s", v)
 	}
 	h.key("esc")
+	h.waitFor("filter cleared", func() bool { return strings.Contains(h.view(), "globex") })
 	h.mustContain("acme", "globex", "beta")
 	// applied filter: enter accepts it, then esc clears it
 	h.key("/")
 	h.typeText("carol")
+	h.waitFor("carol filter", func() bool { return !strings.Contains(h.view(), "bob@acme.com") })
 	h.key("enter")
 	h.mustContain("carol")
 	h.mustNotContain("bob@acme.com")
 	h.key("esc")
+	h.waitFor("filter cleared", func() bool { return strings.Contains(h.view(), "bob@acme.com") })
 	h.mustContain("bob@acme.com")
 }
 

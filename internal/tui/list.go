@@ -8,6 +8,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/sahilm/fuzzy"
@@ -170,13 +171,30 @@ func joinEnds(left, right string, width int) string {
 
 // listScreen is the home screen: the company / account tree with a detail
 // pane.
+//
+// Filtering is done here, synchronously, instead of by the list component:
+// the bubbles list filters in a command whose results can arrive out of order
+// (a stale result for "b" overwriting the result for "beta"). With a few
+// hundred rows the fuzzy match takes microseconds, so there is nothing to
+// gain from doing it in the background.
 type listScreen struct {
 	sh      *shared
 	l       list.Model
+	all     []list.Item // every row, unfiltered
+	filter  textinput.Model
+	mode    filterMode
 	w, h    int
 	keyInfo keys.Info
 	keyFor  string
 }
+
+type filterMode int
+
+const (
+	filterOff filterMode = iota
+	filterTyping
+	filterApplied
+)
 
 func newListScreen(sh *shared) *listScreen {
 	l := list.New(nil, rowDelegate{sh}, 10, 10)
@@ -184,10 +202,9 @@ func newListScreen(sh *shared) *listScreen {
 	l.SetShowStatusBar(false)
 	l.SetShowHelp(false)
 	l.SetShowFilter(false)
-	l.SetFilteringEnabled(true)
+	l.SetFilteringEnabled(false)
 	l.SetShowPagination(false)
 	l.DisableQuitKeybindings()
-	l.Filter = treeFilter
 	l.KeyMap.CursorUp = key.NewBinding(key.WithKeys("up", "ctrl+p"))
 	l.KeyMap.CursorDown = key.NewBinding(key.WithKeys("down", "ctrl+n"))
 	l.KeyMap.GoToStart = key.NewBinding(key.WithKeys("home"))
@@ -197,16 +214,18 @@ func newListScreen(sh *shared) *listScreen {
 	l.KeyMap.ShowFullHelp.SetEnabled(false)
 	l.KeyMap.CloseFullHelp.SetEnabled(false)
 	l.Styles.NoItems = sh.st.Muted
-	l.FilterInput.Prompt = "/ "
-	l.FilterInput.PromptStyle = sh.st.Accent
-	l.FilterInput.Cursor.Style = sh.st.Accent
-	return &listScreen{sh: sh, l: l}
+	fi := textinput.New()
+	fi.Prompt = "/ "
+	fi.PromptStyle = sh.st.Accent
+	fi.Cursor.Style = sh.st.Accent
+	fi.CharLimit = 64
+	return &listScreen{sh: sh, l: l, filter: fi}
 }
 
 func (s *listScreen) Title() string { return tr("tui.list.title") }
 func (s *listScreen) Init() tea.Cmd { return nil }
 
-func (s *listScreen) Capturing() bool { return s.l.FilterState() == list.Filtering }
+func (s *listScreen) Capturing() bool { return s.mode == filterTyping }
 
 func (s *listScreen) Help() []key.Binding {
 	km := s.sh.km
@@ -216,6 +235,7 @@ func (s *listScreen) Help() []key.Binding {
 func (s *listScreen) Resize(w, h int) {
 	s.w, s.h = w, h
 	lw, _ := s.widths()
+	s.filter.Width = maxInt(lw-10, 8)
 	s.l.SetSize(maxInt(lw-4, 4), maxInt(h-4, 1)) // width: border+padding; height: border(2) + title(1) + filter line(1)
 }
 
@@ -258,16 +278,59 @@ func (s *listScreen) rebuild() tea.Cmd {
 	if r, ok := s.selected(); ok {
 		prev = r.key()
 	}
-	items := rowsOf(s.sh.cfg)
-	cmd := s.l.SetItems(items)
-	for i, it := range s.l.VisibleItems() {
+	s.all = rowsOf(s.sh.cfg)
+	s.applyFilter(prev)
+	s.keyFor = ""
+	s.refreshKey()
+	return nil
+}
+
+// applyFilter shows the rows that match the filter text, in tree order, and
+// keeps the row with key prev selected when it is still visible.
+func (s *listScreen) applyFilter(prev string) {
+	items := s.all
+	if s.mode != filterOff {
+		if term := strings.TrimSpace(s.filter.Value()); term != "" {
+			targets := make([]string, len(s.all))
+			for i, it := range s.all {
+				targets[i] = it.FilterValue()
+			}
+			items = nil
+			for _, r := range treeFilter(term, targets) {
+				items = append(items, s.all[r.Index])
+			}
+		}
+	}
+	s.l.SetItems(items)
+	s.l.Select(0)
+	for i, it := range items {
 		if it.(rowItem).key() == prev {
 			s.l.Select(i)
 			break
 		}
 	}
+}
+
+func (s *listScreen) currentKey() string {
+	if r, ok := s.selected(); ok {
+		return r.key()
+	}
+	return ""
+}
+
+// setFilter updates the mode and the visible rows.
+func (s *listScreen) setFilter(mode filterMode, clear bool) {
+	prev := s.currentKey()
+	s.mode = mode
+	if clear {
+		s.filter.SetValue("")
+	}
+	if mode != filterTyping {
+		s.filter.Blur()
+	}
+	s.applyFilter(prev)
+	s.keyFor = ""
 	s.refreshKey()
-	return cmd
 }
 
 // refreshKey Lstat's the key files of the selected account.
@@ -292,14 +355,60 @@ func (s *listScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		s.keyFor = ""
 		return s, s.rebuild()
 	case tea.KeyMsg:
-		if s.l.FilterState() != list.Filtering {
-			if cmd, handled := s.action(msg, km); handled {
-				return s, cmd
+		switch s.mode {
+		case filterTyping:
+			return s.typing(msg)
+		case filterApplied:
+			if msg.Type == tea.KeyEsc {
+				s.setFilter(filterOff, true)
+				return s, nil
 			}
+		}
+		if s.mode != filterTyping && key.Matches(msg, km.Filter) {
+			s.mode = filterTyping
+			return s, s.filter.Focus()
+		}
+		if cmd, handled := s.action(msg, km); handled {
+			return s, cmd
+		}
+	default:
+		if s.mode == filterTyping {
+			var cmd tea.Cmd
+			s.filter, cmd = s.filter.Update(msg) // cursor blink
+			return s, cmd
 		}
 	}
 	var cmd tea.Cmd
 	s.l, cmd = s.l.Update(msg)
+	s.keyFor = ""
+	s.refreshKey()
+	return s, cmd
+}
+
+// typing handles a key while the filter text is being edited.
+func (s *listScreen) typing(msg tea.KeyMsg) (Screen, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEsc:
+		s.setFilter(filterOff, true)
+		return s, nil
+	case tea.KeyEnter:
+		if strings.TrimSpace(s.filter.Value()) == "" {
+			s.setFilter(filterOff, true)
+		} else {
+			s.setFilter(filterApplied, false)
+		}
+		return s, nil
+	case tea.KeyUp, tea.KeyDown, tea.KeyCtrlP, tea.KeyCtrlN:
+		var cmd tea.Cmd
+		s.l, cmd = s.l.Update(msg) // move the selection while typing
+		s.keyFor = ""
+		s.refreshKey()
+		return s, cmd
+	}
+	prev := s.currentKey()
+	var cmd tea.Cmd
+	s.filter, cmd = s.filter.Update(msg)
+	s.applyFilter(prev)
 	s.keyFor = ""
 	s.refreshKey()
 	return s, cmd
@@ -384,11 +493,11 @@ func (s *listScreen) View() string {
 
 func (s *listScreen) filterLine() string {
 	st := s.sh.st
-	switch s.l.FilterState() {
-	case list.Filtering:
-		return s.l.FilterInput.View()
-	case list.FilterApplied:
-		return st.Accent.Render("/ ") + st.Text.Render(s.l.FilterValue()) + st.Faint.Render("  "+tr("tui.list.clear_filter"))
+	switch s.mode {
+	case filterTyping:
+		return s.filter.View()
+	case filterApplied:
+		return st.Accent.Render("/ ") + st.Text.Render(s.filter.Value()) + st.Faint.Render("  "+tr("tui.list.clear_filter"))
 	}
 	return st.Faint.Render("/ " + tr("tui.list.filter_hint"))
 }
@@ -399,11 +508,11 @@ func (s *listScreen) listPanel(w int) string {
 	switch {
 	case !s.sh.loaded:
 		body = s.sh.st.Muted.Render(tr("tui.list.loading"))
-	case len(s.l.Items()) == 0:
+	case len(s.all) == 0:
 		body = s.emptyState(inner)
 	default:
 		body = s.l.View()
-		if len(s.l.VisibleItems()) == 0 {
+		if len(s.l.Items()) == 0 {
 			body = s.sh.st.Muted.Render(tr("tui.list.no_match"))
 		}
 	}

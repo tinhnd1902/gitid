@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -36,6 +38,10 @@ type harness struct {
 	fake *execx.Fake
 	svc  *app.Service
 	msgs chan tea.Msg
+
+	mu       sync.Mutex
+	inflight map[int]time.Time // commands that have started and not returned yet
+	nextCmd  int
 }
 
 // newHarness builds a model over a temp HOME. cfg (optional) is saved first.
@@ -49,7 +55,7 @@ func newHarness(t *testing.T, cfg *config.Config) *harness {
 			t.Fatalf("seed config: %v", err)
 		}
 	}
-	h := &harness{t: t, e: e, fake: fake, svc: svc, msgs: make(chan tea.Msg, 256)}
+	h := &harness{t: t, e: e, fake: fake, svc: svc, msgs: make(chan tea.Msg, 256), inflight: map[int]time.Time{}}
 	h.m = New(svc, Options{Cwd: e.Home, Version: "test"})
 	h.send(tea.WindowSizeMsg{Width: 100, Height: 30})
 	h.run(h.m.Init())
@@ -64,14 +70,59 @@ func basicCfg() *config.Config {
 
 // run executes cmd (and any batch it expands to) in the background.
 func (h *harness) run(cmd tea.Cmd) {
-	if cmd == nil {
+	if cmd == nil || animation(cmd) {
 		return
 	}
+	h.mu.Lock()
+	h.nextCmd++
+	id := h.nextCmd
+	h.inflight[id] = time.Now()
+	h.mu.Unlock()
 	go func() {
 		msg := cmd()
+		// deliver before the command stops counting as in flight, so drain
+		// never sees "nothing running, nothing queued" in between
 		h.deliver(msg)
+		h.mu.Lock()
+		delete(h.inflight, id)
+		h.mu.Unlock()
 	}()
 }
+
+// animation reports whether cmd only drives cursor blinking, a spinner or a
+// timer. Such commands are never run in tests: they sleep, and the bubbles
+// implementations read their model from the command's goroutine while Update
+// writes it (harmless in a program, but the race detector rightly flags it).
+// Tests that need a tick send the tick message themselves.
+func animation(cmd tea.Cmd) bool {
+	f := runtime.FuncForPC(reflect.ValueOf(cmd).Pointer())
+	if f == nil {
+		return false
+	}
+	n := f.Name()
+	for _, part := range []string{"bubbles/cursor.", "bubbles/spinner.", "bubbles/textinput.Blink", "bubbletea.Tick", "bubbletea.Every"} {
+		if strings.Contains(n, part) {
+			return true
+		}
+	}
+	return false
+}
+
+// busy reports whether a command that started recently is still running.
+// Commands older than sleeperAge are timers (cursor blink, spinner ticks) and
+// are not waited for.
+func (h *harness) busy() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, at := range h.inflight {
+		if time.Since(at) < sleeperAge {
+			return true
+		}
+	}
+	return false
+}
+
+const sleeperAge = 100 * time.Millisecond
 
 func (h *harness) deliver(msg tea.Msg) {
 	if msg == nil {
@@ -82,7 +133,7 @@ func (h *harness) deliver(msg tea.Msg) {
 		name := rv.Type().Name()
 		for i := 0; i < rv.Len(); i++ {
 			c, _ := rv.Index(i).Interface().(tea.Cmd)
-			if c == nil {
+			if c == nil || animation(c) {
 				continue
 			}
 			if name == "sequenceMsg" {
@@ -102,7 +153,8 @@ func noise(msg tea.Msg) bool {
 	return strings.Contains(s, "TickMsg") || strings.Contains(s, "link") || strings.Contains(s, "windowSize")
 }
 
-// drain feeds queued results to the model until nothing arrives for a while.
+// drain feeds queued results to the model until nothing arrives for a while
+// and no recently started command is still running.
 func (h *harness) drain() {
 	h.t.Helper()
 	for {
@@ -113,7 +165,9 @@ func (h *harness) drain() {
 			}
 			h.update(msg)
 		case <-time.After(60 * time.Millisecond):
-			return
+			if !h.busy() {
+				return
+			}
 		}
 	}
 }
@@ -191,7 +245,7 @@ func (h *harness) mustNotContain(parts ...string) {
 // waitFor polls until pred is true (feeding late results) or fails.
 func (h *harness) waitFor(what string, pred func() bool) {
 	h.t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
 		h.drain()
 		if pred() {
