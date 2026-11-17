@@ -161,12 +161,18 @@ func (d rowDelegate) line(r rowItem, width int, selected bool, level int) string
 	if a.Auth == config.AuthSSH && a.SSHKey == "" {
 		warn = " !"
 	}
+	if _, dup := duplicateOf(r.company, *a); dup {
+		warn = " !" // the same login twice in one company, see the detail
+	}
 	tag := platformTag(a.Platform)
 	mid := fmt.Sprintf("%s %s  %s %s", star, pad(a.ID, idCol), tag, authTag(a.Auth))
 	email := a.Email
 	if selected {
-		left := branch + " " + mid + warn
-		return st.Selected.Render(pad("▌"+left, maxInt(width-lipgloss.Width(email)-1, 4)) + " " + email)
+		left := "▌" + branch + " " + mid + warn
+		if lipgloss.Width(left)+lipgloss.Width(email)+2 > width {
+			email = "" // same rule as the other rows: the email goes first, never the id
+		}
+		return st.Selected.Render(pad(left, maxInt(width-lipgloss.Width(email)-1, 4)) + " " + email)
 	}
 	starS := " "
 	if star != " " {
@@ -409,7 +415,15 @@ func (s *listScreen) dims() (lw, lh, dw, dh int) {
 		lw = s.w * 55 / 100
 		return lw, s.h, s.w - lw, s.h
 	case layoutStacked:
+		// The detail pane gets what the list does not need: the rows plus
+		// the border, the title and the filter line. The row count is that of
+		// the whole tree, so filtering does not move the split.
+		need := len(s.all) + 4
 		dh = clamp(s.h/3, 7, 10)
+		if s.h-need > dh {
+			dh = s.h - need
+		}
+		dh = minInt(dh, s.h-6)
 		return s.w, s.h - dh, s.w, dh
 	}
 	return s.w, s.h, 0, 0
@@ -448,6 +462,7 @@ func (s *listScreen) rebuild() tea.Cmd {
 		prev = r.key()
 	}
 	s.all = rowsOf(s.sh.cfg)
+	s.Resize(s.w, s.h) // the stacked split depends on the number of rows
 	s.applyFilter(prev)
 	s.keyFor = ""
 	s.refreshKey()
@@ -885,7 +900,7 @@ func detailField(st *Styles, label, value string, w int) string {
 func labelCol(w int) int {
 	n := 12
 	for _, k := range []string{"tui.f.base_dir", "tui.f.default", "tui.f.accounts", "tui.f.platform", "tui.f.auth",
-		"tui.f.username", "tui.f.git_name", "tui.f.email", "tui.f.orgs", "tui.f.alias", "tui.f.key"} {
+		"tui.f.username", "tui.f.git_name", "tui.f.email", "tui.f.orgs", "tui.f.alias", "tui.f.key", "tui.f.remote", "tui.f.dir"} {
 		n = maxInt(n, lipgloss.Width(tr(k))+1)
 	}
 	return minInt(n, maxInt(w/2, 12))
@@ -1015,12 +1030,27 @@ func accountTarget(ref config.AccountRef) string {
 	return "https://" + a.Username + "@" + a.EffectiveHost() + "/" + path + "…"
 }
 
+// wrapField renders "label  value" with the value wrapped under the value
+// column instead of cut, for values that must stay readable (the remote).
+func wrapField(st *Styles, label, value string, w int) []string {
+	lc := labelCol(w)
+	var out []string
+	for i, l := range wrapUnits(value, maxInt(w-lc, 8)) {
+		head := spaces(lc)
+		if i == 0 {
+			head = pad(label, lc)
+		}
+		out = append(out, st.Label.Render(head)+st.Text.Render(l))
+	}
+	return out
+}
+
 func accountVariants(sh *shared, r rowItem, w int, ki keys.Info, haveKey bool) [][]string {
 	st := sh.st
 	a := *r.account
 	ref := config.AccountRef{Company: r.company, Account: a}
 	titleLine := st.Bold.Render(trunc(ref.String(), w))
-	field := func(label, value string) string { return detailField(st, label, value, w) }
+	example := remoteExample(ref)
 
 	var keyState string
 	if haveKey && a.Auth == config.AuthSSH {
@@ -1040,6 +1070,19 @@ func accountVariants(sh *shared, r rowItem, w int, ki keys.Info, haveKey bool) [
 	} else {
 		how = styledWrap(st.Muted, tr("tui.detail.acc_other", accountTarget(ref), r.company.BaseDir, r.company.DefaultAccount), w)
 	}
+	// next is the sentence that says what to press; it is never dropped.
+	var next []string
+	switch {
+	case sh.planErr:
+	case sh.planned && sh.pending > 0:
+		next = styledWrap(st.Warn, tr("tui.detail.how_pending"), w)
+	case sh.planned:
+		next = styledWrap(st.OK, tr("tui.detail.acc_next_applied", r.company.BaseDir), w)
+	}
+	var dup []string
+	if other, ok := duplicateOf(r.company, a); ok {
+		dup = styledWrap(st.Warn, tr("tui.detail.dup", r.company.Slug+"/"+other.ID), w)
+	}
 	opt := func(s string) []string {
 		if s == "" {
 			return nil
@@ -1056,39 +1099,58 @@ func accountVariants(sh *shared, r rowItem, w int, ki keys.Info, haveKey bool) [
 	one := func(l string) []string { return []string{l} }
 	blank := []string{""}
 
-	full := []string{
-		field(tr("tui.f.platform"), a.Platform.DisplayName()+" ("+a.EffectiveHost()+")"),
-		field(tr("tui.f.auth"), authTag(a.Auth)),
-		field(tr("tui.f.username"), a.Username),
-		field(tr("tui.f.git_name"), a.Name),
-		field(tr("tui.f.email"), a.Email),
+	auth := authTag(a.Auth)
+	if a.Auth == config.AuthHTTPS {
+		auth = tr("tui.detail.auth_https")
+	}
+	// Values the user typed wrap under their label instead of being cut.
+	wf := func(label, value string) []string { return wrapField(st, label, value, w) }
+	username := wf(tr("tui.f.username"), a.Username)
+	remoteLine := wf(tr("tui.f.remote"), example)
+	var fields []string
+	for _, part := range [][]string{
+		wf(tr("tui.f.platform"), a.Platform.DisplayName()+" ("+a.EffectiveHost()+")"),
+		username,
+		wf(tr("tui.f.email"), a.Email),
+		wf(tr("tui.f.git_name"), a.Name),
+		wf(tr("tui.f.auth"), auth),
+		remoteLine,
+		wf(tr("tui.f.dir"), r.company.BaseDir),
+	} {
+		fields = append(fields, part...)
 	}
 	if len(a.Orgs) > 0 {
-		full = append(full, field(tr("tui.f.orgs"), strings.Join(a.Orgs, ", ")))
+		fields = append(fields, wf(tr("tui.f.orgs"), strings.Join(a.Orgs, ", "))...)
 	}
 	if r.company.DefaultAccount == a.ID {
-		full = append(full, field(tr("tui.f.default"), "★ "+tr("tui.f.default_yes")))
-	}
-	mid := []string{
-		field(tr("tui.f.auth"), authTag(a.Auth)),
-		field(tr("tui.f.username"), a.Username),
-		field(tr("tui.f.email"), a.Email),
+		fields = append(fields, wf(tr("tui.f.default"), "★ "+tr("tui.f.default_yes"))...)
 	}
 	if a.Auth == config.AuthSSH {
 		path := a.SSHKey
 		if path == "" {
 			path = r.company.DefaultKeyPath(a)
 		}
-		full = append(full, field(tr("tui.f.alias"), ref.Alias()), field(tr("tui.f.key"), path))
-		mid = append(mid, field(tr("tui.f.alias"), ref.Alias()))
+		fields = append(fields, wf(tr("tui.f.alias"), ref.Alias())...)
+		fields = append(fields, wf(tr("tui.f.key"), path)...)
 	}
+	// Compaction, richest first: everything with blank lines; everything
+	// without them; the main fields; the login, the remote and the key state; the remote
+	// alone; the remote without its label; the next step only. The remote
+	// line and the next step survive the smallest pane that fits anything.
+	last := next
+	if len(last) == 0 {
+		last = how // nothing to press yet (plan not computed): say what happens
+	}
+	core := cat(username, wf(tr("tui.f.email"), a.Email), wf(tr("tui.f.auth"), auth), remoteLine, wf(tr("tui.f.dir"), r.company.BaseDir))
 	return [][]string{
-		cat(one(titleLine), blank, full, opt(keyState), blank, how),
-		cat(one(titleLine), blank, mid, opt(keyState), blank, how),
-		cat(one(titleLine), mid[2:3], opt(keyState), how),
-		cat(one(titleLine), opt(keyState), how),
-		cat(one(titleLine), how),
-		cat(how),
+		cat(one(titleLine), blank, fields, opt(keyState), blank, dup, how, next),
+		cat(one(titleLine), fields, opt(keyState), dup, how, next),
+		cat(one(titleLine), core, opt(keyState), dup, how, next),
+		cat(one(titleLine), username, remoteLine, opt(keyState), dup, how, next),
+		cat(one(titleLine), remoteLine, how, next),
+		cat(remoteLine, next),
+		cat(styledWrap(st.Text, example, w), next),
+		last,
 	}
 }
 
@@ -1117,7 +1179,7 @@ func (d *detailScreen) Resize(w, h int) {
 
 func (d *detailScreen) Help() []key.Binding {
 	km := d.sh.km
-	return []key.Binding{km.AddAccount, km.Edit, km.Delete, km.GenKey, km.Apply, km.Check, km.Doctor, km.Back}
+	return []key.Binding{km.AddAccount, km.Edit, km.Delete, km.GenKey, km.Apply, km.Clone, km.Check, km.Doctor, km.Back}
 }
 
 // ContextHelp puts the next step first in the short help bar.
@@ -1143,7 +1205,7 @@ func (d *detailScreen) ContextHelp() []helpItem {
 	if isSSH {
 		items = append(items, mk(km.GenKey, "g"))
 	}
-	items = append(items, mk(km.Check, "k"), mk(km.Doctor, "D"), mk(km.Back, "esc"))
+	items = append(items, mk(km.Clone, "c"), mk(km.Check, "k"), mk(km.Doctor, "D"), mk(km.Back, "esc"))
 	// primary first
 	for i, it := range items {
 		if it.primary {
@@ -1172,6 +1234,8 @@ func (d *detailScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 			return d, d.sh.pushNow(newConfirmScreen(d.sh, tr("tui.confirm.title_apply")))
 		case key.Matches(k, km.Check):
 			return d, d.sh.pushNow(newCheckScreen(d.sh))
+		case key.Matches(k, km.Clone):
+			return d, d.sh.pushNow(newCloneScreen(d.sh))
 		case key.Matches(k, km.Doctor):
 			return d, d.sh.pushNow(newDoctorScreen(d.sh))
 		case key.Matches(k, km.Delete):

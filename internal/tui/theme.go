@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"strings"
+
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/huh"
@@ -188,6 +190,27 @@ func trunc(s string, w int) string {
 		return ""
 	}
 	return ansi.Truncate(s, w, "…")
+}
+
+// truncWords cuts plain text to w cells at a word boundary, with an ellipsis,
+// so a word is never shown cut in the middle. A single word wider than w is
+// cut like trunc does.
+func truncWords(s string, w int) string {
+	if w <= 0 {
+		return ""
+	}
+	if lipgloss.Width(s) <= w {
+		return s
+	}
+	cut := ansi.Truncate(s, w-1, "")
+	// the cut is clean when it ends at a space or the text goes on with one
+	rest := strings.TrimPrefix(s, cut)
+	if !strings.HasSuffix(cut, " ") && !strings.HasPrefix(rest, " ") {
+		if i := strings.LastIndexByte(cut, ' '); i > 0 {
+			cut = cut[:i]
+		}
+	}
+	return strings.TrimRight(cut, " ") + "…"
 }
 
 // pad pads or cuts s to exactly w cells.

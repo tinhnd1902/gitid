@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -8,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/tinhnd1902/gitid/internal/app"
 	"github.com/tinhnd1902/gitid/internal/config"
 	"github.com/tinhnd1902/gitid/internal/keys"
 )
@@ -88,6 +90,9 @@ func (k *keygenScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		}
 		if msg.err != nil {
 			k.phase, k.errMsg = kgError, errText(msg.err)
+			if errors.Is(msg.err, app.ErrConfigChanged) {
+				return k, changed(msg.cfg) // show what is on disk now
+			}
 			return k, nil
 		}
 		pub := msg.pub
@@ -142,6 +147,12 @@ func (k *keygenScreen) run(noPass bool) tea.Cmd {
 func (k *keygenScreen) finish() tea.Cmd {
 	svc, cfg, ref, id := k.sh.svc, k.sh.cfg, k.ref, k.id
 	return func() tea.Msg {
+		// Never overwrite what another gitid window saved in the meantime.
+		if disk, stale, err := svc.ChangedSince(cfg); err != nil {
+			return keyDoneMsg{id: id, err: err}
+		} else if stale {
+			return keyDoneMsg{id: id, cfg: disk, err: app.ErrConfigChanged}
+		}
 		pub, saved, err := svc.FinishKey(cfg, ref)
 		return keyDoneMsg{id: id, pub: pub, cfg: saved, err: err}
 	}

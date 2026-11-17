@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -9,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/tinhnd1902/gitid/internal/app"
 	"github.com/tinhnd1902/gitid/internal/config"
 )
 
@@ -129,6 +131,9 @@ func (d *deleteScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		if msg.err != nil {
 			d.step, d.errMsg = 0, errText(msg.err)
 			d.pick.idx = 0
+			if errors.Is(msg.err, app.ErrConfigChanged) {
+				return d, changed(msg.res.Config) // show what is on disk now
+			}
 			return d, nil
 		}
 		status := tr("tui.status.account_deleted", d.company.Slug+"/"+d.word())
@@ -201,6 +206,12 @@ func (d *deleteScreen) run(keep bool) tea.Cmd {
 	d.errMsg = ""
 	svc, cfg, id, comp, acc := d.sh.svc, d.sh.cfg, d.id, d.company, d.account
 	return tea.Batch(d.spin.Tick, func() tea.Msg {
+		// Never overwrite what another gitid window saved in the meantime.
+		if disk, stale, err := svc.ChangedSince(cfg); err != nil {
+			return deletedMsg{id: id, err: err}
+		} else if stale {
+			return deletedMsg{id: id, res: app.DeleteResult{Config: disk}, err: app.ErrConfigChanged}
+		}
 		if acc == nil {
 			res, err := svc.DeleteCompany(cfg, comp.Slug, keep)
 			return deletedMsg{id: id, res: res, err: err}

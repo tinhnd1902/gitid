@@ -456,9 +456,8 @@ func TestD8SSHAccountWithKeyGoesToKeygen(t *testing.T) {
 	h.key("enter")
 	h.send(tea.KeyMsg{Type: tea.KeyDown}) // auth: ssh
 	h.key("enter")
-	for i := 0; i < 5; i++ { // host, orgs, ssh host, ssh port, default
-		h.key("enter")
-	}
+	h.key("enter") // advanced settings: no (the host, orgs and ssh fields stay hidden)
+	h.key("enter") // make default (acme already has accounts)
 	h.mustContain(tr("tui.form.gen_key"))
 	h.key("y") // generate the key right after saving
 	h.waitFor("keygen", func() bool { _, ok := h.top().(*keygenScreen); return ok })
@@ -650,8 +649,11 @@ func TestF7ConfirmHelpBar(t *testing.T) {
 	}
 	h.key("y")
 	h.waitFor("done", func() bool { c, ok := h.top().(*confirmScreen); return ok && c.state == confDone })
-	if !strings.HasPrefix(h.helpLine(), "▸ k "+tr("tui.key.check")) {
-		t.Fatalf("done: %q", h.helpLine())
+	// the next step is to clone; check and the way back follow
+	if hb := h.helpLine(); !strings.HasPrefix(hb, "▸ c "+tr("tui.key.clone")) ||
+		!strings.Contains(hb, "k "+tr("tui.key.check")) || !strings.Contains(hb, "enter "+tr("tui.key.to_list")) ||
+		strings.Contains(hb, "enter "+tr("tui.key.select")) {
+		t.Fatalf("done: %q", hb)
 	}
 }
 

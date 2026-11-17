@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -41,6 +42,7 @@ type importScreen struct {
 	errMsg string
 	spin   spinner.Model
 	w, h   int
+	userIn *huh.Input
 }
 
 func newImportScreen(sh *shared) *importScreen {
@@ -51,6 +53,7 @@ func (s *importScreen) Title() string { return tr("tui.import.title") }
 func (s *importScreen) Resize(w, h int) {
 	s.w, s.h = w, h
 	if s.form != nil {
+		s.hint()
 		s.form.WithWidth(maxInt(w-4, 20)).WithHeight(maxInt(h-3-errorRows, 4))
 	}
 }
@@ -69,11 +72,22 @@ func (s *importScreen) Help() []key.Binding {
 	km := s.sh.km
 	switch s.phase {
 	case imList:
+		if len(s.res.Proposals) == 0 {
+			return []key.Binding{km.Back} // nothing to pick: only the way out
+		}
 		return []key.Binding{km.Up, km.Down, withDesc(km.Enter, "enter", tr("tui.import.pick")), km.Back}
 	case imForm:
 		return []key.Binding{km.Save, km.Next, km.Cancel}
 	}
 	return nil
+}
+
+// hint sets the username hint wrapped word-aware for the form width (huh
+// would split the URL in it at the dot).
+func (s *importScreen) hint() {
+	if s.userIn != nil && s.w > 0 {
+		s.userIn.Description(hintText(tr("tui.form.username_hint"), maxInt(s.w-4, 20)-2))
+	}
 }
 
 func (s *importScreen) buildForm() {
@@ -82,17 +96,19 @@ func (s *importScreen) buildForm() {
 	for _, p := range platform.All() {
 		opts = append(opts, huh.NewOption(p.DisplayName(), string(p)))
 	}
+	s.userIn = huh.NewInput()
 	s.form = huh.NewForm(huh.NewGroup(
 		huh.NewSelect[string]().Title(tr("tui.f.platform")).Options(opts...).Inline(true).Value(&s.plat),
-		huh.NewInput().Title(tr("tui.f.username")).Description(tr("tui.form.username_hint")).Placeholder(tr("tui.form.eg", "alice")).Value(&s.user).
+		s.userIn.Title(tr("tui.f.username")).Description(tr("tui.form.username_hint")).Placeholder(tr("tui.form.eg", "alice")).Value(&s.user).
 			Validate(sh.fieldValidator("username", tr("tui.f.username"), true)),
 		huh.NewSelect[string]().Title(tr("tui.f.auth")).
 			Options(huh.NewOption("HTTPS", string(config.AuthHTTPS)), huh.NewOption("SSH", string(config.AuthSSH))).Value(&s.auth),
 		huh.NewInput().Title(tr("tui.f.host")).Description(tr("tui.form.host_hint")).
-			Placeholder(tr("tui.form.host_placeholder")).
+			Placeholder(tr("tui.form.eg", "git.acme.com")).
 			Value(&s.host).
 			Validate(sh.fieldValidator("host", tr("tui.f.host"), false)),
 	)).WithTheme(sh.st.huhTheme()).WithShowHelp(false).WithShowErrors(false)
+	s.hint()
 	s.form.WithWidth(maxInt(s.w-4, 20)).WithHeight(maxInt(s.h-3-errorRows, 4))
 }
 
@@ -118,6 +134,9 @@ func (s *importScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		}
 		if msg.err != nil {
 			s.phase, s.errMsg = imList, errText(msg.err)
+			if errors.Is(msg.err, app.ErrConfigChanged) {
+				return s, changed(msg.cfg) // show what is on disk now
+			}
 			return s, nil
 		}
 		return s, tea.Sequence(changed(msg.cfg), say(levelOK, tr("tui.status.imported")), replace(newConfirmScreen(s.sh, tr("tui.confirm.title_apply"))))
@@ -183,6 +202,12 @@ func (s *importScreen) save() tea.Cmd {
 		choice.Host = ""
 	}
 	return tea.Batch(s.spin.Tick, func() tea.Msg {
+		// Never overwrite what another gitid window saved in the meantime.
+		if disk, stale, err := svc.ChangedSince(cfg); err != nil {
+			return savedMsg{id: id, err: err}
+		} else if stale {
+			return savedMsg{id: id, cfg: disk, err: app.ErrConfigChanged}
+		}
 		comp := svc.ProposalToCompany(cfg, p, choice)
 		saved, backup, err := svc.Commit(app.AddCompany(cfg, comp))
 		return savedMsg{id: id, cfg: saved, backup: backup, err: err}
@@ -223,6 +248,7 @@ func (s *importScreen) listView(w int) string {
 	}
 	if len(s.res.Proposals) == 0 {
 		b.WriteString(st.Muted.Render(wrap(tr("cli.import.none"), w)) + "\n")
+		b.WriteString("\n" + st.Text.Render(wrap(tr("tui.import.none_next"), w)) + "\n")
 	} else {
 		b.WriteString(st.Bold.Render(tr("tui.import.proposals")) + "\n")
 		for i, p := range s.res.Proposals {

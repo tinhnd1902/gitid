@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/tinhnd1902/gitid/internal/app"
@@ -104,5 +105,70 @@ func TestCloneExec(t *testing.T) {
 	cmd, err := s.CloneExec(p)
 	if err != nil || cmd == nil {
 		t.Fatalf("CloneExec %v %v", cmd, err)
+	}
+}
+
+func TestChangedSince(t *testing.T) { // TC-E6
+	e := testutil.TempEnv(t)
+	s := app.New(e, execx.NewFake())
+
+	// a missing file equals the default configuration
+	if _, changed, err := s.ChangedSince(config.Default()); err != nil || changed {
+		t.Fatalf("missing file: changed=%v err=%v", changed, err)
+	}
+
+	cfg := fixtures.Basic()
+	saved, _, err := s.Commit(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := s.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, base := range map[string]config.Config{"loaded": loaded, "saved": saved} {
+		if _, changed, err := s.ChangedSince(base); err != nil || changed {
+			t.Fatalf("%s: changed=%v err=%v", name, changed, err)
+		}
+	}
+
+	// settings that were left empty are filled on load: not a change either
+	bare := config.Config{Version: 1, Companies: []config.Company{{Slug: "bare", Name: "Bare", BaseDir: "~/Code/bare/"}}}
+	if _, _, err := s.Commit(bare); err != nil {
+		t.Fatal(err)
+	}
+	if _, changed, err := s.ChangedSince(bare); err != nil || changed {
+		t.Fatalf("bare config: changed=%v err=%v", changed, err)
+	}
+	if _, _, err := s.Commit(saved); err != nil {
+		t.Fatal(err)
+	}
+
+	// normalization-only differences are not a change
+	odd := saved
+	odd.Companies = append([]config.Company(nil), saved.Companies...)
+	odd.Companies[0].BaseDir = "  " + strings.TrimSuffix(odd.Companies[0].BaseDir, "/")
+	odd.Companies[0].Accounts = append([]config.Account(nil), odd.Companies[0].Accounts...)
+	odd.Companies[0].Accounts[0].Username += " "
+	if _, changed, err := s.ChangedSince(odd); err != nil || changed {
+		t.Fatalf("normalize-only: changed=%v err=%v", changed, err)
+	}
+
+	// another writer commits: the old base is now stale, the new disk is returned
+	other := saved
+	other.Companies = append([]config.Company(nil), saved.Companies...)
+	other.Companies = append(other.Companies, config.Company{Slug: "zed", Name: "Zed", BaseDir: "~/Code/zed/"})
+	if _, _, err := s.Commit(other); err != nil {
+		t.Fatal(err)
+	}
+	disk, changed, err := s.ChangedSince(saved)
+	if err != nil || !changed {
+		t.Fatalf("after commit: changed=%v err=%v", changed, err)
+	}
+	if _, _, ok := disk.FindCompany("zed"); !ok {
+		t.Fatal("the disk configuration was not returned")
+	}
+	if !errors.Is(app.ErrConfigChanged, app.ErrConfigChanged) {
+		t.Fatal("ErrConfigChanged")
 	}
 }

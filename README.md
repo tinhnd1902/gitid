@@ -109,8 +109,8 @@ gitid            # opens the TUI; press ? for the key map, q to quit
 First run in the TUI, three steps (the screen shows them too, and the bottom line always marks the next key with `▸`):
 
 1. `A` adds a company: a short slug and a base folder such as `~/Code/acme/`.
-2. `a` adds a Git account (username, email) to that company.
-3. `p` previews the files gitid will write, then `y` applies them (every file is backed up first). After that, every repo inside the base folder uses the right account; `k` checks a repo.
+2. `a` adds a Git account (username, email) to that company. The form shows the remote the account will use (`https://<username>@github.com/…`) and the gitid ID it derives from the username. The username is your login on the platform (the part in `github.com/<login>`), not your email; the email only becomes the commit author and gitid does not verify it.
+3. `p` previews the files gitid will write, then `y` applies them (every file is backed up first). After that, every repo inside the base folder uses the right account: `c` clones a repo into it, `k` checks a repo. The first HTTPS clone or push makes git ask you to sign in (use a Personal Access Token if it asks for a password); gitid itself never signs in to or verifies anything with the platform.
 
 **Preview safely:**
 
@@ -305,7 +305,7 @@ gitid rewrites `config.yaml` from its internal model whenever you save, so **com
 
 ### List
 
-The home screen is a tree of companies and accounts with a platform tag (`GH`, `GL`, `BB`, `GT`, `AZ`), the auth mode, `★` for the company default and the email. Press `/` to filter by name, username, email, host or platform; matching is fuzzy inside each word and the tree order is kept. From 84 columns a detail pane sits next to the list; from 60 columns (and 24 rows) it sits below the list; on smaller terminals `enter` opens it. The pane explains what the selected company or account does ("What happens"). A company without an account is marked `no accounts yet`: gitid writes nothing for it until you add one with `a`.
+The home screen is a tree of companies and accounts with a platform tag (`GH`, `GL`, `BB`, `GT`, `AZ`), the auth mode, `★` for the company default and the email. Press `/` to filter by name, username, email, host or platform; matching is fuzzy inside each word and the tree order is kept. From 84 columns a detail pane sits next to the list; from 60 columns (and 24 rows) it sits below the list; on smaller terminals `enter` opens it. The pane explains what the selected company or account does ("What happens"); for an account it also shows the remote it produces, its folder and the next step. Two accounts of one company with the same platform, host and username are flagged with `!`. A company without an account is marked `no accounts yet`: gitid writes nothing for it until you add one with `a`.
 
 ```text
 ▌ acme  ACME Corp                   ~/Code/acme/  2 accounts

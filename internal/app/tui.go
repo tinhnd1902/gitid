@@ -1,7 +1,9 @@
 package app
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"os/exec"
 
 	"github.com/tinhnd1902/gitid/internal/config"
@@ -17,6 +19,46 @@ import (
 
 // ErrLocked is returned when another gitid process holds the apply lock.
 var ErrLocked = fsx.ErrLocked
+
+// ErrConfigChanged is returned by a TUI write when config.yaml was changed by
+// someone else (another gitid window, gitid import) since the TUI loaded it.
+var ErrConfigChanged = errors.New("app: config.yaml changed since it was loaded")
+
+// ChangedSince reports whether config.yaml on disk differs from base, the
+// configuration the caller is about to modify. It returns the configuration
+// on disk so the caller can reload it. The comparison is on the normalized,
+// serialized form (not on modification times), so formatting differences and
+// normalization never count as a change. A missing file equals the default
+// configuration.
+func (s *Service) ChangedSince(base config.Config) (config.Config, bool, error) {
+	disk, err := s.Load()
+	if err != nil {
+		return config.Config{}, false, err
+	}
+	a, err := s.canonical(base)
+	if err != nil {
+		return disk, false, err
+	}
+	b, err := s.canonical(disk)
+	if err != nil {
+		return disk, false, err
+	}
+	return disk, !bytes.Equal(a, b), nil
+}
+
+// canonical serializes cfg the way config.yaml would be read back: normalized,
+// written, parsed (which fills the default settings) and normalized again.
+func (s *Service) canonical(cfg config.Config) ([]byte, error) {
+	data, err := config.Marshal(config.Normalize(cfg, s.Env))
+	if err != nil {
+		return nil, err
+	}
+	parsed, err := config.Parse(data)
+	if err != nil {
+		return nil, err
+	}
+	return config.Marshal(config.Normalize(parsed, s.Env))
+}
 
 // ValidateField validates one form value; it returns "" or an i18n error key.
 func (s *Service) ValidateField(field, value string) string {

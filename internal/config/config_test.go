@@ -2,8 +2,10 @@ package config_test
 
 import (
 	"errors"
+	"math/rand"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -181,6 +183,76 @@ func TestDefaultAccountID(t *testing.T) { // D6
 	}
 	if config.DefaultAccountID(c, platform.GitLab, "alice") != "alice-gitlab" {
 		t.Fatal("dup")
+	}
+}
+
+// P1-10: DefaultAccountID always yields an id that passes the id rule.
+func TestDefaultAccountIDIsAlwaysValid(t *testing.T) {
+	idRe := regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
+	company := func(ids ...string) config.Company {
+		c := config.Company{Slug: "x"}
+		for _, id := range ids {
+			c.Accounts = append(c.Accounts, config.Account{ID: id})
+		}
+		return c
+	}
+	long := strings.Repeat("a", 40)
+	tests := []struct {
+		name     string
+		ids      []string
+		plat     platform.Platform
+		username string
+		want     string
+	}{
+		{"H1 plain", nil, platform.GitHub, "Dave", "dave"},
+		{"H2 duplicate", []string{"alice"}, platform.GitLab, "alice", "alice-gitlab"},
+		{"H3 dot", nil, platform.GitLab, "john.doe", "john-doe"},
+		{"H4 runs and edges", nil, platform.GitLab, "John__Doe.", "john-doe"},
+		{"H5 nothing left", nil, platform.GitLab, "___", "account"},
+		{"H6 too long", nil, platform.GitHub, long, strings.Repeat("a", 32)},
+		{"H8 second duplicate", []string{"alice", "alice-gitlab"}, platform.GitLab, "alice", "alice-gitlab-2"},
+		{"third duplicate", []string{"alice", "alice-gitlab", "alice-gitlab-2"}, platform.GitLab, "alice", "alice-gitlab-3"},
+		{"non ascii", nil, platform.GitHub, "Trần Văn", "tr-n-v-n"},
+	}
+	for _, tc := range tests {
+		got := config.DefaultAccountID(company(tc.ids...), tc.plat, tc.username)
+		if got != tc.want {
+			t.Errorf("%s: got %q, want %q", tc.name, got, tc.want)
+		}
+		if !idRe.MatchString(got) {
+			t.Errorf("%s: %q is not a valid id", tc.name, got)
+		}
+	}
+
+	// H7: a 32-character id already taken, a longer username
+	got := config.DefaultAccountID(company(strings.Repeat("a", 32)), platform.GitLab, long)
+	if len(got) > 32 || !strings.HasSuffix(got, "-gitlab") || !idRe.MatchString(got) {
+		t.Errorf("H7: %q", got)
+	}
+}
+
+// H9: whatever the username, the id is valid and not taken.
+func TestDefaultAccountIDProperty(t *testing.T) {
+	idRe := regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
+	rng := rand.New(rand.NewSource(1))
+	alphabet := []rune("abcXYZ019 ._-@+/éà漢-_.")
+	c := config.Company{Slug: "x", Accounts: []config.Account{{ID: "alice"}, {ID: "alice-github"}, {ID: "account"}}}
+	for i := 0; i < 200; i++ {
+		n := 1 + rng.Intn(45)
+		var b strings.Builder
+		for j := 0; j < n; j++ {
+			b.WriteRune(alphabet[rng.Intn(len(alphabet))])
+		}
+		u := b.String()
+		for _, p := range []platform.Platform{platform.GitHub, platform.GitLab, platform.AzureDevOps} {
+			id := config.DefaultAccountID(c, p, u)
+			if !idRe.MatchString(id) {
+				t.Fatalf("username %q (%s): invalid id %q", u, p, id)
+			}
+			if _, _, taken := c.FindAccount(id); taken {
+				t.Fatalf("username %q (%s): id %q is taken", u, p, id)
+			}
+		}
 	}
 }
 

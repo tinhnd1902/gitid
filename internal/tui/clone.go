@@ -63,7 +63,7 @@ func newCloneScreen(sh *shared) *cloneScreen {
 	in := textinput.New()
 	in.Prompt = "› "
 	in.PromptStyle = sh.st.Accent
-	in.Placeholder = "https://github.com/org/repo.git"
+	in.Placeholder = tr("tui.form.eg", "https://github.com/org/repo.git")
 	in.CharLimit = 1024
 	p := progress.New(progress.WithGradient("#7C6BFF", "#2DD4BF"), progress.WithoutPercentage())
 	return &cloneScreen{sh: sh, id: sh.id(), input: in, prog: p, spin: sh.st.Spinner}

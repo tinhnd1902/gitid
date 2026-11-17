@@ -51,7 +51,59 @@ type formHost struct {
 	spin   spinner.Model
 	id     int
 	fixed  [][2]string // read-only (label, value) pairs shown above the form
+	// preview, when set, draws a live block between the error area and the
+	// form. It is called from View, on the Update goroutine, with the usable
+	// width and the number of rows it may fill. It must read the form state
+	// only; huh's DescriptionFunc runs in another goroutine and is not used
+	// for this.
+	preview func(w, rows int) []string
+	// previewHead, when set, is the height the first part of the preview
+	// needs at width w (a remote that wraps); 1 when unset or when the body
+	// is too short to spend more.
+	previewHead func(w int) int
+	// hints are the descriptions that must be wrapped here (see hintText);
+	// they are set again whenever the width changes.
+	hints []hintSlot
+	// sizedRows is the preview height the form height was computed with.
+	sizedRows int
 }
+
+// hintSlot is a form description kept word-wrapped for the current width.
+type hintSlot struct {
+	text string
+	set  func(string)
+}
+
+// addHint registers a description: set receives the text wrapped for the
+// width of the form (the text itself while the width is unknown).
+func (f *formHost) addHint(text string, set func(string)) string {
+	f.hints = append(f.hints, hintSlot{text: text, set: set})
+	return text
+}
+
+// hintWidth is the width huh gives a description: the form width less the
+// frame (border and padding) of a field.
+func (f *formHost) hintWidth() int {
+	return maxInt(f.w-4, 20) - 2
+}
+
+func (f *formHost) applyHints() {
+	if f.w <= 0 {
+		return
+	}
+	for _, h := range f.hints {
+		h.set(hintText(h.text, f.hintWidth()))
+	}
+}
+
+// Preview block height: the remote line, plus up to two lines of notes when
+// the body is tall enough; the remote line alone below previewMinBody rows.
+const (
+	previewNoteRows = 2
+	previewMinBody  = 18
+	previewWrapMin  = 12 // below this body height the remote stays on one line
+	previewHeadMax  = 3
+)
 
 func (f *formHost) initHost(sh *shared, title string) {
 	f.sh, f.title = sh, title
@@ -76,10 +128,39 @@ func (f *formHost) fixedLines() int {
 	return len(f.fixed) + 2 // values, the hint line and a blank line
 }
 
+// previewRows is the height reserved for the preview block (0 without one).
+func (f *formHost) previewRows() int {
+	switch {
+	case f.preview == nil:
+		return 0
+	}
+	head := 1
+	if f.previewHead != nil && f.h >= previewWrapMin {
+		head = clamp(f.previewHead(f.previewWidth()), 1, previewHeadMax)
+	}
+	if f.h < previewMinBody {
+		return head
+	}
+	return head + previewNoteRows
+}
+
+func (f *formHost) previewWidth() int { return maxInt(f.w-6, 10) }
+
 func (f *formHost) applySize(form *huh.Form) {
 	if f.w > 0 {
-		form.WithWidth(maxInt(f.w-4, 20)).WithHeight(maxInt(f.h-3-errorRows-f.fixedLines(), 4))
+		f.applyHints()
+		f.sizedRows = f.previewRows()
+		form.WithWidth(maxInt(f.w-4, 20)).WithHeight(maxInt(f.h-3-errorRows-f.fixedLines()-f.previewRows(), 4))
 	}
+}
+
+// previewView renders the preview block, always previewRows lines high.
+func (f *formHost) previewView() string {
+	n := f.previewRows()
+	if n == 0 {
+		return ""
+	}
+	return fitHeight(joinLines(f.preview(f.previewWidth(), n)), n) + "\n"
 }
 
 func (f *formHost) fixedView() string {
@@ -96,9 +177,16 @@ func (f *formHost) fixedView() string {
 }
 
 func (f *formHost) Resize(w, h int) {
+	changed := f.w != w || f.h != h
+	had := f.w > 0
 	f.w, f.h = w, h
 	if f.form != nil {
 		f.applySize(f.form)
+		if changed && had {
+			// huh wraps the hints when it handles a message, not when the
+			// size changes: push one through so nothing stays cut.
+			f.form.Update(tea.WindowSizeMsg{Width: w, Height: h})
+		}
 	}
 }
 
@@ -121,6 +209,15 @@ func (f *formHost) ContextHelp() []helpItem {
 	return out
 }
 
+// shownError is the message drawn in the error area: the first validation
+// error of the form, or the error of the last save.
+func (f *formHost) shownError() string {
+	if errs := f.form.Errors(); len(errs) > 0 {
+		return errs[0].Error()
+	}
+	return f.errMsg
+}
+
 func (f *formHost) view() string {
 	st := f.sh.st
 	var body string
@@ -128,15 +225,16 @@ func (f *formHost) view() string {
 	case f.saving:
 		body = "\n  " + f.spin.View() + " " + st.Muted.Render(tr("tui.form.saving"))
 	default:
-		msg := f.errMsg
-		if errs := f.form.Errors(); len(errs) > 0 {
-			msg = errs[0].Error()
-		}
+		msg := f.shownError()
 		errBlock := ""
 		if msg != "" {
 			errBlock = st.Err.Render(wrap("✗ "+msg, maxInt(f.w-6, 10)))
 		}
-		body = fitHeight(errBlock, errorRows) + "\n" + f.fixedView() + f.form.View()
+		if f.previewRows() != f.sizedRows {
+			// the remote wrapped (or stopped wrapping) while typing
+			f.applySize(f.form)
+		}
+		body = fitHeight(errBlock, errorRows) + "\n" + f.previewView() + f.fixedView() + f.form.View()
 	}
 	return f.sh.panel(f.title, body, f.w, f.h, true)
 }
@@ -144,16 +242,23 @@ func (f *formHost) view() string {
 // commit saves cfg in the background; the result is a savedMsg.
 func (f *formHost) commit(cfg config.Config, after func(config.Config) Screen) tea.Cmd {
 	f.saving = true
-	svc, id := f.sh.svc, f.id
+	svc, id, base := f.sh.svc, f.id, f.sh.cfg
 	return tea.Batch(f.spin.Tick, func() tea.Msg {
+		// Never overwrite what another gitid window saved in the meantime.
+		if disk, stale, err := svc.ChangedSince(base); err != nil {
+			return savedMsg{id: id, err: err}
+		} else if stale {
+			return savedMsg{id: id, cfg: disk, err: app.ErrConfigChanged}
+		}
 		saved, backup, err := svc.Commit(cfg)
 		return savedMsg{id: id, cfg: saved, backup: backup, err: err, after: after}
 	})
 }
 
 // handleSaved processes a savedMsg. It returns (handled, cmd, rebuild) where
-// rebuild asks the caller to create a fresh form after an error. ok builds
-// the command to run after a successful save.
+// rebuild asks the caller to create a fresh form after an error (cmd may then
+// still carry a command to run, such as reloading a stale configuration). ok
+// builds the command to run after a successful save.
 func (f *formHost) handleSaved(msg savedMsg, ok func(config.Config) tea.Cmd) (bool, tea.Cmd, bool) {
 	if msg.id != f.id {
 		return false, nil, false
@@ -161,6 +266,10 @@ func (f *formHost) handleSaved(msg savedMsg, ok func(config.Config) tea.Cmd) (bo
 	f.saving = false
 	if msg.err != nil {
 		f.errMsg = errText(msg.err)
+		if errors.Is(msg.err, app.ErrConfigChanged) {
+			// show the configuration found on disk; the form keeps its values
+			return true, changed(msg.cfg), true
+		}
 		return true, nil, true
 	}
 	return true, ok(msg.cfg), false
@@ -294,7 +403,7 @@ func (f *companyForm) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		if ok, cmd, rebuild := f.handleSaved(msg, next); ok {
 			if rebuild {
 				f.form = f.build()
-				return f, f.form.Init()
+				return f, tea.Batch(f.form.Init(), cmd)
 			}
 			return f, cmd
 		}
@@ -362,6 +471,7 @@ type accountForm struct {
 	username, name, email     string
 	host, orgs, sshHost, port string
 	makeDefault, genKey       bool
+	showAdvanced              bool
 }
 
 func newAccountForm(sh *shared, slug string, edit *config.Account) *accountForm {
@@ -379,6 +489,8 @@ func newAccountForm(sh *shared, slug string, edit *config.Account) *accountForm 
 		if c, _, ok := sh.cfg.FindCompany(slug); ok {
 			f.makeDefault = c.DefaultAccount == edit.ID
 		}
+		// settings that were customized are shown, not hidden
+		f.showAdvanced = edit.Host != "" || edit.SSHHost != "" || edit.SSHPort > 0 || len(edit.Orgs) > 0
 	} else if c, _, ok := sh.cfg.FindCompany(slug); ok {
 		f.makeDefault = len(c.Accounts) == 0
 		// a new account of a company with accounts inherits their git name
@@ -387,6 +499,8 @@ func newAccountForm(sh *shared, slug string, edit *config.Account) *accountForm 
 		}
 	}
 	f.initHost(sh, title)
+	f.preview = f.previewLines
+	f.previewHead = f.remoteRows
 	if edit != nil {
 		f.fixed = [][2]string{{tr("tui.f.id"), edit.ID}}
 	}
@@ -398,33 +512,173 @@ func (f *accountForm) Title() string { return f.title }
 
 func (f *accountForm) hasKey() bool { return f.edit != nil && f.edit.SSHKey != "" }
 
+// editID is the id of the account being edited ("" for a new one).
+func (f *accountForm) editID() string {
+	if f.edit != nil {
+		return f.edit.ID
+	}
+	return ""
+}
+
+// company is the company the account belongs to.
+func (f *accountForm) company() config.Company {
+	if c, _, ok := f.sh.cfg.FindCompany(f.companySlug); ok {
+		return c
+	}
+	return config.Company{Slug: f.companySlug}
+}
+
+// hasOtherAccounts reports whether the company has an account besides the one
+// being edited: only then "make default" is a real choice (the first account
+// is always the default).
+func (f *accountForm) hasOtherAccounts() bool {
+	for _, a := range f.company().Accounts {
+		if a.ID != f.editID() {
+			return true
+		}
+	}
+	return false
+}
+
+// candidate is the account the form describes as far as its login goes.
+func (f *accountForm) candidate() config.Account {
+	return config.Account{
+		ID:       f.accountID(),
+		Platform: platform.Platform(f.plat),
+		Host:     strings.TrimSpace(f.host),
+		Username: strings.TrimSpace(f.username),
+		Auth:     config.Auth(f.auth),
+	}
+}
+
+// loginError is the reason the login of the form cannot be saved: an email
+// where a username belongs, or an account of the company that already signs
+// in as the same user. It returns "" when there is none.
+func (f *accountForm) loginError() string {
+	c := f.candidate()
+	if dup, ok := dupInCompany(f.company(), c, f.editID()); ok {
+		return tr("tui.form.err.dup_account", dup.ID, c.EffectiveHost())
+	}
+	if looksLikeEmail(c.Platform, c.Username) {
+		return tr("tui.form.err.username_email")
+	}
+	return ""
+}
+
+// previewLines is the live block above the form: the remote the account will
+// produce, and one note (first match wins): a duplicate, an email typed as a
+// username, the same login in another company, a changed username, or the id.
+func (f *accountForm) previewLines(w, rows int) []string {
+	st := f.sh.st
+	acc := f.candidate()
+	var lines []string
+	for _, l := range f.remoteLines(w, rows) {
+		lines = append(lines, st.Muted.Render(l))
+	}
+	if rows <= len(lines) {
+		return lines
+	}
+	var note string
+	style := st.Faint
+	loginErr := f.loginError()
+	var elsewhere []string
+	if acc.Username != "" {
+		elsewhere = loginElsewhere(f.sh.cfg, f.companySlug, acc)
+	}
+	switch {
+	case loginErr != "" && loginErr == f.shownError():
+		// the error area already says it; do not repeat it
+	case loginErr != "":
+		note, style = loginErr, st.Err
+	case len(elsewhere) > 0:
+		note, style = tr("tui.form.warn.dup_other", strings.Join(elsewhere, ", ")), st.Warn
+	case f.edit != nil && acc.Username != "" && acc.Username != f.edit.Username:
+		note, style = tr("tui.form.warn.username_changed", f.edit.Username), st.Warn
+	case acc.Username != "" && f.edit != nil:
+		note = tr("tui.form.preview_id_fixed", acc.ID)
+	case acc.Username != "":
+		note = tr("tui.form.preview_id", acc.ID)
+	}
+	if note == "" {
+		return lines
+	}
+	noteLines := wrapLines(note, w)
+	if left := rows - len(lines); len(noteLines) > left {
+		noteLines = noteLines[:left]
+	}
+	for _, l := range noteLines {
+		lines = append(lines, style.Render(l))
+	}
+	return lines
+}
+
+// remoteLines is the "Remote will be" line, wrapped so the URL is shown whole
+// (on its own line when it does not fit after the label). Only a body too
+// short to spare the rows cuts it to one line.
+func (f *accountForm) remoteLines(w, rows int) []string {
+	acc := f.candidate()
+	if acc.Username == "" {
+		acc.Username, acc.ID = sentUser, sentUser
+	}
+	example := remoteExample(config.AccountRef{Company: f.company(), Account: acc})
+	example = strings.ReplaceAll(example, sentUser, "<username>")
+	text := tr("tui.form.preview_remote", example)
+	if f.h < previewWrapMin {
+		return []string{trunc(text, w)}
+	}
+	lines := wrapUnits(text, w)
+	if len(lines) > previewHeadMax {
+		lines = lines[:previewHeadMax]
+	}
+	return lines
+}
+
+// remoteRows is how many rows the remote line needs at width w.
+func (f *accountForm) remoteRows(w int) int { return len(f.remoteLines(w, 0)) }
+
+// sentUser stands in for an empty username while the example is rendered.
+const sentUser = "GITIDUSER"
+
 func (f *accountForm) build() *huh.Form {
 	sh := f.sh
 	var platOpts []huh.Option[string]
 	for _, p := range platform.All() {
 		platOpts = append(platOpts, huh.NewOption(p.DisplayName(), string(p)))
 	}
+	userRequired := sh.fieldValidator("username", tr("tui.f.username"), true)
+	f.hints = nil
+	userIn, emailIn := huh.NewInput(), huh.NewInput()
 	main := []huh.Field{}
 	main = append(main,
 		huh.NewSelect[string]().Title(tr("tui.f.platform")).Description(tr("tui.form.platform_hint")).
 			Options(platOpts...).Inline(true).Value(&f.plat),
-		huh.NewInput().Title(tr("tui.f.username")).Description(tr("tui.form.username_hint")).
+		userIn.Title(tr("tui.f.username")).Description(f.addHint(tr("tui.form.username_hint"), func(s string) { userIn.Description(s) })).
 			Placeholder(tr("tui.form.eg", "alice")).Value(&f.username).
-			Validate(sh.fieldValidator("username", tr("tui.f.username"), true)),
+			Validate(func(v string) error {
+				if err := userRequired(v); err != nil {
+					return err
+				}
+				if msg := f.loginError(); msg != "" {
+					return errors.New(msg)
+				}
+				return nil
+			}),
 		huh.NewInput().Title(tr("tui.f.git_name")).Description(tr("tui.form.git_name_hint")).
 			Placeholder(tr("tui.form.eg", "Alice Tran")).Value(&f.name).
 			Validate(sh.fieldValidator("name", tr("tui.f.git_name"), true)),
-		huh.NewInput().Title(tr("tui.f.email")).Description(tr("tui.form.email_hint")).
+		emailIn.Title(tr("tui.f.email")).Description(f.addHint(tr("tui.form.email_hint"), func(s string) { emailIn.Description(s) })).
 			Placeholder(tr("tui.form.eg", "alice@acme.com")).Value(&f.email).
 			Validate(sh.fieldValidator("email", tr("tui.f.email"), true)),
 		huh.NewSelect[string]().Title(tr("tui.f.auth")).Description(tr("tui.form.auth_hint")).
 			Options(huh.NewOption("HTTPS ("+tr("tui.form.auth_https")+")", string(config.AuthHTTPS)),
 				huh.NewOption("SSH ("+tr("tui.form.auth_ssh")+")", string(config.AuthSSH))).
 			Value(&f.auth),
+		huh.NewConfirm().Title(tr("tui.form.show_advanced")).Description(tr("tui.form.advanced_hint")).
+			Value(&f.showAdvanced).Affirmative(tr("tui.yes")).Negative(tr("tui.no")),
 	)
 	advanced := []huh.Field{
 		huh.NewInput().Title(tr("tui.f.host")).Description(tr("tui.form.host_hint")).
-			Placeholder(tr("tui.form.host_placeholder")).
+			Placeholder(tr("tui.form.eg", "git.acme.com")).
 			Value(&f.host).
 			Validate(func(v string) error {
 				v = strings.TrimSpace(v)
@@ -446,12 +700,17 @@ func (f *accountForm) build() *huh.Form {
 			Validate(sh.fieldValidator("ssh_host", tr("tui.f.ssh_host"), false)),
 		huh.NewInput().Title(tr("tui.f.ssh_port")).Value(&f.port).
 			Validate(sh.fieldValidator("ssh_port", tr("tui.f.ssh_port"), false)),
-		huh.NewConfirm().Title(tr("tui.f.make_default")).Value(&f.makeDefault).
-			Affirmative(tr("tui.yes")).Negative(tr("tui.no")),
 	}
+	// The hide funcs run in Form.Update, on the Update goroutine, like the
+	// validators: they may read the form fields.
 	groups := []*huh.Group{
 		huh.NewGroup(main...).Title(tr("tui.form.group_main")),
-		huh.NewGroup(advanced...).Title(tr("tui.form.group_advanced")),
+		huh.NewGroup(advanced...).Title(tr("tui.form.group_advanced")).
+			WithHideFunc(func() bool { return !f.showAdvanced && f.plat != string(platform.Gitea) }),
+		huh.NewGroup(
+			huh.NewConfirm().Title(tr("tui.f.make_default")).Value(&f.makeDefault).
+				Affirmative(tr("tui.yes")).Negative(tr("tui.no")),
+		).WithHideFunc(func() bool { return !f.hasOtherAccounts() }),
 	}
 	if !f.hasKey() {
 		groups = append(groups, huh.NewGroup(
@@ -479,12 +738,17 @@ func (f *accountForm) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	case savedMsg:
 		next := func(config.Config) tea.Cmd {
 			ref := f.companySlug + "/" + f.accountID()
-			return f.reviewNext(msg, statusMsg{level: levelOK, text: tr("tui.status.account_saved", ref), ttl: hintTTL}, ref)
+			text := tr("tui.status.account_saved", ref)
+			if f.edit != nil && strings.TrimSpace(f.username) != f.edit.Username {
+				// repos cloned with the old username keep pointing at it
+				text = tr("tui.status.account_saved_relogin", ref, f.edit.Username)
+			}
+			return f.reviewNext(msg, statusMsg{level: levelOK, text: text, ttl: hintTTL}, ref)
 		}
 		if ok, cmd, rebuild := f.handleSaved(msg, next); ok {
 			if rebuild {
 				f.form = f.build()
-				return f, f.form.Init()
+				return f, tea.Batch(f.form.Init(), cmd)
 			}
 			return f, cmd
 		}
@@ -526,13 +790,18 @@ func (f *accountForm) accountID() string {
 	return config.DefaultAccountID(c, platform.Platform(f.plat), strings.TrimSpace(f.username))
 }
 
+// fail shows msg in the error area and starts the form over with its values.
+func (f *accountForm) fail(msg string) tea.Cmd {
+	f.errMsg = msg
+	f.form = f.build()
+	return f.form.Init()
+}
+
 func (f *accountForm) submit() tea.Cmd {
 	sh := f.sh
 	comp, ci, ok := sh.cfg.FindCompany(f.companySlug)
 	if !ok {
-		f.errMsg = errText(config.ErrRefNotFound)
-		f.form = f.build()
-		return f.form.Init()
+		return f.fail(errText(config.ErrRefNotFound))
 	}
 	acc := config.Account{
 		ID:       f.accountID(),
@@ -545,6 +814,11 @@ func (f *accountForm) submit() tea.Cmd {
 		Auth:     config.Auth(f.auth),
 		Orgs:     splitList(f.orgs),
 	}
+	// The username validator saw the host as it was then; the host (advanced
+	// settings) and the platform may have changed since.
+	if msg := f.loginError(); msg != "" {
+		return f.fail(msg)
+	}
 	if acc.Host == platform.DefaultHost(acc.Platform) {
 		acc.Host = ""
 	}
@@ -556,9 +830,7 @@ func (f *accountForm) submit() tea.Cmd {
 	}
 	cfg, err := app.UpsertAccount(sh.cfg, f.companySlug, acc)
 	if err != nil {
-		f.errMsg = errText(err)
-		f.form = f.build()
-		return f.form.Init()
+		return f.fail(errText(err))
 	}
 	if f.makeDefault {
 		cfg.Companies[ci].DefaultAccount = acc.ID

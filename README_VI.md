@@ -109,8 +109,8 @@ gitid            # mở TUI; nhấn ? để xem phím tắt, q để thoát
 Lần đầu dùng TUI, làm ba bước (màn hình cũng hiện sẵn các bước, và dòng dưới cùng luôn đánh dấu phím tiếp theo bằng `▸`):
 
 1. `A` thêm công ty: một slug ngắn và một thư mục gốc như `~/Code/acme/`.
-2. `a` thêm tài khoản Git (username, email) cho công ty đó.
-3. `p` xem trước các tệp gitid sẽ ghi, rồi `y` để áp dụng (mọi tệp đều được sao lưu trước). Từ đó mọi repo trong thư mục gốc tự dùng đúng tài khoản; `k` kiểm tra một repo.
+2. `a` thêm tài khoản Git (username, email) cho công ty đó. Form hiện sẵn remote tài khoản sẽ dùng (`https://<username>@github.com/…`) và ID gitid tự đặt theo username. Username là tên đăng nhập của bạn trên nền tảng (phần trong `github.com/<login>`), không phải email; email chỉ để ghi tác giả commit và gitid không xác minh nó.
+3. `p` xem trước các tệp gitid sẽ ghi, rồi `y` để áp dụng (mọi tệp đều được sao lưu trước). Từ đó mọi repo trong thư mục gốc tự dùng đúng tài khoản: `c` clone repo vào đó, `k` kiểm tra một repo. Lần đầu clone hoặc push qua HTTPS, git sẽ hỏi đăng nhập (nếu hỏi mật khẩu, hãy dùng Personal Access Token); bản thân gitid không đăng nhập hay xác minh gì với nền tảng.
 
 **Xem trước an toàn:**
 
@@ -305,7 +305,7 @@ Mỗi lần lưu, gitid ghi lại `config.yaml` từ mô hình nội bộ, nên 
 
 ### Danh sách
 
-Màn hình chính là cây công ty và tài khoản với thẻ nền tảng (`GH`, `GL`, `BB`, `GT`, `AZ`), kiểu xác thực, `★` cho tài khoản mặc định của công ty và email. Nhấn `/` để lọc theo tên, username, email, host hoặc nền tảng; việc so khớp là mờ trong từng từ và giữ nguyên thứ tự của cây. Từ 84 cột, khung chi tiết nằm cạnh danh sách; từ 60 cột (và 24 dòng) nó nằm dưới danh sách; terminal nhỏ hơn thì nhấn `enter` để mở. Khung này giải thích công ty hoặc tài khoản đang chọn sẽ làm gì ("Điều gì sẽ xảy ra"). Công ty chưa có tài khoản được đánh dấu `chưa có tài khoản`: gitid chưa ghi gì cho nó cho tới khi bạn thêm tài khoản bằng `a`.
+Màn hình chính là cây công ty và tài khoản với thẻ nền tảng (`GH`, `GL`, `BB`, `GT`, `AZ`), kiểu xác thực, `★` cho tài khoản mặc định của công ty và email. Nhấn `/` để lọc theo tên, username, email, host hoặc nền tảng; việc so khớp là mờ trong từng từ và giữ nguyên thứ tự của cây. Từ 84 cột, khung chi tiết nằm cạnh danh sách; từ 60 cột (và 24 dòng) nó nằm dưới danh sách; terminal nhỏ hơn thì nhấn `enter` để mở. Khung này giải thích công ty hoặc tài khoản đang chọn sẽ làm gì ("Điều gì sẽ xảy ra"); với tài khoản, nó còn hiện remote được tạo ra, thư mục và bước tiếp theo. Hai tài khoản cùng công ty có cùng nền tảng, host và username được đánh dấu `!`. Công ty chưa có tài khoản được đánh dấu `chưa có tài khoản`: gitid chưa ghi gì cho nó cho tới khi bạn thêm tài khoản bằng `a`.
 
 ```text
 ▌ acme  ACME Corp                 ~/Code/acme/  2 tài khoản

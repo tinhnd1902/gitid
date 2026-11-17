@@ -4,6 +4,7 @@ package config
 
 import (
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/tinhnd1902/gitid/internal/env"
@@ -193,14 +194,62 @@ func DefaultBaseDir(e env.Env, codeRoot, slug string) string {
 	return NormalizeBaseDir(e, strings.TrimRight(codeRoot, "/")+"/"+slug)
 }
 
-// DefaultAccountID implements D6: the username, or username-platform when
-// the company already has an account with that id.
-func DefaultAccountID(c Company, p platform.Platform, username string) string {
-	id := strings.ToLower(username)
-	if _, _, dup := c.FindAccount(id); dup {
-		return id + "-" + string(p)
+// maxIDLen is the longest account id (see the id rule in validate.go).
+const maxIDLen = 32
+
+// sanitizeID turns a username into a valid id fragment: lowercase, every
+// rune outside [a-z0-9-] becomes "-", runs of "-" collapse, leading and
+// trailing "-" go, and nothing is left as "account".
+func sanitizeID(username string) string {
+	var b strings.Builder
+	dash := true // swallows leading dashes
+	for _, r := range strings.ToLower(username) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+			dash = false
+			continue
+		}
+		if !dash {
+			b.WriteByte('-')
+			dash = true
+		}
+	}
+	id := strings.TrimRight(b.String(), "-")
+	if id == "" {
+		return "account"
 	}
 	return id
+}
+
+// cutID shortens id so that id+suffix is at most maxIDLen characters and the
+// cut does not leave a trailing dash. id is ASCII (see sanitizeID).
+func cutID(id string, suffixLen int) string {
+	if n := maxIDLen - suffixLen; len(id) > n {
+		id = strings.TrimRight(id[:n], "-")
+	}
+	return id
+}
+
+// DefaultAccountID implements D6: the username made into a valid id
+// (lowercase a-z, 0-9 and "-", at most 32 characters), or <id>-<platform>
+// (then -2, -3, ...) when the company already has an account with that id.
+func DefaultAccountID(c Company, p platform.Platform, username string) string {
+	base := sanitizeID(username)
+	id := cutID(base, 0)
+	if _, _, dup := c.FindAccount(id); !dup {
+		return id
+	}
+	suffix := "-" + string(p)
+	for n := 1; ; n++ {
+		s := suffix
+		if n > 1 {
+			s = suffix + "-" + strconv.Itoa(n)
+		}
+		cand := cutID(base, len(s)) + s
+		if _, _, dup := c.FindAccount(cand); !dup {
+			return cand
+		}
+	}
 }
 
 // Normalize returns a normalized copy: lowercase hosts, stored form of base

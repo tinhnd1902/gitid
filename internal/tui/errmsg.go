@@ -57,6 +57,7 @@ func errText(err error) string {
 		{gitops.ErrNotFound, "err.repo_not_found"},
 		{plan.ErrGitConfigLocked, "err.gitconfig_locked"},
 		{app.ErrLocked, "err.locked"},
+		{app.ErrConfigChanged, "tui.err.config_changed"},
 	}
 	for _, t := range table {
 		if errors.Is(err, t.target) {

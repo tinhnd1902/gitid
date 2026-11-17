@@ -228,7 +228,7 @@ func TestEditAccountKeepsID(t *testing.T) {
 	if f.edit == nil || f.username != "alice" {
 		t.Fatalf("prefill %+v", f)
 	}
-	// enter through: note, platform, username, name, email, auth | host, orgs, ssh host, port, default
+	// enter through: note, platform, username, name, email, auth, advanced (no) | default (only with other accounts)
 	for i := 0; i < 12; i++ {
 		h.key("enter")
 		if _, ok := h.top().(*confirmScreen); ok {
@@ -413,6 +413,10 @@ func TestT7CloneFlow(t *testing.T) {
 	close(release)
 	h.waitFor("failed", func() bool { return cs.phase == clFailed })
 	h.mustContain(tr("tui.clone.terminal_mode"), tr("err.auth"))
+	h.mustContainPlain(tr("tui.clone.auth_hint")) // mentions Personal Access Tokens for HTTPS
+	if !strings.Contains(i18n.In("vi", "tui.clone.auth_hint"), "Personal Access Token") || !strings.Contains(i18n.In("en", "tui.clone.auth_hint"), "Personal Access Token") {
+		t.Fatal("the clone hint must mention Personal Access Tokens")
+	}
 	// terminal mode is offered with t
 	h.fake.On("git clone", execx.Response{})
 	h.key("t")

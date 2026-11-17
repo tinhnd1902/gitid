@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -8,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/tinhnd1902/gitid/internal/app"
+	"github.com/tinhnd1902/gitid/internal/gitops"
 )
 
 type checkPhase int
@@ -64,6 +66,12 @@ func (c *checkScreen) run() tea.Cmd {
 	}
 }
 
+// notRepo reports whether the check failed because the folder gitid was
+// started in is not a git repository (retrying cannot help there).
+func (c *checkScreen) notRepo() bool {
+	return c.phase == chError && errors.Is(c.err, gitops.ErrNotRepo)
+}
+
 func (c *checkScreen) canFix() bool { return c.res.Account != "" && c.res.Remote != "" }
 
 func (c *checkScreen) Help() []key.Binding {
@@ -76,11 +84,23 @@ func (c *checkScreen) Help() []key.Binding {
 		}
 		return append(out, km.Retry, km.Back)
 	case chError:
+		if c.notRepo() {
+			return []key.Binding{km.Clone, km.Retry, km.Back}
+		}
 		return []key.Binding{km.Retry, km.Back}
 	case chFixConfirm:
 		return []key.Binding{km.Yes, km.No, km.Toggle, km.Enter, km.Back}
 	}
 	return nil
+}
+
+// ContextHelp makes clone the next step when the folder is not a repository.
+func (c *checkScreen) ContextHelp() []helpItem {
+	var out []helpItem
+	for i, b := range c.Help() {
+		out = append(out, helpItem{b: b, primary: i == 0 && c.notRepo()})
+	}
+	return out
 }
 
 func (c *checkScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
@@ -140,8 +160,11 @@ func (c *checkScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 				return c, tea.Batch(c.spin.Tick, c.run())
 			}
 		case chError:
-			if key.Matches(msg, km.Retry) {
+			switch {
+			case key.Matches(msg, km.Retry):
 				return c, tea.Batch(c.spin.Tick, c.run())
+			case key.Matches(msg, km.Clone) && c.notRepo():
+				return c, c.sh.replaceNow(newCloneScreen(c.sh))
 			}
 		case chFixConfirm:
 			switch {
@@ -202,6 +225,15 @@ func (c *checkScreen) View() string {
 		b.WriteString(c.spin.View() + " " + st.Muted.Render(tr("tui.fix.working")))
 	case chError:
 		b.WriteString(st.Err.Render("✗ "+wrap(errText(c.err), inner)) + "\n\n")
+		if c.notRepo() {
+			cwd := "."
+			if c.sh.cwd != "" {
+				cwd = c.sh.svc.Env.Contract(c.sh.cwd)
+			}
+			b.WriteString(st.Muted.Render(wrap(tr("tui.check.where", cwd), inner)) + "\n")
+			b.WriteString(st.Text.Render(wrap(c.notRepoNext(), inner)))
+			break
+		}
 		b.WriteString(st.Faint.Render(tr("tui.check.retry_hint")))
 	case chFixConfirm:
 		b.WriteString(st.Bold.Render(tr("tui.fix.title", c.fix.Remote, c.fix.Account)) + "\n\n")
@@ -212,6 +244,15 @@ func (c *checkScreen) View() string {
 		b.WriteString(c.resultView(inner))
 	}
 	return c.sh.panel(tr("tui.check.title"), b.String(), c.w, c.h, true)
+}
+
+// notRepoNext says what to do instead: open a terminal in a repo (named after
+// the first company folder when there is one) or clone one.
+func (c *checkScreen) notRepoNext() string {
+	if len(c.sh.cfg.Companies) > 0 {
+		return tr("tui.check.not_repo_next", c.sh.cfg.Companies[0].BaseDir)
+	}
+	return tr("tui.check.not_repo_next_none")
 }
 
 func (c *checkScreen) resultView(w int) string {

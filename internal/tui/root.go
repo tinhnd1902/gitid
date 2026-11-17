@@ -438,24 +438,132 @@ func (m *Model) helpBar() string {
 	return b.String()
 }
 
+// helpView lists every key of the current screen, then the global keys. When
+// the bindings do not fit the height they go in two or three columns, and as
+// a last resort the blank separator lines go; the global section and the
+// close hint are always visible.
 func (m *Model) helpView(w, h int) string {
 	st := m.sh.st
-	var b strings.Builder
-	b.WriteString(st.PanelTitle.Render(tr("tui.help.title")) + "\n\n")
-	row := func(bs []key.Binding) {
+	enabled := func(bs []key.Binding) []key.Binding {
+		var out []key.Binding
 		for _, k := range bs {
-			if !k.Enabled() {
-				continue
+			if k.Enabled() {
+				out = append(out, k)
 			}
-			h := k.Help()
-			b.WriteString("  " + st.Accent.Render(pad(h.Key, 8)) + st.Muted.Render(h.Desc) + "\n")
+		}
+		return out
+	}
+	screen, global := enabled(m.top().Help()), enabled(m.globalHelp())
+	inner := maxInt(w-4, 10)
+	avail := maxInt(h-2, 1) // panel border
+
+	// fixed lines around the bindings: title, screen name, global title, its
+	// rows and the close hint, plus four blank separators
+	fixed := func(compact bool) int {
+		n := 4 + len(global) + 1
+		if !compact {
+			n += 4
+		}
+		return n
+	}
+	perCol := func(cols int) int { return (len(screen) + cols - 1) / cols }
+	// colWidths gives each of n columns the room its longest description
+	// needs (cell: 2 indent + 8 key + the text); fits says whether all of
+	// them are shown in full. When they are not, the widest columns shrink.
+	colWidths := func(n int) (ws []int, fits bool) {
+		rows := perCol(n)
+		ws = make([]int, n)
+		total := 0
+		for c := range ws {
+			ws[c] = 11
+			for r := 0; r < rows; r++ {
+				if idx := c*rows + r; idx < len(screen) {
+					ws[c] = maxInt(ws[c], 10+lipgloss.Width(screen[idx].Help().Desc))
+				}
+			}
+			if c < n-1 {
+				ws[c] += 2 // gap before the next column
+			}
+			total += ws[c]
+		}
+		fits = total <= inner
+		// shrink from the last column: the first ones keep their text
+		for c := n - 1; c >= 0 && total > inner; c-- {
+			cut := minInt(total-inner, ws[c]-11)
+			if cut > 0 {
+				ws[c] -= cut
+				total -= cut
+			}
+		}
+		return ws, fits
+	}
+	roomy := func(n int) bool { _, ok := colWidths(n); return ok }
+	cols, compact := 1, false
+	pick := func(needRoom bool) bool {
+		for _, c := range []bool{false, true} {
+			for n := 1; n <= 3; n++ {
+				if needRoom && !roomy(n) {
+					continue
+				}
+				if fixed(c)+perCol(n) <= avail {
+					cols, compact = n, c
+					return true
+				}
+			}
+		}
+		return false
+	}
+	// prefer full descriptions; else the fewest columns that fit the height
+	// (their text is then cut at a word, see cell)
+	if !pick(true) && !pick(false) {
+		cols, compact = 3, true
+	}
+
+	cell := func(k key.Binding, cw int) string {
+		hp := k.Help()
+		desc := hp.Desc
+		if cw > 0 {
+			desc = truncWords(desc, maxInt(cw-10, 1))
+		}
+		out := "  " + st.Accent.Render(pad(hp.Key, 8)) + st.Muted.Render(desc)
+		if cw > 0 {
+			out += spaces(cw - lipgloss.Width(out))
+		}
+		return out
+	}
+	blank := func(b *strings.Builder) {
+		if !compact {
+			b.WriteString("\n")
 		}
 	}
+	var b strings.Builder
+	b.WriteString(st.PanelTitle.Render(tr("tui.help.title")) + "\n")
+	blank(&b)
 	b.WriteString(st.Bold.Render(m.top().Title()) + "\n")
-	row(m.top().Help())
-	b.WriteString("\n" + st.Bold.Render(tr("tui.help.global")) + "\n")
-	row(m.globalHelp())
-	b.WriteString("\n" + st.Faint.Render(tr("tui.help.close")))
+	if cols == 1 {
+		for _, k := range screen {
+			b.WriteString(cell(k, 0) + "\n")
+		}
+	} else {
+		cws, _ := colWidths(cols)
+		rows := perCol(cols)
+		for r := 0; r < rows; r++ {
+			var line strings.Builder
+			for c := 0; c < cols; c++ {
+				if idx := c*rows + r; idx < len(screen) {
+					line.WriteString(cell(screen[idx], cws[c]))
+				}
+			}
+			b.WriteString(strings.TrimRight(line.String(), " ") + "\n")
+		}
+	}
+	blank(&b)
+	b.WriteString(st.Bold.Render(tr("tui.help.global")) + "\n")
+	for _, k := range global {
+		b.WriteString(cell(k, 0) + "\n")
+	}
+	blank(&b)
+	b.WriteString(st.Faint.Render(tr("tui.help.close")))
 	return m.sh.panel("", b.String(), w, h, true)
 }
 

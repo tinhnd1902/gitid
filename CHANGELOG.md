@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-11-17
+
+### Improved
+
+- Terminal UI, account form: a live preview shows the remote the account will
+  produce (`https://alice@github.com/<owner>/<repo>.git`, or the SSH alias
+  form, rendered by the same code as clone and fix-remote) and the gitid ID
+  derived from the username. The username hint now says it is the login in
+  your profile URL, not an email or display name; the Git name hint says it
+  is not the username; the email hint says gitid does not verify it and points
+  to the platform's noreply address.
+- Terminal UI, account form: host, orgs and SSH host/port are behind one
+  "Advanced settings?" question (off by default; on for Gitea and for accounts
+  that already use them). The default-account question only appears when the
+  company has another account. The host placeholder is an example (`vd:`).
+- Terminal UI, after apply: a "Next steps" section says to clone into the
+  company folder (`c`), check a repo (`k`), what to expect on the first HTTPS
+  clone or push (Personal Access Token, credential helper) and that gitid
+  verifies nothing with the platform. `c` opens clone from the done screen.
+- Terminal UI, account detail: shows the remote, the folder, what HTTPS asks
+  for and the next step; long values wrap instead of being cut. The stacked
+  layout (80x24) gives the detail pane the rows the list does not need.
+- Terminal UI, `k` outside a repository says which folder was checked and what
+  to do (open a terminal in a repo, or press `c` to clone), instead of only
+  offering to retry. The detail screen handles `c` too.
+- Terminal UI: the selected account row drops the email, not the ID, when the
+  row is narrow; the clone URL placeholder is an example; the clone
+  authentication hint mentions Personal Access Tokens; an import with nothing
+  found says how to add a company by hand; the `?` overlay uses columns so the
+  global keys stay visible on small terminals; resizing an open form re-wraps
+  its hints.
+
+### Fixed
+
+- Terminal UI: adding a second account with the same platform, host and
+  username to one company (for example `tinhnd` and `tinhnd-github`) is
+  refused with a pointer to the existing account; an email typed as a GitHub,
+  GitLab or Gitea username is refused. The same login in another company only
+  warns. Accounts that are already duplicated are flagged with `!` in the list
+  and in the detail pane.
+- Terminal UI: saving, deleting, importing and key generation no longer
+  overwrite a `config.yaml` that changed since the TUI loaded it (for example
+  from a second gitid window or `gitid import`). The change is refused, the
+  list reloads and the form stays open to save again.
+- Changing the username of an account now explains that repos cloned with the
+  old username need `gitid fix-remote`.
+- Account IDs derived from usernames are always valid (`john.doe` becomes
+  `john-doe`, runs of other characters collapse, at most 32 characters,
+  collisions get `-<platform>`, `-<platform>-2`, ...); before, such a username
+  failed on save with a message about a field the form never showed. The
+  importer uses the same rule.
+
 ## [0.1.4] - 2026-11-17
 
 ### Fixed
@@ -105,7 +157,8 @@ First public version.
 - Every value written to git or ssh configuration is validated and escaped;
   clone arguments are always passed after `--`.
 
-[Unreleased]: https://github.com/tinhnd1902/gitid/compare/v0.1.4...HEAD
+[Unreleased]: https://github.com/tinhnd1902/gitid/compare/v0.1.5...HEAD
+[0.1.5]: https://github.com/tinhnd1902/gitid/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/tinhnd1902/gitid/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/tinhnd1902/gitid/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/tinhnd1902/gitid/releases/tag/v0.1.2
