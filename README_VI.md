@@ -106,6 +106,12 @@ install -m 0755 gitid /usr/local/bin/gitid   # hoặc thư mục bất kỳ tron
 gitid            # mở TUI; nhấn ? để xem phím tắt, q để thoát
 ```
 
+Lần đầu dùng TUI, làm ba bước (màn hình cũng hiện sẵn các bước, và dòng dưới cùng luôn đánh dấu phím tiếp theo bằng `▸`):
+
+1. `A` thêm công ty: một slug ngắn và một thư mục gốc như `~/Code/acme/`.
+2. `a` thêm tài khoản Git (username, email) cho công ty đó.
+3. `p` xem trước các tệp gitid sẽ ghi, rồi `y` để áp dụng (mọi tệp đều được sao lưu trước). Từ đó mọi repo trong thư mục gốc tự dùng đúng tài khoản; `k` kiểm tra một repo.
+
 **Xem trước an toàn:**
 
 ```bash
@@ -299,17 +305,20 @@ Mỗi lần lưu, gitid ghi lại `config.yaml` từ mô hình nội bộ, nên 
 
 ### Danh sách
 
-Màn hình chính là cây công ty và tài khoản với thẻ nền tảng (`GH`, `GL`, `BB`, `GT`, `AZ`), kiểu xác thực, `★` cho tài khoản mặc định của công ty và email. Nhấn `/` để lọc theo tên, username, email, host hoặc nền tảng; việc so khớp là mờ trong từng từ và giữ nguyên thứ tự của cây. Trên terminal rộng (từ 100 cột) có khung chi tiết cho dòng đang chọn; còn không thì nhấn `enter` để mở.
+Màn hình chính là cây công ty và tài khoản với thẻ nền tảng (`GH`, `GL`, `BB`, `GT`, `AZ`), kiểu xác thực, `★` cho tài khoản mặc định của công ty và email. Nhấn `/` để lọc theo tên, username, email, host hoặc nền tảng; việc so khớp là mờ trong từng từ và giữ nguyên thứ tự của cây. Từ 84 cột, khung chi tiết nằm cạnh danh sách; từ 60 cột (và 24 dòng) nó nằm dưới danh sách; terminal nhỏ hơn thì nhấn `enter` để mở. Khung này giải thích công ty hoặc tài khoản đang chọn sẽ làm gì ("Điều gì sẽ xảy ra"). Công ty chưa có tài khoản được đánh dấu `chưa có tài khoản`: gitid chưa ghi gì cho nó cho tới khi bạn thêm tài khoản bằng `a`.
 
 ```text
-▌ acme  ACME Corp                            ~/Code/acme/  2
+▌ acme  ACME Corp                 ~/Code/acme/  2 tài khoản
  ├─ ★ alice      GH https                  alice@example.com
  └─   carol      GH ssh                    carol@example.com
-▪ globex  Globex                           ~/Code/globex/  1
+▪ globex  Globex                ~/Code/globex/  1 tài khoản
  └─ ★ dave       GL ssh                  dave@globex.example
 
-● 6 thay đổi chưa áp dụng (nhấn p)
+                          ● 6 thay đổi chưa áp dụng — bấm p
+ ▸ p xem trước & áp dụng  a thêm tài khoản  e sửa  d xóa  q thoát  ? tất cả phím
 ```
+
+Bên phải thanh trạng thái luôn cho biết còn việc gì: thay đổi chưa áp dụng (được tô nổi), công ty chưa có tài khoản, hoặc `✓ Đã áp dụng, không còn thay đổi`. Thanh phím chỉ hiện các phím đang cần; bước tiếp theo đứng đầu và có dấu `▸`, còn `?` liệt kê mọi phím.
 
 ### Thêm và sửa tài khoản
 
@@ -405,7 +414,7 @@ Với tài khoản HTTPS, cần một credential helper nhớ riêng từng user
 <details>
 <summary>Terminal hiển thị lỗi hoặc quá nhỏ</summary>
 
-gitid cần tối thiểu 40x10 ô và đẹp nhất từ 80x24; terminal rộng (từ 100 cột) có thêm khung chi tiết. Nếu màn hình bị rối sau khi chương trình sập, chạy `reset`. TUI chỉ chạy trên terminal thật; trong script hãy dùng các lệnh con.
+gitid cần tối thiểu 40x10 ô và đẹp nhất từ 80x24; khung chi tiết hiện từ 84 cột (cạnh danh sách) hoặc từ 60x24 (dưới danh sách). Nếu màn hình bị rối sau khi chương trình sập, chạy `reset`. TUI chỉ chạy trên terminal thật; trong script hãy dùng các lệnh con.
 
 </details>
 

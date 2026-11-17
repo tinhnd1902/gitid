@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -63,7 +64,9 @@ func (c *confirmScreen) Help() []key.Binding {
 	switch c.state {
 	case confReady:
 		return []key.Binding{withDesc(km.Yes, "y", tr("tui.confirm.apply")), withDesc(km.No, "n/esc", tr("tui.key.cancel")), withDesc(km.Up, "↑/↓", tr("tui.key.scroll"))}
-	case confDone, confEmpty:
+	case confDone:
+		return []key.Binding{km.Check, km.Enter, km.Back}
+	case confEmpty:
 		return []key.Binding{km.Enter, km.Back}
 	case confFailed:
 		return []key.Binding{km.Retry, km.Back}
@@ -71,16 +74,87 @@ func (c *confirmScreen) Help() []key.Binding {
 	return nil
 }
 
+// ContextHelp makes the next step primary: apply when the plan is ready,
+// check the repo once it was applied.
+func (c *confirmScreen) ContextHelp() []helpItem {
+	var out []helpItem
+	for i, b := range c.Help() {
+		out = append(out, helpItem{b: b, primary: i == 0 && (c.state == confReady || c.state == confDone)})
+	}
+	return out
+}
+
 func (c *confirmScreen) Resize(w, h int) {
 	c.w, c.h = w, h
 	c.layout()
 }
 
-// headerLines is the file list above the diff.
+// summaryLines is the plain-language part above the file list: what each
+// kind of file is for and where the backups go. At small heights it shrinks
+// to the backup line alone.
+func (c *confirmScreen) summaryLines() []string {
+	st := c.sh.st
+	var gitconfig, sshconfig, sshconf, genDir string
+	gen, del := 0, 0
+	for _, ch := range c.plan.Changes {
+		if string(ch.Op) == "delete" {
+			del++
+			continue
+		}
+		switch ch.Kind {
+		case plan.KindGitConfig:
+			gitconfig = ch.Display
+		case plan.KindSSHConfig:
+			sshconfig = ch.Display
+		case plan.KindSSHConf:
+			sshconf = ch.Display
+		case plan.KindGenerated:
+			gen++
+			if genDir == "" {
+				genDir = filepath.Dir(ch.Display)
+			}
+		}
+	}
+	var what []string
+	if gitconfig != "" {
+		what = append(what, tr("tui.confirm.sum_gitconfig", gitconfig))
+	}
+	if gen > 0 {
+		what = append(what, tr("tui.confirm.sum_generated", gen, genDir))
+	}
+	if sshconfig != "" {
+		what = append(what, tr("tui.confirm.sum_sshconfig", sshconfig))
+	}
+	if sshconf != "" {
+		what = append(what, tr("tui.confirm.sum_sshconf", sshconf))
+	}
+	if del > 0 {
+		what = append(what, tr("tui.confirm.sum_delete", del))
+	}
+	env := c.sh.svc.Env
+	backup := tr("tui.confirm.sum_backup", env.Contract(env.Paths().BackupsDir))
+	switch {
+	case c.h >= 26: // everything
+	case c.h >= 20:
+		if len(what) > 3 {
+			what = what[:3]
+		}
+	default:
+		return []string{st.Muted.Render("  " + backup)}
+	}
+	lines := []string{st.Bold.Render(tr("tui.confirm.summary"))}
+	for _, w := range what {
+		lines = append(lines, st.Muted.Render("  "+w))
+	}
+	return append(lines, st.Muted.Render("  "+backup))
+}
+
+// headerLines is the summary and the file list above the diff.
 func (c *confirmScreen) headerLines() []string {
 	st := c.sh.st
-	lines := []string{st.Bold.Render(tr("tui.confirm.files", len(c.plan.Changes)))}
-	maxFiles := clamp(c.h/4, 2, 8)
+	lines := c.summaryLines()
+	lines = append(lines, st.Bold.Render(tr("tui.confirm.files", len(c.plan.Changes))))
+	maxFiles := clamp((c.h-len(lines))/4, 2, 8)
 	for i, ch := range c.plan.Changes {
 		if i == maxFiles {
 			lines = append(lines, st.Faint.Render(fmt.Sprintf("  … +%d", len(c.plan.Changes)-maxFiles)))
@@ -172,7 +246,9 @@ func (c *confirmScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 			return c, say(levelErr, errText(msg.err))
 		}
 		c.state = confDone
-		return c, tea.Batch(refreshPlan(), say(levelOK, tr("tui.status.applied")))
+		return c, tea.Batch(refreshPlan(), func() tea.Msg {
+			return statusMsg{level: levelOK, text: tr("tui.status.applied"), ttl: hintTTL}
+		})
 	case tea.KeyMsg:
 		switch c.state {
 		case confReady:
@@ -180,7 +256,7 @@ func (c *confirmScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 			case key.Matches(msg, km.Yes):
 				return c, c.apply()
 			case key.Matches(msg, km.No):
-				return c, pop()
+				return c, tea.Sequence(pop(), hint(tr("tui.status.apply_later")))
 			}
 			var cmd tea.Cmd
 			c.vp, cmd = c.vp.Update(msg)
@@ -188,6 +264,9 @@ func (c *confirmScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		case confDone, confEmpty:
 			if key.Matches(msg, km.Enter) {
 				return c, popRoot()
+			}
+			if c.state == confDone && key.Matches(msg, km.Check) {
+				return c, replace(newCheckScreen(c.sh))
 			}
 		case confFailed:
 			if key.Matches(msg, km.Retry) {
@@ -217,7 +296,12 @@ func (c *confirmScreen) View() string {
 	case confLoading:
 		body = c.spin.View() + " " + st.Muted.Render(tr("tui.confirm.building"))
 	case confEmpty:
-		body = st.OK.Render("✓ "+tr("tui.confirm.empty")) + "\n\n" + st.Faint.Render(tr("tui.confirm.back_hint"))
+		if empty := emptyCompanies(c.sh.cfg); len(empty) > 0 {
+			body = st.Warn.Render(wrap("! "+tr("tui.confirm.empty_no_accounts", empty[0]), maxInt(c.w-6, 10)))
+		} else {
+			body = st.OK.Render("✓ " + tr("tui.confirm.empty"))
+		}
+		body += "\n\n" + st.Faint.Render(tr("tui.confirm.back_hint"))
 	case confReady:
 		body = strings.Join(c.headerLines(), "\n") + "\n" +
 			st.Faint.Render(strings.Repeat("─", maxInt(c.w-4, 4))) + "\n" + c.vp.View() + "\n" +
@@ -232,22 +316,86 @@ func (c *confirmScreen) View() string {
 	return c.sh.panel(c.title, body, c.w, c.h, true)
 }
 
+// doneView tells what changed for the user ("from now on"), how to verify it,
+// and only then lists the files and the backup. The file list is the part
+// that shrinks when the screen is short.
 func (c *confirmScreen) doneView() string {
 	st := c.sh.st
-	var b strings.Builder
-	b.WriteString(st.OK.Bold(true).Render("✓ "+tr("tui.confirm.done")) + "\n\n")
+	env := c.sh.svc.Env
+	inner := maxInt(c.w-4, 10)
+	rows := maxInt(c.h-3, 1) // panel borders and title
+
+	var effect []string
+	for _, co := range c.sh.cfg.Companies {
+		if def, ok := co.Default(); ok {
+			effect = append(effect, tr("tui.confirm.effect_line", co.BaseDir, def.Name, def.Email))
+		}
+	}
+	const maxEffect = 6
+	extra := 0
+	if len(effect) > maxEffect {
+		extra = len(effect) - maxEffect
+		effect = effect[:maxEffect]
+	}
+	cwd := "."
+	if c.sh.cwd != "" {
+		cwd = env.Contract(c.sh.cwd)
+	}
+
+	build := func(withNote, blanks bool) (head, tail []string) {
+		gap := func(l *[]string) {
+			if blanks {
+				*l = append(*l, "")
+			}
+		}
+		head = append(head, st.OK.Bold(true).Render("✓ "+tr("tui.confirm.done")))
+		gap(&head)
+		if len(effect) > 0 {
+			head = append(head, st.Bold.Render(tr("tui.confirm.effect")))
+			for _, e := range effect {
+				head = append(head, st.Text.Render(trunc("  "+e, inner)))
+			}
+			if extra > 0 {
+				head = append(head, st.Faint.Render(fmt.Sprintf("  … +%d", extra)))
+			}
+			gap(&head)
+		}
+		head = append(head, styledWrap(st.Muted, tr("tui.confirm.verify", cwd), inner)...)
+		if withNote {
+			head = append(head, styledWrap(st.Faint, tr("tui.confirm.override_note"), inner)...)
+		}
+		gap(&head)
+		if c.res.BackupDir != "" {
+			tail = append(tail, st.Label.Render(tr("tui.confirm.backup"))+" "+st.Text.Render(env.Contract(c.res.BackupDir)))
+		}
+		for _, w := range c.res.Warnings {
+			tail = append(tail, st.Warn.Render(trunc("! "+w, inner)))
+		}
+		gap(&tail)
+		tail = append(tail, st.Faint.Render(tr("tui.confirm.back_hint")))
+		return head, tail
+	}
+	head, tail := build(true, true)
+	if len(head)+len(tail) > rows {
+		head, tail = build(false, true)
+	}
+	if len(head)+len(tail) > rows {
+		head, tail = build(false, false)
+	}
+
+	var files []string
 	for _, p := range c.res.Written {
-		b.WriteString("  " + st.OK.Render("+") + " " + st.Text.Render(c.sh.svc.Env.Contract(p)) + "\n")
+		files = append(files, "  "+st.OK.Render("+")+" "+st.Text.Render(trunc(env.Contract(p), maxInt(inner-4, 4))))
 	}
 	for _, p := range c.res.Deleted {
-		b.WriteString("  " + st.Err.Render("-") + " " + st.Text.Render(c.sh.svc.Env.Contract(p)) + "\n")
+		files = append(files, "  "+st.Err.Render("-")+" "+st.Text.Render(trunc(env.Contract(p), maxInt(inner-4, 4))))
 	}
-	if c.res.BackupDir != "" {
-		b.WriteString("\n" + st.Label.Render(tr("tui.confirm.backup")) + " " + st.Text.Render(c.sh.svc.Env.Contract(c.res.BackupDir)) + "\n")
+	if avail := rows - len(head) - len(tail); avail <= 0 {
+		files = nil
+	} else if len(files) > avail {
+		more := st.Faint.Render(fmt.Sprintf("  … +%d", len(files)-avail+1))
+		files = append(files[:avail-1:avail-1], more)
 	}
-	for _, w := range c.res.Warnings {
-		b.WriteString(st.Warn.Render("! "+w) + "\n")
-	}
-	b.WriteString("\n" + st.Faint.Render(tr("tui.confirm.back_hint")))
-	return b.String()
+	lines := append(append(head, files...), tail...)
+	return strings.Join(lines, "\n")
 }

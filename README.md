@@ -106,6 +106,12 @@ install -m 0755 gitid /usr/local/bin/gitid   # or any directory on your PATH
 gitid            # opens the TUI; press ? for the key map, q to quit
 ```
 
+First run in the TUI, three steps (the screen shows them too, and the bottom line always marks the next key with `▸`):
+
+1. `A` adds a company: a short slug and a base folder such as `~/Code/acme/`.
+2. `a` adds a Git account (username, email) to that company.
+3. `p` previews the files gitid will write, then `y` applies them (every file is backed up first). After that, every repo inside the base folder uses the right account; `k` checks a repo.
+
 **Preview safely:**
 
 ```bash
@@ -299,17 +305,20 @@ gitid rewrites `config.yaml` from its internal model whenever you save, so **com
 
 ### List
 
-The home screen is a tree of companies and accounts with a platform tag (`GH`, `GL`, `BB`, `GT`, `AZ`), the auth mode, `★` for the company default and the email. Press `/` to filter by name, username, email, host or platform; matching is fuzzy inside each word and the tree order is kept. On wide terminals (100 columns and up) a detail pane shows the selected row; otherwise `enter` opens it.
+The home screen is a tree of companies and accounts with a platform tag (`GH`, `GL`, `BB`, `GT`, `AZ`), the auth mode, `★` for the company default and the email. Press `/` to filter by name, username, email, host or platform; matching is fuzzy inside each word and the tree order is kept. From 84 columns a detail pane sits next to the list; from 60 columns (and 24 rows) it sits below the list; on smaller terminals `enter` opens it. The pane explains what the selected company or account does ("What happens"). A company without an account is marked `no accounts yet`: gitid writes nothing for it until you add one with `a`.
 
 ```text
-▌ acme  ACME Corp                            ~/Code/acme/  2
+▌ acme  ACME Corp                   ~/Code/acme/  2 accounts
  ├─ ★ alice      GH https                  alice@example.com
  └─   carol      GH ssh                    carol@example.com
-▪ globex  Globex                           ~/Code/globex/  1
+▪ globex  Globex                  ~/Code/globex/  1 account
  └─ ★ dave       GL ssh                  dave@globex.example
 
-● 6 changes not applied (press p)
+                          ● 6 unapplied change(s) — press p
+ ▸ p preview & apply  a add account  e edit  d delete  q quit  ? all keys
 ```
+
+The right side of the status bar always says what is left to do: unapplied changes (highlighted), a company that has no account yet, or `✓ Applied, nothing pending`. The help bar shows only the keys that matter now; the next step comes first, marked `▸`, and `?` lists every key.
 
 ### Add and edit accounts
 
@@ -405,7 +414,7 @@ For HTTPS accounts a credential helper must remember one login per username. git
 <details>
 <summary>The terminal looks broken or too small</summary>
 
-gitid needs at least 40x10 cells and looks best from 80x24; wide terminals (100+ columns) add a detail pane. If the screen is garbled after a crash, run `reset`. The TUI starts only on a real terminal; in scripts use the subcommands.
+gitid needs at least 40x10 cells and looks best from 80x24; the detail pane appears from 84 columns (beside the list) or from 60x24 (below it). If the screen is garbled after a crash, run `reset`. The TUI starts only on a real terminal; in scripts use the subcommands.
 
 </details>
 

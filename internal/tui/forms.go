@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
@@ -16,12 +17,16 @@ import (
 )
 
 // fieldValidator adapts config.ValidateField to a huh validator, so the form
-// and the CLI share the same rules.
-func (sh *shared) fieldValidator(field string, required bool) func(string) error {
+// and the CLI share the same rules. An empty required field says what to do
+// ("Please enter <label>") instead of quoting the format rule.
+func (sh *shared) fieldValidator(field, label string, required bool) func(string) error {
 	return func(v string) error {
 		v = strings.TrimSpace(v)
 		if v == "" && !required {
 			return nil
+		}
+		if v == "" {
+			return errors.New(tr("tui.form.err.required", label))
 		}
 		if code := sh.svc.ValidateField(field, v); code != "" {
 			return errors.New(tr(code))
@@ -107,6 +112,15 @@ func (f *formHost) Help() []key.Binding {
 	return []key.Binding{km.Save, km.Next, km.Cancel}
 }
 
+// ContextHelp makes "enter" the next step of every form.
+func (f *formHost) ContextHelp() []helpItem {
+	var out []helpItem
+	for i, b := range f.Help() {
+		out = append(out, helpItem{b: b, primary: i == 0})
+	}
+	return out
+}
+
 func (f *formHost) view() string {
 	st := f.sh.st
 	var body string
@@ -138,8 +152,9 @@ func (f *formHost) commit(cfg config.Config, after func(config.Config) Screen) t
 }
 
 // handleSaved processes a savedMsg. It returns (handled, cmd, rebuild) where
-// rebuild asks the caller to create a fresh form after an error.
-func (f *formHost) handleSaved(msg savedMsg, okStatus string) (bool, tea.Cmd, bool) {
+// rebuild asks the caller to create a fresh form after an error. ok builds
+// the command to run after a successful save.
+func (f *formHost) handleSaved(msg savedMsg, ok func(config.Config) tea.Cmd) (bool, tea.Cmd, bool) {
 	if msg.id != f.id {
 		return false, nil, false
 	}
@@ -148,13 +163,19 @@ func (f *formHost) handleSaved(msg savedMsg, okStatus string) (bool, tea.Cmd, bo
 		f.errMsg = errText(msg.err)
 		return true, nil, true
 	}
-	cmds := []tea.Cmd{changed(msg.cfg), say(levelOK, okStatus)}
+	return true, ok(msg.cfg), false
+}
+
+// reviewNext is the usual follow-up of a save: publish the new configuration,
+// say what was saved, then open the confirm screen (or msg.after, for
+// example the key generation). The steps run in order, so the confirm screen
+// always plans against the saved configuration.
+func (f *formHost) reviewNext(msg savedMsg, status statusMsg) tea.Cmd {
+	next := Screen(newConfirmScreen(f.sh, tr("tui.confirm.title_apply")))
 	if msg.after != nil {
-		cmds = append(cmds, replace(msg.after(msg.cfg)))
-	} else {
-		cmds = append(cmds, replace(newConfirmScreen(f.sh, tr("tui.confirm.title_apply"))))
+		next = msg.after(msg.cfg)
 	}
-	return true, tea.Batch(cmds...), false
+	return tea.Sequence(changed(msg.cfg), func() tea.Msg { return status }, replace(next))
 }
 
 // ---- company form ----
@@ -165,6 +186,10 @@ type companyForm struct {
 	slug    string
 	name    string
 	baseDir string
+	// slugSnap is the trimmed slug as of the last Update. huh evaluates a
+	// DescriptionFunc in another goroutine, which must not read f.slug (the
+	// input writes it from the Update goroutine); it reads this snapshot.
+	slugSnap atomic.Value // string
 }
 
 func newCompanyForm(sh *shared, edit *config.Company) *companyForm {
@@ -174,6 +199,7 @@ func newCompanyForm(sh *shared, edit *config.Company) *companyForm {
 		title = tr("tui.form.company_edit")
 		f.slug, f.name, f.baseDir = edit.Slug, edit.Name, edit.BaseDir
 	}
+	f.slugSnap.Store(strings.TrimSpace(f.slug))
 	f.initHost(sh, title)
 	if edit != nil {
 		f.fixed = [][2]string{{tr("tui.f.slug"), edit.Slug}}
@@ -184,6 +210,15 @@ func newCompanyForm(sh *shared, edit *config.Company) *companyForm {
 
 func (f *companyForm) Title() string { return f.title }
 
+// baseDirDesc is the description of the base directory field: what it is and
+// what an empty value means for the given slug.
+func baseDirDesc(svc *app.Service, cfg config.Config, slug string) string {
+	if slug == "" {
+		slug = "<slug>"
+	}
+	return tr("tui.form.base_dir_hint") + "\n" + tr("tui.form.base_dir_default", svc.DefaultBaseDir(cfg, slug))
+}
+
 func (f *companyForm) build() *huh.Form {
 	sh := f.sh
 	var fields []huh.Field
@@ -191,30 +226,46 @@ func (f *companyForm) build() *huh.Form {
 		fields = append(fields, huh.NewInput().
 			Title(tr("tui.f.slug")).
 			Description(tr("tui.form.slug_hint")).
+			Placeholder(tr("tui.form.eg", "acme")).
 			Value(&f.slug).
 			Validate(func(v string) error {
 				v = strings.TrimSpace(v)
-				if err := sh.fieldValidator("slug", true)(v); err != nil {
+				if err := sh.fieldValidator("slug", tr("tui.f.slug"), true)(v); err != nil {
 					return err
 				}
 				if _, _, dup := sh.cfg.FindCompany(v); dup {
-					return errors.New(tr(config.ErrSlugDuplicate))
+					return errors.New(tr("tui.form.err.slug_taken", v))
 				}
 				return nil
 			}))
+	}
+	base := huh.NewInput().
+		Title(tr("tui.f.base_dir")).
+		Value(&f.baseDir).
+		Validate(sh.fieldValidator("base_dir", tr("tui.f.base_dir"), false))
+	if f.edit != nil {
+		base.Description(baseDirDesc(sh.svc, sh.cfg, f.edit.Slug))
+	} else {
+		// "Leave empty for <default>" follows the slug as it is typed. The
+		// closure runs in another goroutine: it only reads the atomic snapshot
+		// and a copy of the settings (no slices shared with the shared config).
+		cfg := config.Config{Settings: sh.cfg.Settings}
+		svc := sh.svc
+		snap := &f.slugSnap
+		base.Description(baseDirDesc(svc, cfg, "")).
+			DescriptionFunc(func() string {
+				slug, _ := snap.Load().(string)
+				return baseDirDesc(svc, cfg, slug)
+			}, &f.slug)
 	}
 	fields = append(fields,
 		huh.NewInput().
 			Title(tr("tui.f.name")).
 			Description(tr("tui.form.company_name_hint")).
+			Placeholder(tr("tui.form.eg", "ACME Corp")).
 			Value(&f.name).
-			Validate(sh.fieldValidator("company_name", true)),
-		huh.NewInput().
-			Title(tr("tui.f.base_dir")).
-			Description(tr("tui.form.base_dir_hint")).
-			Placeholder(sh.svc.DefaultBaseDir(sh.cfg, "<slug>")).
-			Value(&f.baseDir).
-			Validate(sh.fieldValidator("base_dir", false)),
+			Validate(sh.fieldValidator("company_name", tr("tui.f.name"), true)),
+		base,
 	)
 	return f.newForm(huh.NewGroup(fields...))
 }
@@ -225,7 +276,17 @@ func (f *companyForm) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	switch msg := msg.(type) {
 	case savedMsg:
 		name := strings.TrimSpace(f.slug)
-		if ok, cmd, rebuild := f.handleSaved(msg, tr("tui.status.company_saved", name)); ok {
+		next := func(cfg config.Config) tea.Cmd {
+			if f.edit == nil {
+				// A new company has no account yet, so there is nothing to
+				// apply: go back to the list, select it and say what is next.
+				if c, _, found := cfg.FindCompany(name); found && len(c.Accounts) == 0 {
+					return tea.Sequence(changed(cfg), pop(), focus(name), hint(tr("tui.status.company_created", name)))
+				}
+			}
+			return f.reviewNext(msg, statusMsg{level: levelOK, text: tr("tui.status.company_saved", name)})
+		}
+		if ok, cmd, rebuild := f.handleSaved(msg, next); ok {
 			if rebuild {
 				f.form = f.build()
 				return f, f.form.Init()
@@ -252,6 +313,7 @@ func (f *companyForm) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	}
 	m, cmd := f.form.Update(msg)
 	f.form = m.(*huh.Form)
+	f.slugSnap.Store(strings.TrimSpace(f.slug))
 	if f.form.State == huh.StateCompleted {
 		return f, tea.Batch(cmd, f.submit())
 	}
@@ -339,14 +401,18 @@ func (f *accountForm) build() *huh.Form {
 	}
 	main := []huh.Field{}
 	main = append(main,
-		huh.NewSelect[string]().Title(tr("tui.f.platform")).Options(platOpts...).Inline(true).Value(&f.plat),
-		huh.NewInput().Title(tr("tui.f.username")).Description(tr("tui.form.username_hint")).Value(&f.username).
-			Validate(sh.fieldValidator("username", true)),
-		huh.NewInput().Title(tr("tui.f.git_name")).Description(tr("tui.form.git_name_hint")).Value(&f.name).
-			Validate(sh.fieldValidator("name", true)),
-		huh.NewInput().Title(tr("tui.f.email")).Value(&f.email).
-			Validate(sh.fieldValidator("email", true)),
-		huh.NewSelect[string]().Title(tr("tui.f.auth")).
+		huh.NewSelect[string]().Title(tr("tui.f.platform")).Description(tr("tui.form.platform_hint")).
+			Options(platOpts...).Inline(true).Value(&f.plat),
+		huh.NewInput().Title(tr("tui.f.username")).Description(tr("tui.form.username_hint")).
+			Placeholder(tr("tui.form.eg", "alice")).Value(&f.username).
+			Validate(sh.fieldValidator("username", tr("tui.f.username"), true)),
+		huh.NewInput().Title(tr("tui.f.git_name")).Description(tr("tui.form.git_name_hint")).
+			Placeholder(tr("tui.form.eg", "Alice Tran")).Value(&f.name).
+			Validate(sh.fieldValidator("name", tr("tui.f.git_name"), true)),
+		huh.NewInput().Title(tr("tui.f.email")).Description(tr("tui.form.email_hint")).
+			Placeholder(tr("tui.form.eg", "alice@acme.com")).Value(&f.email).
+			Validate(sh.fieldValidator("email", tr("tui.f.email"), true)),
+		huh.NewSelect[string]().Title(tr("tui.f.auth")).Description(tr("tui.form.auth_hint")).
 			Options(huh.NewOption("HTTPS ("+tr("tui.form.auth_https")+")", string(config.AuthHTTPS)),
 				huh.NewOption("SSH ("+tr("tui.form.auth_ssh")+")", string(config.AuthSSH))).
 			Value(&f.auth),
@@ -360,7 +426,7 @@ func (f *accountForm) build() *huh.Form {
 				if v == "" && platform.DefaultHost(platform.Platform(f.plat)) == "" {
 					return errors.New(tr(config.ErrHostRequired))
 				}
-				return sh.fieldValidator("host", false)(v)
+				return sh.fieldValidator("host", tr("tui.f.host"), false)(v)
 			}),
 		huh.NewInput().Title(tr("tui.f.orgs")).Description(tr("tui.form.orgs_hint")).Value(&f.orgs).
 			Validate(func(v string) error {
@@ -372,9 +438,9 @@ func (f *accountForm) build() *huh.Form {
 				return nil
 			}),
 		huh.NewInput().Title(tr("tui.f.ssh_host")).Description(tr("tui.form.ssh_host_hint")).Value(&f.sshHost).
-			Validate(sh.fieldValidator("ssh_host", false)),
+			Validate(sh.fieldValidator("ssh_host", tr("tui.f.ssh_host"), false)),
 		huh.NewInput().Title(tr("tui.f.ssh_port")).Value(&f.port).
-			Validate(sh.fieldValidator("ssh_port", false)),
+			Validate(sh.fieldValidator("ssh_port", tr("tui.f.ssh_port"), false)),
 		huh.NewConfirm().Title(tr("tui.f.make_default")).Value(&f.makeDefault).
 			Affirmative(tr("tui.yes")).Negative(tr("tui.no")),
 	}
@@ -406,7 +472,11 @@ func (f *accountForm) Init() tea.Cmd { return tea.Batch(f.form.Init(), f.spin.Ti
 func (f *accountForm) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	switch msg := msg.(type) {
 	case savedMsg:
-		if ok, cmd, rebuild := f.handleSaved(msg, tr("tui.status.account_saved", f.companySlug+"/"+f.accountID())); ok {
+		next := func(config.Config) tea.Cmd {
+			ref := f.companySlug + "/" + f.accountID()
+			return f.reviewNext(msg, statusMsg{level: levelOK, text: tr("tui.status.account_saved", ref), ttl: hintTTL})
+		}
+		if ok, cmd, rebuild := f.handleSaved(msg, next); ok {
 			if rebuild {
 				f.form = f.build()
 				return f, f.form.Init()

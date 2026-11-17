@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -36,17 +35,13 @@ type Model struct {
 	status   statusMsg
 	statSeq  int
 	planSeq  int
-	help     help.Model
 	showHelp bool
 }
 
 // New creates the root model. The configuration is loaded by Init.
 func New(svc *app.Service, opts Options) *Model {
 	sh := &shared{svc: svc, st: NewStyles(), km: NewKeyMap(), cwd: opts.Cwd, version: opts.Version}
-	hm := help.New()
-	hm.Styles = sh.st.Help
-	hm.ShortSeparator = "  "
-	m := &Model{sh: sh, help: hm}
+	m := &Model{sh: sh}
 	m.stack = []Screen{newListScreen(sh)}
 	return m
 }
@@ -103,7 +98,11 @@ func (m *Model) setStatus(s statusMsg) tea.Cmd {
 	if s.level == levelErr {
 		return nil // errors stay until replaced
 	}
-	return tea.Tick(statusExpiry, func(time.Time) tea.Msg { return statusExpireMsg{seq} })
+	ttl := s.ttl
+	if ttl == 0 {
+		ttl = statusExpiry
+	}
+	return tea.Tick(ttl, func(time.Time) tea.Msg { return statusExpireMsg{seq} })
 }
 
 // broadcast sends msg to every screen of the stack.
@@ -123,7 +122,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.w, m.h = msg.Width, msg.Height
-		m.help.Width = msg.Width - 2
 		m.resizeAll()
 		return m, nil
 
@@ -178,7 +176,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case cfgLoadedMsg:
 		var cmds []tea.Cmd
 		if msg.err != nil {
-			cmds = append(cmds, m.setStatus(statusMsg{levelErr, errText(msg.err)}))
+			cmds = append(cmds, m.setStatus(statusMsg{level: levelErr, text: errText(msg.err)}))
 		} else {
 			m.sh.cfg, m.sh.loaded = msg.cfg, true
 			cmds = append(cmds, m.planCmd())
@@ -195,8 +193,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if msg.err == nil {
-			m.sh.pending, m.sh.planned = len(msg.plan.Changes), true
+			m.sh.pending, m.sh.planned, m.sh.planErr = len(msg.plan.Changes), true, false
+		} else {
+			m.sh.planErr = true
 		}
+		return m, m.broadcast(msg)
+	case focusMsg:
 		return m, m.broadcast(msg)
 	}
 
@@ -259,17 +261,36 @@ func (m *Model) headerView() string {
 	return " " + left + spaces(gap) + right
 }
 
-func (m *Model) pendingBadge() string {
-	st := m.sh.st
+// maxBadgeSlug is the longest company slug quoted in the status badge.
+const maxBadgeSlug = 16
+
+// syncBadge is the right part of the status bar. It answers "what do I do
+// next?" in a fixed priority order, and shows the success mark only when
+// there is nothing left to do (no pending change and no company without an
+// account).
+func (m *Model) syncBadge() string {
+	sh, st := m.sh, m.sh.st
 	switch {
-	case !m.sh.planned:
+	case !sh.loaded:
 		return ""
-	case m.sh.pending > 0:
-		txt := tr("tui.status.pending", m.sh.pending)
+	case sh.planErr:
+		return st.Warn.Render("! " + tr("tui.status.plan_failed"))
+	case !sh.planned:
+		return ""
+	case len(sh.cfg.Companies) == 0:
+		return st.Info.Render("i " + tr("tui.status.no_company"))
+	case sh.pending > 0:
+		txt := tr("tui.status.pending", sh.pending)
 		if m.w < 70 {
-			txt = tr("tui.status.pending_short", m.sh.pending)
+			txt = tr("tui.status.pending_short", sh.pending)
 		}
-		return st.Warn.Render("● " + txt)
+		return st.Badge.Render("● " + txt)
+	}
+	if empty := emptyCompanies(sh.cfg); len(empty) == 1 {
+		slug := trunc(empty[0], maxBadgeSlug)
+		return st.Warn.Render("! " + tr("tui.status.empty_company", slug))
+	} else if len(empty) > 1 {
+		return st.Warn.Render("! " + tr("tui.status.empty_companies", len(empty)))
 	}
 	return st.OK.Render("✓ " + tr("tui.status.synced"))
 }
@@ -281,9 +302,15 @@ func (m *Model) statusView() string {
 		first := strings.SplitN(m.status.text, "\n", 2)[0]
 		left = st.levelStyle(m.status.level).Render(levelIcon(m.status.level) + " " + first)
 	}
-	right := m.pendingBadge()
-	avail := m.w - lipgloss.Width(right) - 3
-	left = trunc(left, maxInt(avail, 4))
+	right := m.syncBadge()
+	// A message that expires (not an error) wins over the badge when both
+	// cannot fit: the badge comes back when the message goes.
+	if left != "" && right != "" && m.status.level != levelErr &&
+		lipgloss.Width(left)+lipgloss.Width(right)+3 > m.w {
+		right = ""
+	}
+	right = trunc(right, maxInt(m.w-2, 4))
+	left = trunc(left, maxInt(m.w-lipgloss.Width(right)-3, 4))
 	gap := m.w - lipgloss.Width(left) - lipgloss.Width(right) - 2
 	if gap < 1 {
 		gap = 1
@@ -296,9 +323,70 @@ func (m *Model) globalHelp() []key.Binding {
 	return []key.Binding{km.Help, km.ForceQuit}
 }
 
+// helpItems are the entries of the short help bar: the screen's own choice
+// when it has one, otherwise its full list. "? all keys" is always last.
+func (m *Model) helpItems() []helpItem {
+	var items []helpItem
+	if ch, ok := m.top().(contextHelper); ok {
+		items = ch.ContextHelp()
+	} else {
+		for _, b := range m.top().Help() {
+			items = append(items, helpItem{b: b})
+		}
+	}
+	out := items[:0:0]
+	for _, it := range items {
+		if it.b.Enabled() {
+			out = append(out, it)
+		}
+	}
+	return out
+}
+
+// helpBar draws the short help bar. It never truncates with an ellipsis:
+// when the bar is too wide, whole low-priority items are dropped from the
+// end. The primary item and "? all keys" are never dropped.
 func (m *Model) helpBar() string {
-	bs := append(append([]key.Binding(nil), m.top().Help()...), m.globalHelp()...)
-	return " " + m.help.ShortHelpView(bs)
+	st := m.sh.st
+	km := m.sh.km
+	more := helpItem{b: withDesc(km.Help, "?", tr("tui.key.all_keys"))}
+	items := m.helpItems()
+	render := func(it helpItem) string {
+		h := it.b.Help()
+		if it.primary {
+			return st.HelpPrimary.Render("▸ " + h.Key + " " + h.Desc)
+		}
+		return st.Help.ShortKey.Render(h.Key) + " " + st.Help.ShortDesc.Render(h.Desc)
+	}
+	sep := "  "
+	width := func(items []helpItem) int {
+		w := 1 + lipgloss.Width(render(more))
+		for _, it := range items {
+			w += lipgloss.Width(render(it)) + len(sep)
+		}
+		return w
+	}
+	for width(items) > m.w {
+		drop := -1
+		for i := len(items) - 1; i >= 0; i-- {
+			if !items[i].primary {
+				drop = i
+				break
+			}
+		}
+		if drop < 0 {
+			break
+		}
+		items = append(items[:drop:drop], items[drop+1:]...)
+	}
+	var b strings.Builder
+	b.WriteString(" ")
+	for _, it := range items {
+		b.WriteString(render(it))
+		b.WriteString(st.Help.ShortSeparator.Render(sep))
+	}
+	b.WriteString(render(more))
+	return b.String()
 }
 
 func (m *Model) helpView(w, h int) string {

@@ -138,7 +138,9 @@ func (d *deleteScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		if len(msg.res.KeysRemoved) > 0 {
 			status += " " + tr("tui.status.keys_removed", len(msg.res.KeysRemoved))
 		}
-		return d, tea.Batch(changed(msg.res.Config), say(levelOK, status), replace(newConfirmScreen(d.sh, tr("tui.confirm.title_apply"))))
+		// in order: the confirm screen plans against the configuration that
+		// was just saved, so it must be created after cfgChangedMsg is handled
+		return d, tea.Sequence(changed(msg.res.Config), say(levelOK, status), replace(newConfirmScreen(d.sh, tr("tui.confirm.title_apply"))))
 	case tea.KeyMsg:
 		switch d.step {
 		case 0:

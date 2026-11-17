@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"time"
+
 	"github.com/tinhnd1902/gitid/internal/app"
 	"github.com/tinhnd1902/gitid/internal/config"
 	"github.com/tinhnd1902/gitid/internal/doctor"
@@ -32,7 +34,11 @@ type (
 	statusMsg struct {
 		level level
 		text  string
+		ttl   time.Duration // 0: statusExpiry
 	}
+	// focusMsg asks the list to select the row with this key (after the
+	// configuration it belongs to was loaded).
+	focusMsg        struct{ key string }
 	statusExpireMsg struct{ seq int }
 	cfgLoadedMsg    struct {
 		cfg config.Config

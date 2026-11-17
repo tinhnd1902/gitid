@@ -82,9 +82,14 @@ func TestTreeFilterMatchesWithinWords(t *testing.T) {
 	}
 }
 
-// T3: the company form validates, saves and then shows the diff.
+// T3: the company form validates and saves. A new company has no account, so
+// there is nothing to apply: the form returns to the list with the new
+// company selected and a hint (it used to open an empty confirm screen that
+// looked like "nothing to do"). Editing a company still opens the confirm
+// screen (see T5).
 func TestT3CompanyForm(t *testing.T) {
 	h := newHarness(t, basicCfg())
+	pendingBefore := h.m.sh.pending
 	h.key("A")
 	h.mustContain(tr("tui.form.company_new"), tr("tui.f.slug"))
 	h.typeText("Bad Slug")
@@ -103,15 +108,21 @@ func TestT3CompanyForm(t *testing.T) {
 	h.typeText("Zeta Inc")
 	h.key("enter")
 	h.key("enter") // empty base dir -> default
-	h.waitFor("confirm screen", func() bool { _, ok := h.top().(*confirmScreen); return ok })
-	h.waitFor("diff", func() bool { return strings.Contains(h.view(), "zeta") })
+	h.waitFor("back on the list", func() bool {
+		l, ok := h.top().(*listScreen)
+		return ok && h.depth() == 1 && l.currentKey() == "zeta"
+	})
 	c, _, ok := h.m.sh.cfg.FindCompany("zeta")
 	if !ok || c.Name != "Zeta Inc" || c.BaseDir != "~/Code/zeta/" {
 		t.Fatalf("saved company %+v ok=%v", c, ok)
 	}
-	h.mustContain(tr("tui.confirm.files", len(h.top().(*confirmScreen).plan.Changes)), "+")
-	if h.top().(*confirmScreen).plan.Empty() {
-		t.Fatal("diff must not be empty")
+	if !strings.Contains(h.m.status.text, tr("tui.status.company_created", "zeta")) {
+		t.Fatalf("status %q", h.m.status.text)
+	}
+	// the new company changes nothing on disk, so the plan stays the same
+	h.waitFor("replanned", func() bool { return h.m.sh.planned })
+	if h.m.sh.pending != pendingBefore {
+		t.Fatalf("pending %d, was %d", h.m.sh.pending, pendingBefore)
 	}
 }
 
@@ -120,7 +131,7 @@ func TestT3DuplicateSlug(t *testing.T) {
 	h.key("A")
 	h.typeText("acme")
 	h.key("enter")
-	h.mustContain(tr(config.ErrSlugDuplicate))
+	h.mustContain(tr("tui.form.err.slug_taken", "acme"))
 }
 
 // T4: n cancels (nothing written), y applies and shows the backup.
@@ -851,8 +862,10 @@ func TestLanguageEnglish(t *testing.T) {
 	i18n.SetLang("en")
 	h := newHarness(t, basicCfg())
 	h.mustContain("Overview", "to filter by name")
+	h.mustContain("3 accounts", "unapplied change(s) — press p", "preview & apply", "all keys")
+	h.mustNotContain("tài khoản", "chưa áp dụng")
 	h.key("A")
-	h.mustContain("Add company")
+	h.mustContain("Add company", "e.g. acme")
 }
 
 func TestErrText(t *testing.T) {

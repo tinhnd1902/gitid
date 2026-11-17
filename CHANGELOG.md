@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-11-17
+
+### Improved
+
+- Terminal UI, first-run experience: a welcome guide with the three steps
+  (add a company, add an account, preview and apply) when nothing is set up.
+- Creating a company no longer opens an empty "nothing to apply" screen or
+  shows "In sync": the list selects the new company and says to press `a` to
+  add an account. A company without account is labelled `no accounts yet`, and
+  the status badge, the detail pane and the help bar all point to the next key.
+- The status badge now answers "what next": unapplied changes (highlighted),
+  companies without an account, a failed plan, or "Applied, nothing pending"
+  only when that is true.
+- The help bar shows 4 to 6 keys for the current state with the next step
+  first (`▸`), and never truncates with an ellipsis; `?` still lists all keys.
+- The detail pane explains what will happen for the selected company or
+  account, and appears from 84 columns (beside the list) or from 60x24 (below
+  it); `enter` opens it on smaller terminals.
+- Forms: placeholders read "e.g. ..." in italics, an empty required field says
+  what to enter, a duplicate slug names the slug, the base folder hint follows
+  the slug as you type, and the platform, email and auth fields explain
+  themselves.
+- Apply: a plain-language summary above the diff; after applying, the screen
+  says which account each folder now uses, how to verify it (`k` opens the
+  check) and which repos keep their own `user.email`.
+- After deleting or importing, the confirm screen is built from the saved
+  configuration (it could show an empty diff when the two raced).
+
 ## [0.1.2] - 2026-11-16
 
 First public version.
@@ -62,5 +90,6 @@ First public version.
 - Every value written to git or ssh configuration is validated and escaped;
   clone arguments are always passed after `--`.
 
-[Unreleased]: https://github.com/tinhnd1902/gitid/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/tinhnd1902/gitid/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/tinhnd1902/gitid/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/tinhnd1902/gitid/releases/tag/v0.1.2

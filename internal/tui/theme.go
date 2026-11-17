@@ -54,6 +54,8 @@ type Styles struct {
 	DiffHunk     lipgloss.Style
 	DiffMeta     lipgloss.Style
 	StatusBar    lipgloss.Style
+	Badge        lipgloss.Style // highlighted status badge (pending changes)
+	HelpPrimary  lipgloss.Style // the next-step item of the help bar
 	Help         help.Styles
 	Spinner      spinner.Model
 }
@@ -86,6 +88,11 @@ func NewStyles() *Styles {
 	s.DiffHunk = lipgloss.NewStyle().Foreground(colInfo)
 	s.DiffMeta = lipgloss.NewStyle().Foreground(colMuted).Bold(true)
 	s.StatusBar = lipgloss.NewStyle().Foreground(colMuted)
+	// Reverse video plus bold plus the "●" marker: the badge never relies on
+	// color alone. colOnAcc is white on the light warn and near-black on the
+	// dark warn, which keeps the contrast readable in both themes.
+	s.Badge = lipgloss.NewStyle().Bold(true).Foreground(colOnAcc).Background(colWarn).Padding(0, 1)
+	s.HelpPrimary = lipgloss.NewStyle().Bold(true).Foreground(colAccent)
 	s.Help = help.Styles{
 		ShortKey:       lipgloss.NewStyle().Foreground(colAccent),
 		ShortDesc:      lipgloss.NewStyle().Foreground(colMuted),
@@ -157,7 +164,9 @@ func (s *Styles) huhTheme() *huh.Theme {
 	t.Focused.Next = s.ButtonOn
 	t.Focused.BlurredButton = s.Button
 	t.Focused.TextInput.Cursor = lipgloss.NewStyle().Foreground(colTeal)
-	t.Focused.TextInput.Placeholder = lipgloss.NewStyle().Foreground(colFaint)
+	// Placeholders are faint italics; typed text stays at full color, so an
+	// example ("e.g. acme") never looks like a value the user already entered.
+	t.Focused.TextInput.Placeholder = lipgloss.NewStyle().Foreground(colFaint).Italic(true)
 	t.Focused.TextInput.Prompt = lipgloss.NewStyle().Foreground(colAccent)
 	t.Focused.TextInput.Text = lipgloss.NewStyle().Foreground(colText)
 
@@ -165,6 +174,7 @@ func (s *Styles) huhTheme() *huh.Theme {
 	t.Blurred.Base = lipgloss.NewStyle().PaddingLeft(1).BorderStyle(lipgloss.HiddenBorder()).BorderLeft(true)
 	t.Blurred.Card = t.Blurred.Base
 	t.Blurred.Title = lipgloss.NewStyle().Foreground(colMuted)
+	t.Blurred.TextInput.Text = lipgloss.NewStyle().Foreground(colText).Bold(true) // a filled field reads as a value
 	t.Blurred.NextIndicator = lipgloss.NewStyle()
 	t.Blurred.PrevIndicator = lipgloss.NewStyle()
 	t.Group.Title = t.Focused.Title

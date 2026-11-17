@@ -17,10 +17,45 @@ import (
 	"github.com/tinhnd1902/gitid/internal/keys"
 )
 
+// Layout breakpoints. The terminal body is the area between the header and
+// the status bar (terminal height minus chromeRows).
 const (
-	wideWidth = 100 // from this width the detail pane sits next to the list
-	idCol     = 14  // width of the account id column
+	sideWidth     = 84 // from this width the detail pane sits next to the list
+	stackMinWidth = 60 // from this width (and stackMinBodyH rows) it sits below
+	stackMinBodyH = 21 // body rows needed for the stacked layout (24-row terminal)
+	idCol         = 14 // width of the account id column
 )
+
+type layoutMode int
+
+const (
+	layoutList    layoutMode = iota // list only; enter opens the detail screen
+	layoutStacked                   // detail panel below the list
+	layoutSide                      // detail panel next to the list
+)
+
+// countLabel says how many accounts a company has, in words.
+func countLabel(n int) string {
+	switch n {
+	case 0:
+		return tr("tui.list.count_zero")
+	case 1:
+		return tr("tui.list.count_one")
+	}
+	return tr("tui.list.count_many", n)
+}
+
+// emptyCompanies lists the slugs of the companies that have no account yet:
+// gitid writes nothing for them.
+func emptyCompanies(cfg config.Config) []string {
+	var out []string
+	for _, c := range cfg.Companies {
+		if len(c.Accounts) == 0 {
+			out = append(out, c.Slug)
+		}
+	}
+	return out
+}
 
 // rowItem is one row of the company / account tree.
 type rowItem struct {
@@ -98,7 +133,7 @@ func (d rowDelegate) Render(w io.Writer, m list.Model, index int, item list.Item
 	}
 	width := m.Width()
 	selected := index == m.Index()
-	fmt.Fprint(w, d.line(r, width, selected))
+	fmt.Fprint(w, d.line(r, width, selected, companyLevel(m.Items(), width)))
 }
 
 func authTag(a config.Auth) string {
@@ -108,22 +143,10 @@ func authTag(a config.Auth) string {
 	return "https"
 }
 
-func (d rowDelegate) line(r rowItem, width int, selected bool) string {
+func (d rowDelegate) line(r rowItem, width int, selected bool, level int) string {
 	st := d.sh.st
 	if r.isCompany() {
-		name := ""
-		if r.company.Name != "" && r.company.Name != r.company.Slug {
-			name = "  " + r.company.Name
-		}
-		count := fmt.Sprintf("%d", len(r.company.Accounts))
-		left := r.company.Slug + name
-		right := r.company.BaseDir + "  " + count
-		if selected {
-			return st.Selected.Render(pad("▌ "+left, maxInt(width-lipgloss.Width(right)-1, 4)) + " " + right)
-		}
-		l := st.Accent.Bold(true).Render("▪ "+r.company.Slug) + st.Muted.Render(name)
-		rr := st.Faint.Render(r.company.BaseDir) + "  " + st.Muted.Render(count)
-		return joinEnds(l, rr, width)
+		return d.companyLine(r, width, selected, level)
 	}
 	a := r.account
 	branch := "├─"
@@ -154,6 +177,78 @@ func (d rowDelegate) line(r rowItem, width int, selected bool) string {
 		l += st.Warn.Render(warn)
 	}
 	return joinEnds(l, st.Faint.Render(email), width)
+}
+
+// companyParts returns the pieces of a company row for a level of detail:
+// 0 = name and base directory, 1 = name only, 2 = slug only. The count label
+// is always shown.
+func companyParts(c config.Company, level int) (name, base string) {
+	if c.Name != "" && c.Name != c.Slug && level < 2 {
+		name = "  " + c.Name
+	}
+	if level == 0 {
+		base = c.BaseDir
+	}
+	return name, base
+}
+
+func companyRight(c config.Company, base string) string {
+	count := countLabel(len(c.Accounts))
+	if base != "" {
+		return base + "  " + count
+	}
+	return count
+}
+
+// companyLevel picks one level of detail for every company row, so the
+// columns line up: the richest level at which all visible company rows fit.
+// The base directory goes first, then the name; when even the slug and the
+// count do not fit, rows are cut one by one (level 2).
+func companyLevel(items []list.Item, width int) int {
+	for level := 0; level < 2; level++ {
+		ok := true
+		for _, it := range items {
+			r, isRow := it.(rowItem)
+			if !isRow || !r.isCompany() {
+				continue
+			}
+			name, base := companyParts(r.company, level)
+			if lipgloss.Width("▪ "+r.company.Slug+name)+lipgloss.Width(companyRight(r.company, base))+2 > width {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			return level
+		}
+	}
+	return 2
+}
+
+// companyLine renders a company row at the given level (see companyLevel).
+func (d rowDelegate) companyLine(r rowItem, width int, selected bool, level int) string {
+	st := d.sh.st
+	c := r.company
+	n := len(c.Accounts)
+	count := countLabel(n)
+	name, base := companyParts(c, level)
+	right := companyRight(c, base)
+	rw := lipgloss.Width(right)
+	if selected {
+		left := trunc("▌ "+c.Slug+name, maxInt(width-rw-2, 4))
+		return st.Selected.Render(pad(left, maxInt(width-rw-1, 4)) + " " + right)
+	}
+	l := st.Accent.Bold(true).Render("▪ "+c.Slug) + st.Muted.Render(name)
+	l = trunc(l, maxInt(width-rw-2, 4))
+	countStyle := st.Muted
+	if n == 0 {
+		countStyle = st.Warn
+	}
+	rr := countStyle.Render(count)
+	if base != "" {
+		rr = st.Faint.Render(base) + "  " + rr
+	}
+	return joinEnds(l, rr, width)
 }
 
 // joinEnds puts left and right at the two ends of a width-cell line. The
@@ -232,22 +327,96 @@ func (s *listScreen) Help() []key.Binding {
 	return []key.Binding{km.Filter, km.AddAccount, km.AddCompany, km.Edit, km.Delete, km.Apply, km.Clone, km.Check, km.Doctor, km.GenKey, km.Import, km.Detail, km.Quit}
 }
 
+// ContextHelp picks the few keys that matter in the current state. The first
+// match of the table wins; the primary item is the next step.
+func (s *listScreen) ContextHelp() []helpItem {
+	km := s.sh.km
+	it := func(b key.Binding) helpItem { return helpItem{b: b} }
+	prim := func(b key.Binding) helpItem { return helpItem{b: b, primary: true} }
+	switch {
+	case !s.sh.loaded:
+		return []helpItem{it(km.Quit)}
+	case s.welcome():
+		return []helpItem{prim(km.AddCompany), it(km.Import), it(km.Quit)}
+	case s.mode == filterTyping:
+		return []helpItem{
+			prim(withDesc(km.Enter, "enter", tr("tui.key.filter_keep"))),
+			it(withDesc(km.Back, "esc", tr("tui.key.filter_clear"))),
+			it(withDesc(km.Up, "↑/↓", tr("tui.key.move"))),
+		}
+	}
+	r, has := s.selected()
+	pending := s.sh.planned && s.sh.pending > 0
+	var out []helpItem
+	switch {
+	case !has:
+		out = []helpItem{it(km.Quit)}
+	case r.isCompany() && len(r.company.Accounts) == 0:
+		out = []helpItem{prim(km.AddAccount), it(withDesc(km.Edit, "e", tr("tui.key.edit_company"))), it(km.Delete), it(km.AddCompany), it(km.Quit)}
+	case pending:
+		out = []helpItem{prim(km.Apply), it(km.AddAccount), it(km.Edit), it(km.Delete), it(km.Quit)}
+	case !r.isCompany() && r.account.Auth == config.AuthSSH && s.keyFor == r.key() && !s.keyInfo.Exists:
+		out = []helpItem{prim(km.GenKey), it(km.Edit), it(km.Delete), it(km.Check), it(km.Quit)}
+	case r.isCompany():
+		out = []helpItem{it(km.AddAccount), it(km.Edit), it(km.Delete), it(km.Clone), it(km.Check), it(km.Quit)}
+	default:
+		out = []helpItem{it(km.Edit), it(km.Delete), it(km.Check), it(km.Clone)}
+		if r.account.Auth == config.AuthSSH {
+			out = append(out, it(km.GenKey))
+		}
+		out = append(out, it(km.Quit))
+	}
+	// insert puts an item right after the primary one (or first when there is none)
+	insert := func(h helpItem) {
+		at := 0
+		if len(out) > 0 && out[0].primary {
+			at = 1
+		}
+		out = append(out[:at], append([]helpItem{h}, out[at:]...)...)
+	}
+	if has && s.layout() == layoutList {
+		insert(it(km.Detail))
+	}
+	if s.mode == filterApplied {
+		insert(it(withDesc(km.Back, "esc", tr("tui.key.filter_clear"))))
+	}
+	return out
+}
+
 func (s *listScreen) Resize(w, h int) {
 	s.w, s.h = w, h
-	lw, _ := s.widths()
+	lw, lh, _, _ := s.dims()
 	s.filter.Width = maxInt(lw-10, 8)
-	s.l.SetSize(maxInt(lw-4, 4), maxInt(h-4, 1)) // width: border+padding; height: border(2) + title(1) + filter line(1)
+	s.l.SetSize(maxInt(lw-4, 4), maxInt(lh-4, 1)) // width: border+padding; height: border(2) + title(1) + filter line(1)
 }
 
-func (s *listScreen) wide() bool { return s.w >= wideWidth }
-
-func (s *listScreen) widths() (list, detail int) {
-	if !s.wide() {
-		return s.w, 0
+// layout picks how the detail pane is shown for the current body size.
+func (s *listScreen) layout() layoutMode {
+	switch {
+	case s.w >= sideWidth:
+		return layoutSide
+	case s.w >= stackMinWidth && s.h >= stackMinBodyH:
+		return layoutStacked
 	}
-	lw := s.w * 55 / 100
-	return lw, s.w - lw
+	return layoutList
 }
+
+// dims returns the outer size of the list panel and of the detail panel
+// (zero when there is none) for the current layout.
+func (s *listScreen) dims() (lw, lh, dw, dh int) {
+	switch s.layout() {
+	case layoutSide:
+		lw = s.w * 55 / 100
+		return lw, s.h, s.w - lw, s.h
+	case layoutStacked:
+		dh = clamp(s.h/3, 7, 10)
+		return s.w, s.h - dh, s.w, dh
+	}
+	return s.w, s.h, 0, 0
+}
+
+// welcome reports whether the home screen shows the first-run guide.
+func (s *listScreen) welcome() bool { return s.sh.loaded && len(s.all) == 0 }
 
 // rows flattens the configuration into tree rows.
 func rowsOf(cfg config.Config) []list.Item {
@@ -318,6 +487,29 @@ func (s *listScreen) currentKey() string {
 	return ""
 }
 
+// focusRow selects the row with key k, clearing a filter that hides it.
+func (s *listScreen) focusRow(k string) {
+	find := func() int {
+		for i, it := range s.l.Items() {
+			if it.(rowItem).key() == k {
+				return i
+			}
+		}
+		return -1
+	}
+	i := find()
+	if i < 0 && s.mode != filterOff {
+		s.setFilter(filterOff, true)
+		i = find()
+	}
+	if i < 0 {
+		return
+	}
+	s.l.Select(i)
+	s.keyFor = ""
+	s.refreshKey()
+}
+
 // setFilter updates the mode and the visible rows.
 func (s *listScreen) setFilter(mode filterMode, clear bool) {
 	prev := s.currentKey()
@@ -354,6 +546,9 @@ func (s *listScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	case cfgLoadedMsg, cfgChangedMsg:
 		s.keyFor = ""
 		return s, s.rebuild()
+	case focusMsg:
+		s.focusRow(msg.key)
+		return s, nil
 	case tea.KeyMsg:
 		switch s.mode {
 		case filterTyping:
@@ -482,13 +677,20 @@ func (s *listScreen) View() string {
 	if s.w == 0 {
 		return ""
 	}
-	lw, dw := s.widths()
-	left := s.listPanel(lw)
-	if dw == 0 {
-		return left
+	if s.welcome() {
+		return s.sh.panel(tr("tui.list.panel", 0, 0), s.welcomeBody(s.w-4, s.h-3), s.w, s.h, true)
 	}
-	right := s.sh.panel(tr("tui.detail.title"), s.detailBody(dw-4), dw, s.h, false)
-	return lipgloss.JoinHorizontal(lipgloss.Top, left, right)
+	lw, lh, dw, dh := s.dims()
+	left := s.listPanel(lw, lh)
+	switch s.layout() {
+	case layoutSide:
+		right := s.sh.panel(tr("tui.detail.title"), s.detailBody(dw-4, dh-3), dw, dh, false)
+		return lipgloss.JoinHorizontal(lipgloss.Top, left, right)
+	case layoutStacked:
+		right := s.sh.panel(tr("tui.detail.title"), s.detailBody(dw-4, dh-3), dw, dh, false)
+		return lipgloss.JoinVertical(lipgloss.Left, left, right)
+	}
+	return left
 }
 
 func (s *listScreen) filterLine() string {
@@ -502,108 +704,392 @@ func (s *listScreen) filterLine() string {
 	return st.Faint.Render("/ " + tr("tui.list.filter_hint"))
 }
 
-func (s *listScreen) listPanel(w int) string {
+func (s *listScreen) listPanel(w, h int) string {
 	inner := w - 4
+	st := s.sh.st
 	var body string
 	switch {
 	case !s.sh.loaded:
-		body = s.sh.st.Muted.Render(tr("tui.list.loading"))
-	case len(s.all) == 0:
-		body = s.emptyState(inner)
+		body = st.Muted.Render(tr("tui.list.loading"))
+	case len(s.l.Items()) == 0:
+		term := strings.TrimSpace(s.filter.Value())
+		lines := []string{st.Muted.Render(trunc(tr("tui.list.no_match", term), inner))}
+		for _, l := range wrapLines(tr("tui.list.no_match_hint"), inner) {
+			lines = append(lines, st.Faint.Render(l))
+		}
+		body = strings.Join(lines, "\n")
 	default:
 		body = s.l.View()
-		if len(s.l.Items()) == 0 {
-			body = s.sh.st.Muted.Render(tr("tui.list.no_match"))
+		if hintLines := s.rowHint(inner); len(hintLines) > 0 {
+			n := len(s.l.Items())
+			rows := splitLines(body)
+			if len(rows) > n {
+				rows = rows[:n]
+			}
+			body = strings.Join(rows, "\n") + "\n\n" + strings.Join(hintLines, "\n")
 		}
 	}
 	content := s.filterLine() + "\n" + body
 	title := tr("tui.list.panel", len(s.sh.cfg.Companies), len(s.sh.cfg.All()))
-	focus := true
-	return s.sh.panel(title, content, w, s.h, focus)
+	return s.sh.panel(title, content, w, h, true)
 }
 
-func (s *listScreen) emptyState(w int) string {
+// rowHint is the centered "add the first account" hint shown under the rows
+// when the list has no detail pane (a company without account is selected)
+// and at least three lines are free.
+func (s *listScreen) rowHint(w int) []string {
+	r, ok := s.selected()
+	if !ok || !r.isCompany() || len(r.company.Accounts) > 0 || s.layout() != layoutList {
+		return nil
+	}
+	if s.l.Height()-len(s.l.Items()) < 3 {
+		return nil
+	}
+	return s.sh.noAccountsLines(r.company, w, false)
+}
+
+// noAccountsLines explains what a company without account means and what to
+// press. The reason is included when withWhy is set.
+func (sh *shared) noAccountsLines(c config.Company, w int, withWhy bool) []string {
+	st := sh.st
+	var out []string
+	if withWhy {
+		for _, l := range wrapLines(tr("tui.list.no_accounts_why", c.Slug), w) {
+			out = append(out, st.Muted.Render(l))
+		}
+		out = append(out, "")
+	}
+	// centered when it fits on one line; a wrapped hint reads better flush left
+	lines := wrapLines(tr("tui.list.no_accounts_hint", c.Slug), w)
+	for _, l := range lines {
+		l = st.Accent.Bold(true).Render(l)
+		if len(lines) == 1 {
+			l = center(l, w)
+		}
+		out = append(out, l)
+	}
+	return out
+}
+
+// center centers one (possibly styled) line in w cells.
+func center(line string, w int) string {
+	return lipgloss.PlaceHorizontal(w, lipgloss.Center, line)
+}
+
+// wrapLines word-wraps plain text to w cells and returns the lines without
+// trailing spaces.
+func wrapLines(s string, w int) []string {
+	lines := splitLines(wrap(s, w))
+	for i, l := range lines {
+		lines[i] = strings.TrimRight(l, " ")
+	}
+	return lines
+}
+
+// welcomeBody is the first-run guide: what gitid does, the three steps with
+// the key of each, and the import shortcut. Below a comfortable height the
+// optional parts are dropped, then the step text is cut to one line.
+func (s *listScreen) welcomeBody(w, h int) string {
 	st := s.sh.st
-	var b strings.Builder
-	b.WriteString("\n" + st.Bold.Render(tr("tui.empty.title")) + "\n\n")
-	b.WriteString(wrap(st.Muted.Render(tr("tui.empty.body")), w) + "\n\n")
-	b.WriteString(st.Accent.Render("A") + "  " + st.Muted.Render(tr("tui.key.add_company")) + "\n")
-	b.WriteString(st.Accent.Render("i") + "  " + st.Muted.Render(tr("tui.key.import")) + "\n")
-	b.WriteString(st.Accent.Render("?") + "  " + st.Muted.Render(tr("tui.key.help")))
-	return b.String()
+	steps := func(wrapText bool) []string {
+		var out []string
+		for i, k := range []string{"A", "a", "p"} {
+			prefix := st.Faint.Render(fmt.Sprintf("  %d  ", i+1)) + st.Accent.Bold(true).Render(k) + "  "
+			text := tr(fmt.Sprintf("tui.empty.step%d", i+1))
+			if !wrapText {
+				out = append(out, trunc(prefix+st.Text.Render(text), w))
+				continue
+			}
+			for j, l := range wrapLines(text, maxInt(w-8, 8)) {
+				if j == 0 {
+					out = append(out, prefix+st.Text.Render(l))
+				} else {
+					out = append(out, spaces(8)+st.Text.Render(l))
+				}
+			}
+		}
+		return out
+	}
+	para := func(style lipgloss.Style, key string) []string {
+		var out []string
+		for _, l := range wrapLines(tr(key), w) {
+			out = append(out, style.Render(l))
+		}
+		return out
+	}
+	title := st.Bold.Render(tr("tui.empty.title"))
+	join := func(parts ...[]string) []string {
+		var out []string
+		for _, p := range parts {
+			out = append(out, p...)
+		}
+		return out
+	}
+	blank := []string{""}
+	stepsHead := []string{st.Bold.Render(tr("tui.empty.steps"))}
+	full := join([]string{title}, para(st.Muted, "tui.empty.body"), blank, stepsHead, steps(true),
+		para(st.Muted, "tui.empty.after"), blank, para(st.Faint, "tui.empty.import"))
+	compact := join([]string{title}, stepsHead, steps(true), para(st.Muted, "tui.empty.after"), para(st.Faint, "tui.empty.import"))
+	short := join([]string{title}, steps(false))
+	tiny := steps(false)
+	variants := [][]string{full, compact, short, tiny}
+	pick := tiny
+	for _, v := range variants {
+		if len(v) <= h {
+			pick = v
+			break
+		}
+	}
+	return strings.Join(pick, "\n")
 }
 
-func (s *listScreen) detailBody(w int) string {
+func (s *listScreen) detailBody(w, h int) string {
 	r, ok := s.selected()
 	if !ok {
 		return s.sh.st.Faint.Render(tr("tui.detail.none"))
 	}
-	return detailText(s.sh, r, w, s.keyInfo, s.keyFor == r.key())
+	return detailText(s.sh, r, w, h, s.keyInfo, s.keyFor == r.key())
 }
 
-// detailText renders the details of a row. It is shared by the side pane and
-// the full-screen detail screen.
-func detailText(sh *shared, r rowItem, w int, ki keys.Info, haveKey bool) string {
-	st := sh.st
-	var b strings.Builder
-	line := func(label, value string) {
-		if value == "" {
-			return
-		}
-		b.WriteString(st.Label.Render(pad(label, 12)) + st.Text.Render(trunc(value, maxInt(w-12, 4))) + "\n")
-	}
+// detailText renders the details of a row in at most h lines (h <= 0: no
+// limit). It is shared by the side and stacked panes and the full-screen
+// detail screen. Variants are ordered from the richest to the most compact;
+// the first one that fits is used, so the "what happens" part survives small
+// panes.
+func detailText(sh *shared, r rowItem, w, h int, ki keys.Info, haveKey bool) string {
+	var variants [][]string
 	if r.isCompany() {
-		c := r.company
-		b.WriteString(st.Bold.Render(c.Slug) + "\n\n")
-		line(tr("tui.f.name"), c.Name)
-		line(tr("tui.f.base_dir"), c.BaseDir)
-		line(tr("tui.f.default"), c.DefaultAccount)
-		line(tr("tui.f.accounts"), fmt.Sprint(len(c.Accounts)))
-		b.WriteString("\n")
-		for _, a := range c.Accounts {
-			star := " "
-			if a.ID == c.DefaultAccount {
-				star = st.Warn.Render("★")
-			}
-			b.WriteString(trunc(star+" "+st.Text.Render(a.ID)+"  "+st.platformBadge(a.Platform)+" "+st.Muted.Render(authTag(a.Auth)), w) + "\n")
-		}
-		return b.String()
+		variants = companyVariants(sh, r.company, w)
+	} else {
+		variants = accountVariants(sh, r, w, ki, haveKey)
 	}
+	pick := variants[len(variants)-1]
+	for _, v := range variants {
+		if h <= 0 || len(v) <= h {
+			pick = v
+			break
+		}
+	}
+	return strings.Join(pick, "\n")
+}
+
+// detailField renders "label  value" with the value cut to the width.
+func detailField(st *Styles, label, value string, w int) string {
+	lc := labelCol(w)
+	return st.Label.Render(pad(label, lc)) + st.Text.Render(trunc(value, maxInt(w-lc, 4)))
+}
+
+// labelCol is the width of the label column of the detail pane: the longest
+// label of the active language plus a space (so "Base directory" is not cut),
+// at least 12 and at most half of the pane.
+func labelCol(w int) int {
+	n := 12
+	for _, k := range []string{"tui.f.base_dir", "tui.f.default", "tui.f.accounts", "tui.f.platform", "tui.f.auth",
+		"tui.f.username", "tui.f.git_name", "tui.f.email", "tui.f.orgs", "tui.f.alias", "tui.f.key"} {
+		n = maxInt(n, lipgloss.Width(tr(k))+1)
+	}
+	return minInt(n, maxInt(w/2, 12))
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// styledWrap wraps text and applies a style to every line.
+func styledWrap(style lipgloss.Style, text string, w int) []string {
+	var out []string
+	for _, l := range wrapLines(text, w) {
+		out = append(out, style.Render(l))
+	}
+	return out
+}
+
+func companyVariants(sh *shared, c config.Company, w int) [][]string {
+	st := sh.st
+	title := c.Slug
+	if c.Name != "" && c.Name != c.Slug {
+		title += " · " + c.Name
+	}
+	titleLine := st.Bold.Render(trunc(title, w))
+	header := st.Bold.Render(tr("tui.detail.how"))
+	def, hasDef := c.Default()
+	defName := tr("tui.detail.no_default")
+	if hasDef {
+		defName = def.ID
+	}
+	accounts := tr("tui.detail.no_default")
+	if n := len(c.Accounts); n > 0 {
+		accounts = fmt.Sprint(n)
+	}
+	fields := []string{
+		detailField(st, tr("tui.f.base_dir"), c.BaseDir, w),
+		detailField(st, tr("tui.f.default"), defName, w),
+		detailField(st, tr("tui.f.accounts"), accounts, w),
+	}
+	var list []string
+	for _, a := range c.Accounts {
+		star := " "
+		if a.ID == c.DefaultAccount {
+			star = st.Warn.Render("★")
+		}
+		list = append(list, trunc(star+" "+st.Text.Render(a.ID)+"  "+st.platformBadge(a.Platform)+" "+st.Muted.Render(authTag(a.Auth)), w))
+	}
+	cat := func(parts ...[]string) []string {
+		var out []string
+		for _, p := range parts {
+			out = append(out, p...)
+		}
+		return out
+	}
+	one := func(l string) []string { return []string{l} }
+	blank := []string{""}
+
+	if len(c.Accounts) == 0 {
+		why := sh.noAccountsLines(c, w, true)
+		return [][]string{
+			cat(one(titleLine), blank, fields, blank, one(header), why),
+			cat(one(titleLine), one(header), why),
+			cat(one(titleLine), noBlank(why)),
+			cat(noBlank(why)),
+			cat(noBlank(sh.noAccountsLines(c, w, false))),
+		}
+	}
+	// nextStep is the sentence that says what to press (apply, or verify). It
+	// is never dropped, whatever the height.
+	var nextStep []string
+	switch {
+	case sh.planErr:
+	case sh.planned && sh.pending > 0:
+		nextStep = styledWrap(st.Warn, tr("tui.detail.how_pending"), w)
+	case sh.planned:
+		nextStep = styledWrap(st.OK, tr("tui.detail.how_applied"), w)
+	}
+	howDefault := styledWrap(st.Muted, tr("tui.detail.how_default", c.BaseDir, def.Name, def.Email), w)
+	how := func(others bool) []string {
+		out := append([]string(nil), howDefault...)
+		if others && len(c.Accounts) > 1 {
+			out = append(out, styledWrap(st.Muted, tr("tui.detail.how_others"), w)...)
+		}
+		return append(out, nextStep...)
+	}
+	out := [][]string{
+		cat(one(titleLine), blank, fields, blank, list, blank, one(header), how(true)),
+		cat(one(titleLine), blank, fields, blank, one(header), how(true)),
+		cat(one(titleLine), blank, fields, blank, one(header), how(false)),
+		cat(one(titleLine), one(header), how(false)),
+		cat(one(titleLine), how(false)),
+		// very short panes: the explanation and the next step, without title
+		cat(how(false)),
+	}
+	if len(nextStep) > 0 {
+		out = append(out, nextStep)
+	}
+	return out
+}
+
+func noBlank(lines []string) []string {
+	var out []string
+	for _, l := range lines {
+		if l != "" {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+// accountTarget describes the remote that selects an account, for the
+// "used when" line (see remote.Patterns: https needs the username in the
+// URL, ssh uses the account's alias).
+func accountTarget(ref config.AccountRef) string {
+	a := ref.Account
+	if a.Auth == config.AuthSSH {
+		return "git@" + ref.Alias() + ":…"
+	}
+	path := ""
+	if len(a.Orgs) > 0 {
+		path = "{" + strings.Join(a.Orgs, ",") + "}/"
+	}
+	return "https://" + a.Username + "@" + a.EffectiveHost() + "/" + path + "…"
+}
+
+func accountVariants(sh *shared, r rowItem, w int, ki keys.Info, haveKey bool) [][]string {
+	st := sh.st
 	a := *r.account
 	ref := config.AccountRef{Company: r.company, Account: a}
-	b.WriteString(st.Bold.Render(ref.String()) + "\n\n")
-	line(tr("tui.f.platform"), a.Platform.DisplayName()+" ("+a.EffectiveHost()+")")
-	line(tr("tui.f.auth"), authTag(a.Auth))
-	line(tr("tui.f.username"), a.Username)
-	line(tr("tui.f.git_name"), a.Name)
-	line(tr("tui.f.email"), a.Email)
+	titleLine := st.Bold.Render(trunc(ref.String(), w))
+	field := func(label, value string) string { return detailField(st, label, value, w) }
+
+	var keyState string
+	if haveKey && a.Auth == config.AuthSSH {
+		pad12 := st.Label.Render(pad("", labelCol(w)))
+		switch {
+		case !ki.Exists:
+			keyState = pad12 + st.Warn.Render(trunc("! "+tr("tui.key.state_missing"), maxInt(w-labelCol(w), 4)))
+		case ki.Mode&0o077 != 0:
+			keyState = pad12 + st.Warn.Render(trunc("! "+tr("tui.key.state_mode", fmt.Sprintf("%04o", ki.Mode)), maxInt(w-labelCol(w), 4)))
+		default:
+			keyState = pad12 + st.OK.Render(trunc("✓ "+tr("tui.key.state_ok"), maxInt(w-labelCol(w), 4)))
+		}
+	}
+	var how []string
+	if r.company.DefaultAccount == a.ID {
+		how = styledWrap(st.Muted, tr("tui.detail.acc_default", r.company.BaseDir), w)
+	} else {
+		how = styledWrap(st.Muted, tr("tui.detail.acc_other", accountTarget(ref), r.company.BaseDir, r.company.DefaultAccount), w)
+	}
+	opt := func(s string) []string {
+		if s == "" {
+			return nil
+		}
+		return []string{s}
+	}
+	cat := func(parts ...[]string) []string {
+		var out []string
+		for _, p := range parts {
+			out = append(out, p...)
+		}
+		return out
+	}
+	one := func(l string) []string { return []string{l} }
+	blank := []string{""}
+
+	full := []string{
+		field(tr("tui.f.platform"), a.Platform.DisplayName()+" ("+a.EffectiveHost()+")"),
+		field(tr("tui.f.auth"), authTag(a.Auth)),
+		field(tr("tui.f.username"), a.Username),
+		field(tr("tui.f.git_name"), a.Name),
+		field(tr("tui.f.email"), a.Email),
+	}
 	if len(a.Orgs) > 0 {
-		line(tr("tui.f.orgs"), strings.Join(a.Orgs, ", "))
+		full = append(full, field(tr("tui.f.orgs"), strings.Join(a.Orgs, ", ")))
 	}
 	if r.company.DefaultAccount == a.ID {
-		line(tr("tui.f.default"), "★ "+tr("tui.f.default_yes"))
+		full = append(full, field(tr("tui.f.default"), "★ "+tr("tui.f.default_yes")))
+	}
+	mid := []string{
+		field(tr("tui.f.auth"), authTag(a.Auth)),
+		field(tr("tui.f.username"), a.Username),
+		field(tr("tui.f.email"), a.Email),
 	}
 	if a.Auth == config.AuthSSH {
-		line(tr("tui.f.alias"), ref.Alias())
 		path := a.SSHKey
 		if path == "" {
 			path = r.company.DefaultKeyPath(a)
 		}
-		line(tr("tui.f.key"), path)
-		if haveKey {
-			b.WriteString(st.Label.Render(pad("", 12)))
-			switch {
-			case !ki.Exists:
-				b.WriteString(st.Warn.Render("! " + tr("tui.key.state_missing")))
-			case ki.Mode&0o077 != 0:
-				b.WriteString(st.Warn.Render("! " + tr("tui.key.state_mode", fmt.Sprintf("%04o", ki.Mode))))
-			default:
-				b.WriteString(st.OK.Render("✓ " + tr("tui.key.state_ok")))
-			}
-			b.WriteString("\n")
-		}
+		full = append(full, field(tr("tui.f.alias"), ref.Alias()), field(tr("tui.f.key"), path))
+		mid = append(mid, field(tr("tui.f.alias"), ref.Alias()))
 	}
-	return b.String()
+	return [][]string{
+		cat(one(titleLine), blank, full, opt(keyState), blank, how),
+		cat(one(titleLine), blank, mid, opt(keyState), blank, how),
+		cat(one(titleLine), mid[2:3], opt(keyState), how),
+		cat(one(titleLine), opt(keyState), how),
+		cat(one(titleLine), how),
+		cat(how),
+	}
 }
 
 // detailScreen shows one row in full (used on narrow terminals).
@@ -663,5 +1149,5 @@ func (d *detailScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 }
 
 func (d *detailScreen) View() string {
-	return d.sh.panel(tr("tui.detail.title"), detailText(d.sh, d.row, d.w-4, d.ki, d.have), d.w, d.h, true)
+	return d.sh.panel(tr("tui.detail.title"), detailText(d.sh, d.row, d.w-4, d.h-3, d.ki, d.have), d.w, d.h, true)
 }

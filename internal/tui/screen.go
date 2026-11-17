@@ -32,6 +32,18 @@ type Screen interface {
 	Resize(w, h int)
 }
 
+// helpItem is one entry of the short help bar. The primary item is the next
+// step the user is expected to take; it is drawn first and emphasized.
+type helpItem struct {
+	b       key.Binding
+	primary bool
+}
+
+// contextHelper is implemented by screens that choose the entries of the
+// short help bar for their current state. Help() stays the full list shown by
+// the "?" overlay.
+type contextHelper interface{ ContextHelp() []helpItem }
+
 // capturer is implemented by screens that take over the keyboard (text
 // inputs, forms, busy states): the root then forwards every key, including
 // esc, to the screen.
@@ -50,6 +62,7 @@ type shared struct {
 	loaded  bool
 	pending int  // number of files an apply would change
 	planned bool // pending is known
+	planErr bool // the last plan could not be computed
 	st      *Styles
 	km      *KeyMap
 	cwd     string
@@ -74,6 +87,24 @@ func popRoot() tea.Cmd         { return func() tea.Msg { return popRootMsg{} } }
 func say(l level, text string) tea.Cmd {
 	return func() tea.Msg { return statusMsg{level: l, text: text} }
 }
+
+// hintTTL is how long a next-step message stays in the status bar. The same
+// guidance is also shown persistently (badge, detail pane, help bar), so the
+// message can safely expire.
+const hintTTL = 10 * time.Second
+
+// hintMsg builds a next-step status message.
+func hintMsg(text string) statusMsg {
+	return statusMsg{level: levelInfo, text: text, ttl: hintTTL}
+}
+
+// hint tells the user what to do next.
+func hint(text string) tea.Cmd {
+	return func() tea.Msg { return hintMsg(text) }
+}
+
+// focus selects the row with this key in the list.
+func focus(key string) tea.Cmd { return func() tea.Msg { return focusMsg{key} } }
 
 func changed(cfg config.Config) tea.Cmd { return func() tea.Msg { return cfgChangedMsg{cfg} } }
 

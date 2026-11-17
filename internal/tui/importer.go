@@ -84,14 +84,14 @@ func (s *importScreen) buildForm() {
 	}
 	s.form = huh.NewForm(huh.NewGroup(
 		huh.NewSelect[string]().Title(tr("tui.f.platform")).Options(opts...).Inline(true).Value(&s.plat),
-		huh.NewInput().Title(tr("tui.f.username")).Description(tr("tui.form.username_hint")).Value(&s.user).
-			Validate(sh.fieldValidator("username", true)),
+		huh.NewInput().Title(tr("tui.f.username")).Description(tr("tui.form.username_hint")).Placeholder(tr("tui.form.eg", "alice")).Value(&s.user).
+			Validate(sh.fieldValidator("username", tr("tui.f.username"), true)),
 		huh.NewSelect[string]().Title(tr("tui.f.auth")).
 			Options(huh.NewOption("HTTPS", string(config.AuthHTTPS)), huh.NewOption("SSH", string(config.AuthSSH))).Value(&s.auth),
 		huh.NewInput().Title(tr("tui.f.host")).Description(tr("tui.form.host_hint")).
 			Placeholder(tr("tui.form.host_placeholder")).
 			Value(&s.host).
-			Validate(sh.fieldValidator("host", false)),
+			Validate(sh.fieldValidator("host", tr("tui.f.host"), false)),
 	)).WithTheme(sh.st.huhTheme()).WithShowHelp(false).WithShowErrors(false)
 	s.form.WithWidth(maxInt(s.w-4, 20)).WithHeight(maxInt(s.h-3-errorRows, 4))
 }
@@ -120,7 +120,7 @@ func (s *importScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 			s.phase, s.errMsg = imList, errText(msg.err)
 			return s, nil
 		}
-		return s, tea.Batch(changed(msg.cfg), say(levelOK, tr("tui.status.imported")), replace(newConfirmScreen(s.sh, tr("tui.confirm.title_apply"))))
+		return s, tea.Sequence(changed(msg.cfg), say(levelOK, tr("tui.status.imported")), replace(newConfirmScreen(s.sh, tr("tui.confirm.title_apply"))))
 	case tea.KeyMsg:
 		switch s.phase {
 		case imList:
