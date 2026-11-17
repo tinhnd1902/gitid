@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-11-17
+
+### Fixed
+
+- Terminal UI: the detail screen now handles `a` (add an account to the row's
+  company), `p` (apply), `k` (check) and `D` (doctor), and its help bar shows
+  the next step first. The keys named in its hints used to do nothing.
+- Terminal UI: navigation started by a key is applied immediately, so fast
+  typing, paste or IME input can no longer stack a detail screen on top of a
+  form or send letters to the wrong screen.
+- Terminal UI: after saving an account, the list selects that account when you
+  return to it.
+- Terminal UI: the status badge only says "press X" on the list and detail
+  screens; on other screens it shows the same state without a key.
+
 ## [0.1.3] - 2026-11-17
 
 ### Improved
@@ -90,6 +105,7 @@ First public version.
 - Every value written to git or ssh configuration is validated and escaped;
   clone arguments are always passed after `--`.
 
-[Unreleased]: https://github.com/tinhnd1902/gitid/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/tinhnd1902/gitid/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/tinhnd1902/gitid/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/tinhnd1902/gitid/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/tinhnd1902/gitid/releases/tag/v0.1.2

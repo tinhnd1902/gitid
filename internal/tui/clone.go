@@ -154,7 +154,7 @@ func (c *cloneScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		case clURL:
 			switch msg.Type {
 			case tea.KeyEsc:
-				return c, pop()
+				return c, c.sh.popNow()
 			case tea.KeyEnter:
 				return c, c.submitURL()
 			}
@@ -185,7 +185,7 @@ func (c *cloneScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 			}
 		case clDone:
 			if key.Matches(msg, km.Enter) {
-				return c, pop()
+				return c, c.sh.popNow()
 			}
 		}
 		return c, nil

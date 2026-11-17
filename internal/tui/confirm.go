@@ -256,17 +256,17 @@ func (c *confirmScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 			case key.Matches(msg, km.Yes):
 				return c, c.apply()
 			case key.Matches(msg, km.No):
-				return c, tea.Sequence(pop(), hint(tr("tui.status.apply_later")))
+				return c, tea.Batch(c.sh.popNow(), hint(tr("tui.status.apply_later")))
 			}
 			var cmd tea.Cmd
 			c.vp, cmd = c.vp.Update(msg)
 			return c, cmd
 		case confDone, confEmpty:
 			if key.Matches(msg, km.Enter) {
-				return c, popRoot()
+				return c, c.sh.popRootNow()
 			}
 			if c.state == confDone && key.Matches(msg, km.Check) {
-				return c, replace(newCheckScreen(c.sh))
+				return c, c.sh.replaceNow(newCheckScreen(c.sh))
 			}
 		case confFailed:
 			if key.Matches(msg, km.Retry) {

@@ -68,6 +68,44 @@ type shared struct {
 	cwd     string
 	version string
 	nextID  int
+	nav     []navOp // navigation requested by the current Update, see applyNav
+}
+
+type navKind int
+
+const (
+	navPush navKind = iota
+	navReplace
+	navPop
+	navPopRoot
+)
+
+type navOp struct {
+	kind navKind
+	s    Screen
+}
+
+// Navigation rule: key handlers use the *Now methods, which queue the change
+// and let Model.Update apply it in the same call, so a key that arrives right
+// after goes to the new top screen. push/replace/pop (async commands) are only
+// for use inside tea.Sequence after async work, where the order relative to
+// other messages matters. A screen that is not the top one must not call *Now
+// while handling a broadcast message.
+func (sh *shared) pushNow(s Screen) tea.Cmd {
+	sh.nav = append(sh.nav, navOp{navPush, s})
+	return nil
+}
+func (sh *shared) replaceNow(s Screen) tea.Cmd {
+	sh.nav = append(sh.nav, navOp{navReplace, s})
+	return nil
+}
+func (sh *shared) popNow() tea.Cmd {
+	sh.nav = append(sh.nav, navOp{kind: navPop})
+	return nil
+}
+func (sh *shared) popRootNow() tea.Cmd {
+	sh.nav = append(sh.nav, navOp{kind: navPopRoot})
+	return nil
 }
 
 // id hands out unique ids so a screen can ignore results that belong to an

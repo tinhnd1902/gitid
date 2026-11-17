@@ -616,37 +616,37 @@ func (s *listScreen) action(msg tea.KeyMsg, km *KeyMap) (tea.Cmd, bool) {
 	case key.Matches(msg, km.Quit):
 		return tea.Quit, true
 	case key.Matches(msg, km.AddCompany):
-		return push(newCompanyForm(sh, nil)), true
+		return sh.pushNow(newCompanyForm(sh, nil)), true
 	case key.Matches(msg, km.AddAccount):
 		if !has {
 			return say(levelWarn, tr("tui.status.need_company")), true
 		}
-		return push(newAccountForm(sh, r.company.Slug, nil)), true
+		return sh.pushNow(newAccountForm(sh, r.company.Slug, nil)), true
 	case key.Matches(msg, km.Edit):
 		if !has {
 			return nil, true
 		}
 		if r.isCompany() {
 			c := r.company
-			return push(newCompanyForm(sh, &c)), true
+			return sh.pushNow(newCompanyForm(sh, &c)), true
 		}
 		a := *r.account
-		return push(newAccountForm(sh, r.company.Slug, &a)), true
+		return sh.pushNow(newAccountForm(sh, r.company.Slug, &a)), true
 	case key.Matches(msg, km.Delete):
 		if !has {
 			return nil, true
 		}
-		return push(newDeleteScreen(sh, r.company, r.account)), true
+		return sh.pushNow(newDeleteScreen(sh, r.company, r.account)), true
 	case key.Matches(msg, km.Clone):
-		return push(newCloneScreen(sh)), true
+		return sh.pushNow(newCloneScreen(sh)), true
 	case key.Matches(msg, km.Check):
-		return push(newCheckScreen(sh)), true
+		return sh.pushNow(newCheckScreen(sh)), true
 	case key.Matches(msg, km.Doctor):
-		return push(newDoctorScreen(sh)), true
+		return sh.pushNow(newDoctorScreen(sh)), true
 	case key.Matches(msg, km.Apply):
-		return push(newConfirmScreen(sh, tr("tui.confirm.title_apply"))), true
+		return sh.pushNow(newConfirmScreen(sh, tr("tui.confirm.title_apply"))), true
 	case key.Matches(msg, km.Import):
-		return push(newImportScreen(sh)), true
+		return sh.pushNow(newImportScreen(sh)), true
 	case key.Matches(msg, km.GenKey):
 		ref, ok := r.ref()
 		if !has || !ok {
@@ -657,7 +657,7 @@ func (s *listScreen) action(msg tea.KeyMsg, km *KeyMap) (tea.Cmd, bool) {
 		if !has {
 			return nil, true
 		}
-		return push(newDetailScreen(sh, r)), true
+		return sh.pushNow(newDetailScreen(sh, r)), true
 	}
 	return nil, false
 }
@@ -668,9 +668,9 @@ func (s *listScreen) genKey(ref config.AccountRef) tea.Cmd {
 		return say(levelWarn, tr("err.not_ssh"))
 	}
 	if s.sh.svc.KeyInfo(ref).Exists {
-		return push(newKeyResultScreen(s.sh, ref, nil))
+		return s.sh.pushNow(newKeyResultScreen(s.sh, ref, nil))
 	}
-	return push(newKeygenScreen(s.sh, ref))
+	return s.sh.pushNow(newKeygenScreen(s.sh, ref))
 }
 
 func (s *listScreen) View() string {
@@ -1117,7 +1117,41 @@ func (d *detailScreen) Resize(w, h int) {
 
 func (d *detailScreen) Help() []key.Binding {
 	km := d.sh.km
-	return []key.Binding{km.Edit, km.Delete, km.GenKey, km.Back}
+	return []key.Binding{km.AddAccount, km.Edit, km.Delete, km.GenKey, km.Apply, km.Check, km.Doctor, km.Back}
+}
+
+// ContextHelp puts the next step first in the short help bar.
+func (d *detailScreen) ContextHelp() []helpItem {
+	km := d.sh.km
+	isSSH := false
+	if ref, ok := d.row.ref(); ok {
+		isSSH = ref.Account.Auth == config.AuthSSH
+	}
+	primary := ""
+	switch {
+	case d.row.isCompany() && len(d.row.company.Accounts) == 0:
+		primary = "a"
+	case d.sh.pending > 0:
+		primary = "p"
+	case d.have && !d.ki.Exists:
+		primary = "g"
+	}
+	mk := func(b key.Binding, k string) helpItem {
+		return helpItem{b: b, primary: primary == k}
+	}
+	items := []helpItem{mk(km.AddAccount, "a"), mk(km.Apply, "p"), mk(km.Edit, "e"), mk(km.Delete, "d")}
+	if isSSH {
+		items = append(items, mk(km.GenKey, "g"))
+	}
+	items = append(items, mk(km.Check, "k"), mk(km.Doctor, "D"), mk(km.Back, "esc"))
+	// primary first
+	for i, it := range items {
+		if it.primary {
+			items = append([]helpItem{it}, append(items[:i:i], items[i+1:]...)...)
+			break
+		}
+	}
+	return items
 }
 
 func (d *detailScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
@@ -1128,21 +1162,29 @@ func (d *detailScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		case key.Matches(k, km.Edit):
 			if r.isCompany() {
 				c := r.company
-				return d, replace(newCompanyForm(d.sh, &c))
+				return d, d.sh.replaceNow(newCompanyForm(d.sh, &c))
 			}
 			a := *r.account
-			return d, replace(newAccountForm(d.sh, r.company.Slug, &a))
+			return d, d.sh.replaceNow(newAccountForm(d.sh, r.company.Slug, &a))
+		case key.Matches(k, km.AddAccount):
+			return d, d.sh.replaceNow(newAccountForm(d.sh, r.company.Slug, nil))
+		case key.Matches(k, km.Apply):
+			return d, d.sh.pushNow(newConfirmScreen(d.sh, tr("tui.confirm.title_apply")))
+		case key.Matches(k, km.Check):
+			return d, d.sh.pushNow(newCheckScreen(d.sh))
+		case key.Matches(k, km.Doctor):
+			return d, d.sh.pushNow(newDoctorScreen(d.sh))
 		case key.Matches(k, km.Delete):
-			return d, replace(newDeleteScreen(d.sh, r.company, r.account))
+			return d, d.sh.replaceNow(newDeleteScreen(d.sh, r.company, r.account))
 		case key.Matches(k, km.GenKey):
 			ref, ok := r.ref()
 			if !ok || ref.Account.Auth != config.AuthSSH {
 				return d, say(levelWarn, tr("err.not_ssh"))
 			}
 			if d.sh.svc.KeyInfo(ref).Exists {
-				return d, replace(newKeyResultScreen(d.sh, ref, nil))
+				return d, d.sh.replaceNow(newKeyResultScreen(d.sh, ref, nil))
 			}
-			return d, replace(newKeygenScreen(d.sh, ref))
+			return d, d.sh.replaceNow(newKeygenScreen(d.sh, ref))
 		}
 	}
 	return d, nil

@@ -119,6 +119,51 @@ func (m *Model) broadcast(msg tea.Msg) tea.Cmd {
 // Update routes messages: global concerns here, everything else to the top
 // screen.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	_, cmd := m.update(msg)
+	return m, tea.Batch(cmd, m.applyNav())
+}
+
+// applyNav applies the navigation queued by the screens during this Update.
+func (m *Model) applyNav() tea.Cmd {
+	ops := m.sh.nav
+	m.sh.nav = nil
+	var cmds []tea.Cmd
+	for _, op := range ops {
+		switch op.kind {
+		case navPush:
+			cmds = append(cmds, m.doPush(op.s))
+		case navReplace:
+			cmds = append(cmds, m.doReplace(op.s))
+		case navPop:
+			m.doPop()
+		case navPopRoot:
+			m.stack = m.stack[:1]
+		}
+	}
+	return tea.Batch(cmds...)
+}
+
+func (m *Model) doPush(s Screen) tea.Cmd {
+	bw, bh := m.bodySize()
+	s.Resize(bw, bh)
+	m.stack = append(m.stack, s)
+	return s.Init()
+}
+
+func (m *Model) doReplace(s Screen) tea.Cmd {
+	bw, bh := m.bodySize()
+	s.Resize(bw, bh)
+	m.stack[len(m.stack)-1] = s
+	return s.Init()
+}
+
+func (m *Model) doPop() {
+	if len(m.stack) > 1 {
+		m.stack = m.stack[:len(m.stack)-1]
+	}
+}
+
+func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.w, m.h = msg.Width, msg.Height
@@ -147,19 +192,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case pushMsg:
-		bw, bh := m.bodySize()
-		msg.s.Resize(bw, bh)
-		m.stack = append(m.stack, msg.s)
-		return m, msg.s.Init()
+		return m, m.doPush(msg.s)
 	case replaceMsg:
-		bw, bh := m.bodySize()
-		msg.s.Resize(bw, bh)
-		m.stack[len(m.stack)-1] = msg.s
-		return m, msg.s.Init()
+		return m, m.doReplace(msg.s)
 	case popMsg:
-		if len(m.stack) > 1 {
-			m.stack = m.stack[:len(m.stack)-1]
-		}
+		m.doPop()
 		return m, nil
 	case popRootMsg:
 		m.stack = m.stack[:1]
@@ -270,25 +307,37 @@ const maxBadgeSlug = 16
 // account).
 func (m *Model) syncBadge() string {
 	sh, st := m.sh, m.sh.st
+	// Only the list and the detail screen handle the keys the badge names.
+	var actionable bool
+	switch m.top().(type) {
+	case *listScreen, *detailScreen:
+		actionable = true
+	}
+	t := func(k string, args ...any) string {
+		if !actionable {
+			k += "_plain"
+		}
+		return tr(k, args...)
+	}
 	switch {
 	case !sh.loaded:
 		return ""
 	case sh.planErr:
-		return st.Warn.Render("! " + tr("tui.status.plan_failed"))
+		return st.Warn.Render("! " + t("tui.status.plan_failed"))
 	case !sh.planned:
 		return ""
 	case len(sh.cfg.Companies) == 0:
-		return st.Info.Render("i " + tr("tui.status.no_company"))
+		return st.Info.Render("i " + t("tui.status.no_company"))
 	case sh.pending > 0:
-		txt := tr("tui.status.pending", sh.pending)
+		txt := t("tui.status.pending", sh.pending)
 		if m.w < 70 {
-			txt = tr("tui.status.pending_short", sh.pending)
+			txt = t("tui.status.pending_short", sh.pending)
 		}
 		return st.Badge.Render("● " + txt)
 	}
 	if empty := emptyCompanies(sh.cfg); len(empty) == 1 {
 		slug := trunc(empty[0], maxBadgeSlug)
-		return st.Warn.Render("! " + tr("tui.status.empty_company", slug))
+		return st.Warn.Render("! " + t("tui.status.empty_company", slug))
 	} else if len(empty) > 1 {
 		return st.Warn.Render("! " + tr("tui.status.empty_companies", len(empty)))
 	}

@@ -170,12 +170,17 @@ func (f *formHost) handleSaved(msg savedMsg, ok func(config.Config) tea.Cmd) (bo
 // say what was saved, then open the confirm screen (or msg.after, for
 // example the key generation). The steps run in order, so the confirm screen
 // always plans against the saved configuration.
-func (f *formHost) reviewNext(msg savedMsg, status statusMsg) tea.Cmd {
+func (f *formHost) reviewNext(msg savedMsg, status statusMsg, focusKey string) tea.Cmd {
 	next := Screen(newConfirmScreen(f.sh, tr("tui.confirm.title_apply")))
 	if msg.after != nil {
 		next = msg.after(msg.cfg)
 	}
-	return tea.Sequence(changed(msg.cfg), func() tea.Msg { return status }, replace(next))
+	steps := []tea.Cmd{changed(msg.cfg)}
+	if focusKey != "" {
+		steps = append(steps, focus(focusKey))
+	}
+	steps = append(steps, func() tea.Msg { return status }, replace(next))
+	return tea.Sequence(steps...)
 }
 
 // ---- company form ----
@@ -284,7 +289,7 @@ func (f *companyForm) Update(msg tea.Msg) (Screen, tea.Cmd) {
 					return tea.Sequence(changed(cfg), pop(), focus(name), hint(tr("tui.status.company_created", name)))
 				}
 			}
-			return f.reviewNext(msg, statusMsg{level: levelOK, text: tr("tui.status.company_saved", name)})
+			return f.reviewNext(msg, statusMsg{level: levelOK, text: tr("tui.status.company_saved", name)}, "")
 		}
 		if ok, cmd, rebuild := f.handleSaved(msg, next); ok {
 			if rebuild {
@@ -305,7 +310,7 @@ func (f *companyForm) Update(msg tea.Msg) (Screen, tea.Cmd) {
 			return f, nil
 		}
 		if msg.Type == tea.KeyEsc {
-			return f, pop()
+			return f, f.sh.popNow()
 		}
 	}
 	if f.saving {
@@ -474,7 +479,7 @@ func (f *accountForm) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	case savedMsg:
 		next := func(config.Config) tea.Cmd {
 			ref := f.companySlug + "/" + f.accountID()
-			return f.reviewNext(msg, statusMsg{level: levelOK, text: tr("tui.status.account_saved", ref), ttl: hintTTL})
+			return f.reviewNext(msg, statusMsg{level: levelOK, text: tr("tui.status.account_saved", ref), ttl: hintTTL}, ref)
 		}
 		if ok, cmd, rebuild := f.handleSaved(msg, next); ok {
 			if rebuild {
@@ -495,7 +500,7 @@ func (f *accountForm) Update(msg tea.Msg) (Screen, tea.Cmd) {
 			return f, nil
 		}
 		if msg.Type == tea.KeyEsc {
-			return f, pop()
+			return f, f.sh.popNow()
 		}
 	}
 	if f.saving {

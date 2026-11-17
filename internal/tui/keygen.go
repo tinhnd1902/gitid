@@ -267,7 +267,7 @@ func (k *keyResultScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 				return openDoneMsg{id: id, err: svc.OpenKeyURL(ctx, acc)}
 			}
 		case key.Matches(msg, km.Apply) && k.sh.pending > 0:
-			return k, push(newConfirmScreen(k.sh, tr("tui.confirm.title_apply")))
+			return k, k.sh.pushNow(newConfirmScreen(k.sh, tr("tui.confirm.title_apply")))
 		}
 	}
 	return k, nil

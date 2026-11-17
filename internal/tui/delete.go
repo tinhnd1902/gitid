@@ -148,19 +148,19 @@ func (d *deleteScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 			case key.Matches(msg, km.Yes):
 				return d, d.advance()
 			case key.Matches(msg, km.No), msg.Type == tea.KeyEsc:
-				return d, pop()
+				return d, d.sh.popNow()
 			case key.Matches(msg, km.Toggle):
 				d.pick.toggle()
 			case key.Matches(msg, km.Enter):
 				if d.pick.idx == 1 {
 					return d, d.advance()
 				}
-				return d, pop()
+				return d, d.sh.popNow()
 			}
 		case 1:
 			switch msg.Type {
 			case tea.KeyEsc:
-				return d, pop()
+				return d, d.sh.popNow()
 			case tea.KeyEnter:
 				v := strings.TrimSpace(d.input.Value())
 				switch {
