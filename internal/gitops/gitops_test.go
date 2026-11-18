@@ -248,3 +248,96 @@ func TestO4Targets(t *testing.T) {
 		t.Fatal("target created")
 	}
 }
+
+// ---- ReadRepoConfig (G-1 .. G-8) ----
+
+func nul(parts ...string) string { return strings.Join(parts, "\x00") + "\x00" }
+
+const repoRe = `^(remote\..*\.url|user\.email)$`
+
+func TestReadRepoConfig(t *testing.T) {
+	// G-1: remote and email
+	f := execx.NewFake().On("git -C /r config -z --show-origin --get-regexp", execx.Response{
+		Stdout: nul("file:/r/.git/config", "remote.origin.url\nhttps://alice@github.com/acme/api.git", "file:/h/.gitconfig", "user.email\nalice@acme.com"),
+	})
+	rc, err := gitops.ReadRepoConfig(bg, f, "/r")
+	if err != nil || len(rc.Remotes) != 1 || rc.Remotes[0] != (gitops.Remote{Name: "origin", URL: "https://alice@github.com/acme/api.git"}) {
+		t.Fatalf("%+v %v", rc, err)
+	}
+	if !rc.HasEmail || rc.Email.Value != "alice@acme.com" || rc.Email.Origin != "file:/h/.gitconfig" || rc.Email.IsRepoLocal() {
+		t.Fatalf("%+v", rc.Email)
+	}
+	// G-8: the exact command shape
+	calls := f.CallStrings()
+	if len(calls) != 1 || calls[0] != "git -C /r config -z --show-origin --get-regexp "+repoRe {
+		t.Fatalf("%q", calls)
+	}
+
+	// G-2: several emails, the last one wins and keeps its own origin
+	f = execx.NewFake().On("git -C /m config", execx.Response{
+		Stdout: nul("file:/h/.gitconfig", "user.email\nglobal@x.io", "file:/h/.config/gitid/git/acme-alice.gitconfig", "user.email\nalice@acme.com", "file:.git/config", "user.email\nlocal@x.io"),
+	})
+	rc, _ = gitops.ReadRepoConfig(bg, f, "/m")
+	if rc.Email.Value != "local@x.io" || !rc.Email.IsRepoLocal() {
+		t.Fatalf("%+v", rc.Email)
+	}
+
+	// G-3: several remotes, in order
+	f = execx.NewFake().On("git -C /s config", execx.Response{
+		Stdout: nul("file:.git/config", "remote.upstream.url\nhttps://github.com/up/api.git", "file:.git/config", "remote.origin.url\ngit@github.com:me/api.git"),
+	})
+	rc, _ = gitops.ReadRepoConfig(bg, f, "/s")
+	if len(rc.Remotes) != 2 || rc.Remotes[0].Name != "upstream" || rc.Remotes[1].Name != "origin" || rc.HasEmail {
+		t.Fatalf("%+v", rc)
+	}
+}
+
+func TestReadRepoConfigExitCodes(t *testing.T) {
+	f := execx.NewFake().
+		On("git -C /none config", execx.Response{ExitCode: 1}).
+		On("git -C /bad config", execx.Response{ExitCode: 128, Stderr: "fatal: not a git repository (or any of the parent directories): .git"}).
+		On("git -C /dub config", execx.Response{ExitCode: 128, Stderr: "fatal: detected dubious ownership in repository at '/dub'\nTo add an exception..."})
+	// G-4
+	if rc, err := gitops.ReadRepoConfig(bg, f, "/none"); err != nil || len(rc.Remotes) != 0 || rc.HasEmail {
+		t.Fatalf("%+v %v", rc, err)
+	}
+	// G-5
+	if _, err := gitops.ReadRepoConfig(bg, f, "/bad"); !errors.Is(err, gitops.ErrNotRepo) {
+		t.Fatalf("%v", err)
+	}
+	// G-6
+	if _, err := gitops.ReadRepoConfig(bg, f, "/dub"); !errors.Is(err, gitops.ErrDubious) {
+		t.Fatalf("%v", err)
+	}
+	// an error that is not an exit status passes through
+	if _, err := gitops.ReadRepoConfig(bg, f, "/unscripted"); err == nil || errors.Is(err, gitops.ErrNotRepo) || errors.Is(err, gitops.ErrDubious) {
+		t.Fatalf("%v", err)
+	}
+}
+
+// G-7: -z keeps spaces and tabs inside values intact.
+func TestReadRepoConfigOddValues(t *testing.T) {
+	f := execx.NewFake().On("git -C /o config", execx.Response{
+		Stdout: nul("file:/r/.git/config", "remote.o r.url\nhttps://h/a b\tc/d.git", "file:/r/.git/config", "remote.origin.url\n/tmp/with\ttab/repo", "garbage-without-pair"),
+	})
+	rc, err := gitops.ReadRepoConfig(bg, f, "/o")
+	if err != nil || len(rc.Remotes) != 2 {
+		t.Fatalf("%+v %v", rc, err)
+	}
+	if rc.Remotes[0].Name != "o r" || rc.Remotes[0].URL != "https://h/a b\tc/d.git" || rc.Remotes[1].URL != "/tmp/with\ttab/repo" {
+		t.Fatalf("%+v", rc.Remotes)
+	}
+}
+
+// a cancelled parent context stops the call (the call also runs under the
+// 10 s git timeout)
+func TestReadRepoConfigCancel(t *testing.T) {
+	f := execx.NewFake().On("git -C /b config", execx.Response{Block: make(chan struct{})})
+	ctx, cancel := context.WithCancel(bg)
+	done := make(chan error, 1)
+	go func() { _, err := gitops.ReadRepoConfig(ctx, f, "/b"); done <- err }()
+	cancel()
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatalf("%v", err)
+	}
+}

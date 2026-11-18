@@ -64,3 +64,23 @@ func TestSnapshot(t *testing.T) {
 	}
 	_ = os.Chmod(filepath.Join(e.Home, "a/secret"), 0o600)
 }
+
+// ENV-2: TempEnv hides the process environment from LookupEnv, MapEnv
+// installs only the given variables.
+func TestTempEnvLookupEnvIsEmpty(t *testing.T) {
+	t.Setenv("PATH_FOR_GITID_TEST", "x")
+	e := TempEnv(t)
+	if v, ok := e.LookupEnv("PATH"); ok || v != "" {
+		t.Fatalf("PATH visible: %q %v", v, ok)
+	}
+	if _, ok := e.LookupEnv("PATH_FOR_GITID_TEST"); ok {
+		t.Fatal("process variable visible")
+	}
+	m := MapEnv(e, map[string]string{"A": "1"})
+	if v, ok := m.LookupEnv("A"); !ok || v != "1" {
+		t.Fatalf("MapEnv A = %q %v", v, ok)
+	}
+	if _, ok := m.LookupEnv("PATH"); ok {
+		t.Fatal("MapEnv leaks PATH")
+	}
+}

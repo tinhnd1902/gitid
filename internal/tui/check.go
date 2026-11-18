@@ -23,10 +23,10 @@ const (
 	chFixing
 )
 
-// checkScreen inspects the repository in the current directory: which account
-// its remote maps to, which email git really uses and why. When the remote
-// does not use the matching account it offers fix-remote with an
-// old -> new preview.
+// checkScreen inspects a repository (the current directory unless it was
+// opened for another one): which account its remote maps to, which email git
+// really uses and why. When the remote does not use the matching account it
+// offers fix-remote with an old -> new preview.
 type checkScreen struct {
 	sh     *shared
 	id     int
@@ -39,13 +39,33 @@ type checkScreen struct {
 	note   string
 	spin   spinner.Model
 	w, h   int
+
+	dir      string // the folder checked
+	fromRepo bool   // opened by the repo browser for a repository it listed
+	autoFix  bool   // go straight to the fix confirmation when there is a fix
+	fixed    bool   // a fix was applied: the browser must read the repository again
 }
 
-func newCheckScreen(sh *shared) *checkScreen {
+// newCheckScreen checks the folder gitid was started in.
+func newCheckScreen(sh *shared) *checkScreen { return newCheckScreenAt(sh, sh.cwd, false) }
+
+// newCheckScreenAt checks the repository at dir. With autoFix the screen goes
+// to the fix confirmation as soon as the check shows a fix is possible.
+func newCheckScreenAt(sh *shared, dir string, autoFix bool) *checkScreen {
 	return &checkScreen{
-		sh: sh, id: sh.id(), spin: sh.st.Spinner,
+		sh: sh, id: sh.id(), spin: sh.st.Spinner, dir: dir, autoFix: autoFix,
 		pick: choice{labels: [2]string{tr("tui.fix.no"), tr("tui.fix.yes")}},
 	}
+}
+
+// Close tells the repo browser to read the repository again when a fix was
+// applied here.
+func (c *checkScreen) Close() tea.Cmd {
+	if !c.fixed {
+		return nil
+	}
+	dir := c.dir
+	return func() tea.Msg { return repoTouchedMsg{dir: dir} }
 }
 
 func (c *checkScreen) Title() string   { return tr("tui.check.title") }
@@ -66,19 +86,21 @@ func (c *checkScreen) StepBack() bool {
 
 func (c *checkScreen) run() tea.Cmd {
 	c.phase = chLoading
-	svc, cfg, cwd, id := c.sh.svc, c.sh.cfg, c.sh.cwd, c.id
+	svc, cfg, dir, id := c.sh.svc, c.sh.cfg, c.dir, c.id
 	return func() tea.Msg {
 		ctx, cancel := ctxTimeout(shortTimeout)
 		defer cancel()
-		res, err := svc.Check(ctx, cfg, cwd)
+		res, err := svc.Check(ctx, cfg, dir)
 		return checkDoneMsg{id: id, res: res, err: err}
 	}
 }
 
 // notRepo reports whether the check failed because the folder gitid was
-// started in is not a git repository (retrying cannot help there).
+// started in is not a git repository (retrying cannot help there). A
+// repository the browser listed is not offered a clone: it only says the
+// check failed.
 func (c *checkScreen) notRepo() bool {
-	return c.phase == chError && errors.Is(c.err, gitops.ErrNotRepo)
+	return c.phase == chError && errors.Is(c.err, gitops.ErrNotRepo) && !c.fromRepo
 }
 
 func (c *checkScreen) canFix() bool { return c.res.Account != "" && c.res.Remote != "" }
@@ -129,8 +151,15 @@ func (c *checkScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		c.res, c.err = msg.res, msg.err
 		if msg.err != nil {
 			c.phase = chError
-		} else {
-			c.phase = chResult
+			return c, nil
+		}
+		c.phase = chResult
+		if c.autoFix {
+			c.autoFix = false
+			if c.canFix() {
+				return c, c.planFix()
+			}
+			c.note = tr("tui.fix.nothing")
 		}
 		return c, nil
 	case fixPlanMsg:
@@ -156,7 +185,7 @@ func (c *checkScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 			c.phase, c.note = chResult, errText(msg.err)
 			return c, nil
 		}
-		c.note = tr("tui.fix.done")
+		c.note, c.fixed = tr("tui.fix.done"), true
 		return c, tea.Batch(c.spin.Tick, c.run(), say(levelOK, tr("tui.status.remote_fixed")))
 	case tea.KeyMsg:
 		switch c.phase {
@@ -173,7 +202,7 @@ func (c *checkScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 			case key.Matches(msg, km.Retry):
 				return c, tea.Batch(c.spin.Tick, c.run())
 			case key.Matches(msg, km.Clone) && c.notRepo():
-				return c, c.sh.replaceNow(newCloneScreen(c.sh, nil))
+				return c, c.sh.replaceNow(newReposScreen(c.sh, nil))
 			}
 		case chFixConfirm:
 			switch {
@@ -196,7 +225,7 @@ func (c *checkScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 }
 
 func (c *checkScreen) req() app.FixRequest {
-	return app.FixRequest{Dir: c.sh.cwd, Account: c.res.Account}
+	return app.FixRequest{Dir: c.dir, Account: c.res.Account}
 }
 
 func (c *checkScreen) planFix() tea.Cmd {
@@ -236,8 +265,8 @@ func (c *checkScreen) View() string {
 		b.WriteString(st.Err.Render("✗ "+wrap(errText(c.err), inner)) + "\n\n")
 		if c.notRepo() {
 			cwd := "."
-			if c.sh.cwd != "" {
-				cwd = c.sh.svc.Env.Contract(c.sh.cwd)
+			if c.dir != "" {
+				cwd = c.sh.svc.Env.Contract(c.dir)
 			}
 			b.WriteString(st.Muted.Render(wrap(tr("tui.check.where", cwd), inner)) + "\n")
 			b.WriteString(st.Text.Render(wrap(c.notRepoNext(), inner)))

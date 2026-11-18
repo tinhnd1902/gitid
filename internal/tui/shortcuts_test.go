@@ -136,8 +136,8 @@ func TestIME5To7TextInputsTakeComposedText(t *testing.T) {
 
 	h.key("c")
 	h.sendRunes("â")
-	if h.status() == imeVi || h.top().(*cloneScreen).input.Value() != "â" {
-		t.Fatalf("clone input %q", h.top().(*cloneScreen).input.Value())
+	if h.status() == imeVi || cloneOf(h).input.Value() != "â" {
+		t.Fatalf("clone input %q", cloneOf(h).input.Value())
 	}
 	h.key("esc")
 
@@ -275,7 +275,7 @@ func TestQB2To11QGoesBackOnSubScreens(t *testing.T) {
 		{"clone failed", func(t *testing.T) *harness {
 			h := newHarness(t, basicCfg())
 			h.key("c")
-			h.top().(*cloneScreen).phase = clFailed
+			cloneOf(h).phase = clFailed
 			return h
 		}},
 	}
@@ -319,7 +319,7 @@ func TestQB12To13CloneURLTypesQAndPickGoesBack(t *testing.T) {
 	h := newHarness(t, basicCfg())
 	h.key("c")
 	h.key("q")
-	cs := h.top().(*cloneScreen)
+	cs := cloneOf(h)
 	if cs.phase != clURL || cs.input.Value() != "q" || h.depth() != 2 {
 		t.Fatalf("phase %v input %q depth %d", cs.phase, cs.input.Value(), h.depth())
 	}
@@ -388,7 +388,7 @@ func TestQB21BusyStatesIgnoreQ(t *testing.T) {
 	h.typeText("https://github.com/org/repo.git")
 	h.key("enter")
 	h.key("enter")
-	cs := h.top().(*cloneScreen)
+	cs := cloneOf(h)
 	if cs.phase != clRunning {
 		t.Fatalf("phase %v", cs.phase)
 	}
@@ -739,7 +739,7 @@ func TestUX8To10ClonePreselectsTheHighlightedAccount(t *testing.T) {
 	pickURL := func() *cloneScreen {
 		h.typeText("https://github.com/org/repo.git")
 		h.key("enter")
-		return h.top().(*cloneScreen)
+		return cloneOf(h)
 	}
 	h.selectKey("acme/bob")
 	h.key("c")
@@ -774,7 +774,7 @@ func TestUX10ClonePreselectDefaultsToTheFirstCandidate(t *testing.T) {
 	h.key("c") // from the Done screen: nothing highlighted
 	h.typeText("https://github.com/org/repo.git")
 	h.key("enter")
-	if cs := h.top().(*cloneScreen); cs.cur != 0 {
+	if cs := cloneOf(h); cs.cur != 0 {
 		t.Fatalf("cur %d", cs.cur)
 	}
 }

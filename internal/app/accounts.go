@@ -174,6 +174,11 @@ func (s *Service) CopyKey(ctx context.Context, pub string) error {
 	return keys.Copy(ctx, s.Env, s.Run, pub)
 }
 
+// CopyText copies text (a path, a URL) to the clipboard.
+func (s *Service) CopyText(ctx context.Context, text string) error {
+	return keys.Copy(ctx, s.Env, s.Run, text)
+}
+
 // OpenKeyURL opens the platform's "add SSH key" page.
 func (s *Service) OpenKeyURL(ctx context.Context, a config.Account) error {
 	return keys.OpenURL(ctx, s.Env, s.Run, keys.KeyURL(a))

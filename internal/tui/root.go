@@ -60,8 +60,10 @@ func Run(svc *app.Service, opts Options) error {
 	// answered into the input stream. A terminal that never answers must not
 	// stall the start for long.
 	detectBackground(1500 * time.Millisecond)
-	p := tea.NewProgram(New(svc, opts), tea.WithAltScreen())
+	model := New(svc, opts)
+	p := tea.NewProgram(model, tea.WithAltScreen())
 	_, err := p.Run()
+	model.shutdown()
 	return err
 }
 
@@ -145,12 +147,41 @@ func (m *Model) applyNav() tea.Cmd {
 		case navReplace:
 			cmds = append(cmds, m.doReplace(op.s))
 		case navPop:
-			m.doPop()
+			cmds = append(cmds, m.doPop())
 		case navPopRoot:
-			m.stack = m.stack[:1]
+			cmds = append(cmds, m.truncate(1))
 		}
 	}
 	return tea.Batch(cmds...)
+}
+
+// closeScreens calls Close on every screen of ss that has background work to
+// stop. The commands the screens return are batched.
+func closeScreens(ss ...Screen) tea.Cmd {
+	var cmds []tea.Cmd
+	for _, s := range ss {
+		if c, ok := s.(closer); ok {
+			if cmd := c.Close(); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+		}
+	}
+	return tea.Batch(cmds...)
+}
+
+// shutdown closes every screen of the stack (the program is ending): running
+// scans and clones are cancelled.
+func (m *Model) shutdown() { _ = closeScreens(m.stack...) }
+
+// truncate drops the screens above the first n (closing them, top first).
+func (m *Model) truncate(n int) tea.Cmd {
+	if n < 1 || n >= len(m.stack) {
+		return nil
+	}
+	gone := slices.Clone(m.stack[n:])
+	slices.Reverse(gone)
+	m.stack = m.stack[:n]
+	return closeScreens(gone...)
 }
 
 func (m *Model) doPush(s Screen) tea.Cmd {
@@ -163,15 +194,12 @@ func (m *Model) doPush(s Screen) tea.Cmd {
 func (m *Model) doReplace(s Screen) tea.Cmd {
 	bw, bh := m.bodySize()
 	s.Resize(bw, bh)
+	old := m.stack[len(m.stack)-1]
 	m.stack[len(m.stack)-1] = s
-	return s.Init()
+	return tea.Batch(closeScreens(old), s.Init())
 }
 
-func (m *Model) doPop() {
-	if len(m.stack) > 1 {
-		m.stack = m.stack[:len(m.stack)-1]
-	}
-}
+func (m *Model) doPop() tea.Cmd { return m.truncate(len(m.stack) - 1) }
 
 func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -208,8 +236,7 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if sb, ok := m.top().(stepBacker); ok && sb.StepBack() {
 					return m, nil
 				}
-				m.stack = m.stack[:len(m.stack)-1]
-				return m, nil
+				return m, m.doPop()
 			}
 		}
 
@@ -218,11 +245,9 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case replaceMsg:
 		return m, m.doReplace(msg.s)
 	case popMsg:
-		m.doPop()
-		return m, nil
+		return m, m.doPop()
 	case popRootMsg:
-		m.stack = m.stack[:1]
-		return m, nil
+		return m, m.truncate(1)
 
 	case statusMsg:
 		return m, m.setStatus(msg)
@@ -282,6 +307,11 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.broadcast(msg)
 	}
 
+	// results of background work may belong to a screen below the top one (a
+	// scan goes on behind a pushed check screen): every screen sees them
+	if _, ok := msg.(bgMsg); ok {
+		return m, m.broadcast(msg)
+	}
 	ns, cmd := m.top().Update(msg)
 	m.stack[len(m.stack)-1] = ns
 	return m, cmd

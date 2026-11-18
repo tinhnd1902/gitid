@@ -4,6 +4,7 @@
 package env
 
 import (
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -18,6 +19,10 @@ type Env struct {
 	Now           func() time.Time
 	GOOS          string
 	LookPath      func(file string) (string, error)
+	// LookupEnv reads one variable of the process environment. Code that
+	// needs a variable other than HOME / XDG_CONFIG_HOME goes through it, so
+	// tests can inject a map instead of the real environment.
+	LookupEnv func(key string) (string, bool)
 }
 
 // New returns an Env with sane defaults for the optional fields.
@@ -34,6 +39,9 @@ func (e Env) withDefaults() Env {
 	}
 	if e.LookPath == nil {
 		e.LookPath = exec.LookPath
+	}
+	if e.LookupEnv == nil {
+		e.LookupEnv = os.LookupEnv
 	}
 	return e
 }

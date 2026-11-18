@@ -21,7 +21,7 @@ import (
 //	doctor Doctor    apply Apply        ssh_key GenKey     import Import
 //	reload Reload    yes Yes            no No              fix Fix
 //	retry Retry      copy Copy          open Open          ssh_test SSHTest
-//	terminal TerminalMode
+//	terminal TerminalMode                problems Problems
 type KeyMap struct {
 	Quit, ForceQuit, Help, Back, Enter, Up, Down, PageUp, PageDown key.Binding
 	Filter                                                         key.Binding
@@ -29,7 +29,7 @@ type KeyMap struct {
 	Apply, GenKey, Import, Detail                                  key.Binding
 	Yes, No, Toggle, Copy, Open, Fix, Retry, SSHTest, TerminalMode key.Binding
 	Save, Next, Cancel                                             key.Binding
-	Reload                                                         key.Binding
+	Reload, Problems                                               key.Binding
 
 	// keys are the effective bindings the bindings above were built from; T
 	// reads the labels of the hint strings from it.
@@ -87,6 +87,7 @@ func NewKeyMap(m keymap.Map) *KeyMap {
 		Next:         bind([]string{"tab"}, "tab", t("tui.key.next")),
 		Cancel:       bind([]string{"esc"}, "esc", t("tui.key.cancel")),
 		Reload:       act(keymap.Reload, "tui.key.reload"),
+		Problems:     act(keymap.Problems, "tui.key.problems"),
 	}
 }
 
@@ -129,6 +130,9 @@ var hintKeys = map[string][]keymap.Action{
 	"tui.form.discard_q":             {keymap.Yes, keymap.No},
 	"tui.import.none_next":           {keymap.AddCompany},
 	"tui.help.close":                 {keymap.Help, keymap.Back},
+	"tui.repos.local.cancelled":      {keymap.Reload},
+	"tui.repos.local.no_problems":    {keymap.Problems},
+	"tui.repos.hint.fix":             {keymap.Fix},
 }
 
 // T translates a message like tr, but a message that names keys (see

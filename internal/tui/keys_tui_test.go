@@ -181,7 +181,7 @@ func TestTK9ConflictKeepsDefaultsAndSaysSo(t *testing.T) {
 		t.Fatalf("status %q", h.status())
 	}
 	h.key("c")
-	if _, ok := h.top().(*cloneScreen); !ok {
+	if cloneOf(h) == nil {
 		t.Fatalf("c: top is %T", h.top())
 	}
 	h.key("esc")
@@ -264,15 +264,17 @@ func TestTK13YesNoKeys(t *testing.T) {
 	}
 }
 
+// (z, not f: since the repo browser, filter and fix are live on the same screen,
+// so filter: f is a conflict there by design)
 func TestTK14FilterKey(t *testing.T) {
-	h := newHarnessKeys(t, basicCfg(), "filter: f\n")
-	h.mustContainPlain("f " + tr("tui.list.filter_hint"))
+	h := newHarnessKeys(t, basicCfg(), "filter: z\n")
+	h.mustContainPlain("z " + tr("tui.list.filter_hint"))
 	noEffect(t, h, "/")
-	h.key("f")
+	h.key("z")
 	if h.listScreen().mode != filterTyping {
-		t.Fatal("f did not start the filter")
+		t.Fatal("z did not start the filter")
 	}
-	h.mustContainPlain("f ")
+	h.mustContainPlain("z ")
 }
 
 func TestTK15ReloadAppliesNewKeys(t *testing.T) {
@@ -442,6 +444,7 @@ var hintArgs = map[string][]any{
 	"tui.detail.dup":                 {"acme/alice"},
 	"tui.form.err.dup_account":       {"alice", "github.com"},
 	"tui.form.warn.username_changed": {"olduser"},
+	"tui.repos.hint.fix":             {"https://alice@github.com/org/repo.git"},
 }
 
 var unindexedVerb = regexp.MustCompile(`%[-+# 0-9.*]*[a-zA-Z]`)

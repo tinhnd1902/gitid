@@ -344,3 +344,13 @@ func (h *harness) act(a keymap.Action) {
 	h.t.Helper()
 	h.key(h.m.sh.km.keys.Label(a))
 }
+
+// cloneOf is the clone flow of the repo browser when the browser is on top
+// and shows its URL tab, nil otherwise. The URL flow lives inside the browser
+// (the screen the clone key opens), so the tests reach it through here.
+func cloneOf(h *harness) *cloneScreen {
+	if r, ok := h.top().(*reposScreen); ok && r.tab == tabURL {
+		return r.url
+	}
+	return nil
+}

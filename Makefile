@@ -4,7 +4,7 @@ VERSION ?= dev
 LDFLAGS := -X main.version=$(VERSION)
 
 # Core packages and their minimum statement coverage (percent). See plan N5.
-CORE85 := remote gitcfg sshcfg block fsx plan config
+CORE85 := remote gitcfg sshcfg block fsx plan config scan
 CORE70 := app keys gitops doctor importer
 
 .PHONY: build test cover vet fmt-check lint test-integration check-home check-install install clean
@@ -13,7 +13,7 @@ build:
 	$(GO) build -trimpath -ldflags "$(LDFLAGS)" -o bin/gitid ./cmd/gitid
 
 test:
-	$(GO) test -race ./...
+	$(GO) test -race -timeout 20m ./...
 
 # cover: run tests with coverage, print per-package results and enforce thresholds.
 cover:
@@ -43,7 +43,7 @@ lint:
 	else echo "golangci-lint not found: falling back to vet + fmt-check"; $(MAKE) --no-print-directory vet fmt-check; fi
 
 test-integration:
-	$(GO) test -tags integration ./...
+	$(GO) test -tags integration -timeout 20m ./...
 
 # check-home: only cmd/ and internal/env/fromos.go may read HOME / XDG from the process.
 check-home:

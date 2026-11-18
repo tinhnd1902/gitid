@@ -239,7 +239,15 @@ func TestCLI7UnparsableKeysAndConfig(t *testing.T) {
 	h := newHarness(t, nil)
 	h.writeKeys("check: [v\n")
 	code, out, _ := h.run("keys")
-	if code != 2 || strings.Count(out, "  ! ") != 1 || !strings.Contains(out, "YAML") {
+	// the warning lines start with "! " (the problems row of the table holds
+	// a key named "!", so the marker is only counted at the start of a line)
+	warns := 0
+	for _, l := range strings.Split(out, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(l), "! ") {
+			warns++
+		}
+	}
+	if code != 2 || warns != 1 || !strings.Contains(out, "YAML") {
 		t.Fatalf("%d\n%s", code, out)
 	}
 	if !strings.Contains(out, "k") {

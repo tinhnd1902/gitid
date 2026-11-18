@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Repo browser: the clone key (`c`) now opens a screen with three tabs, Local,
+  URL and Online, switched with `tab` and `shift+tab`. It opens on the URL tab,
+  which is the clone flow exactly as before (paste, pick the account, clone,
+  retry in terminal mode when authentication fails).
+- Local tab: gitid scans the base folder of every company in the background
+  (up to 4 folders deep and 20 000 folders per company; `node_modules`,
+  `vendor` and hidden folders are skipped; no symlink is followed) and lists
+  every repository with the account its remote maps to, its status (wrong
+  username/alias, unknown account, foreign host, no remote, unreadable remote,
+  ambiguous, git error, unsafe owner) and flags (email differs, local email
+  override, wrong company folder, cloned twice, symlink; worktree, submodule
+  and bare repositories are marked). `k`/`enter` checks a repository, `f` goes
+  straight to the fix-remote question, `c` copies the path, `/` filters, `!`
+  shows only the problems, `left`/`right` switch company, `r` scans again,
+  `esc` stops a scan. One read-only `git config` call per repository, eight at
+  a time. The result is kept for the session; a configuration change is
+  applied to it without scanning again, and a finished clone or fix updates
+  only that repository. Leaving the screen stops the scan.
+- Online tab: a placeholder that says listing online repositories is coming
+  soon (no network is used).
+- New rebindable action `problems` (default `!`) and the `repos` screen scope
+  for `filter`, `check`, `fix`, `copy` and `reload` (`gitid keys` lists them).
+  Since `filter`, `check`, `fix`, `copy`, `reload` and `problems` now share the
+  repo browser screen, they cannot share a key with each other there: for
+  example `filter: "f"` is reported as a conflict with `fix` (the default key
+  stays).
+- README.md and README_VI.md: "Clone and the repo browser".
+- Test: the shortcut guard covers the repo browser states and its sentinel
+  keys now run through `alt+a` to `alt+z` and then `alt+A` to `alt+Z`.
+
+### Changed
+
+- Internal: `gitid check` and the local scan share one classification, so they
+  always agree; the TUI root closes screens that own background work when
+  they leave the stack, and broadcasts the results of background work to
+  every screen.
+
 ## [0.1.6] - 2026-11-18
 
 ### Added

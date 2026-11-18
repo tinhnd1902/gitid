@@ -55,6 +55,18 @@ type capturer interface{ Capturing() bool }
 // means the screen went one step back itself and must stay on the stack.
 type stepBacker interface{ StepBack() bool }
 
+// closer is implemented by screens that own background work (a scan, a
+// fetch). The root calls Close when the screen leaves the stack: popped,
+// replaced, dropped by popRoot, or when the program ends. The command it
+// returns (may be nil) runs like any other.
+type closer interface{ Close() tea.Cmd }
+
+// bgMsg marks the messages of background work that may outlive the screen on
+// top. The root broadcasts them to every screen of the stack instead of
+// handing them to the top one only, so that a scan goes on behind a pushed
+// screen and never stalls waiting for a screen that is not the top.
+type bgMsg interface{ bgMsg() }
+
 func isCapturing(s Screen) bool {
 	c, ok := s.(capturer)
 	return ok && c.Capturing()
@@ -77,6 +89,13 @@ type shared struct {
 	version   string
 	nextID    int
 	nav       []navOp // navigation requested by the current Update, see applyNav
+
+	// repos is the session cache of the repo browser: the raw results of the
+	// local scan, kept for the life of the process (see repoSession).
+	repos *repoSession
+	// scanOpts bounds the local scan (the zero value takes the scan defaults;
+	// tests lower the caps).
+	scanOpts app.ScanOptions
 }
 
 type navKind int

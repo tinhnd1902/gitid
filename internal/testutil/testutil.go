@@ -39,6 +39,18 @@ func TempEnv(t testing.TB) env.Env {
 	e.Now = func() time.Time { return FixedTime }
 	e.GOOS = "darwin"
 	e.LookPath = func(file string) (string, error) { return "/usr/bin/" + file, nil }
+	// no variable of the real process environment is visible to the code
+	// under test; MapEnv installs the ones a test needs
+	e.LookupEnv = func(string) (string, bool) { return "", false }
+	return e
+}
+
+// MapEnv makes e.LookupEnv answer from vars only and returns the updated Env.
+func MapEnv(e env.Env, vars map[string]string) env.Env {
+	e.LookupEnv = func(k string) (string, bool) {
+		v, ok := vars[k]
+		return v, ok
+	}
 	return e
 }
 

@@ -35,6 +35,7 @@ tồn tại, để trang không bao giờ hiện ảnh lỗi.
 - **An toàn mặc định:** mọi thay đổi đều hiện diff trước, tệp được sao lưu trước khi ghi, khối do gitid quản lý có tính idempotent, và `--dry-run` không ghi gì cả.
 - **SSH đỡ đau đầu:** mỗi tài khoản một key ed25519 và một alias `Host`, public key chép vào clipboard chỉ với một phím, còn private key không bao giờ bị đọc.
 - **Clone và sửa remote:** clone bằng đúng tài khoản với thanh tiến trình, kiểm tra repo đang dùng danh tính nào, và sửa remote sai.
+- **Trình duyệt repo:** một màn hình có tab Trên máy (mọi repo trong thư mục các công ty, tài khoản mà remote khớp và điều gì đang sai), tab URL (clone) và tab Online (sắp có).
 - **Chẩn đoán và nhập cấu hình:** kiểm tra toàn bộ thiết lập với tiến trình từng mục, và bắt đầu nhanh từ các `includeIf` bạn đã có.
 - **Hai ngôn ngữ:** tiếng Việt (mặc định) và tiếng Anh, đổi được cho từng lần chạy.
 
@@ -225,6 +226,7 @@ gitid sửa tệp trong thư mục home của bạn, nên nó rất chặt chẽ
 - **Private key:** gitid không bao giờ đọc, in, sửa hay ghi đè private key. Nó chỉ kiểm tra tệp có tồn tại không và quyền truy cập; nó đọc tệp `.pub`. Xóa tài khoản sẽ giữ key, trừ khi bạn gõ id tài khoản để xác nhận xóa, và chỉ xóa được key nằm trong `~/.ssh/gitid/`.
 - **Bí mật trong URL:** mật khẩu hoặc token dán trong URL bị loại bỏ và che đi ở mọi nơi có thể hiển thị.
 - **Chống chèn lệnh:** tên, email, host và username được kiểm tra và escape trước khi vào cấu hình git hay ssh; lệnh clone luôn dùng `git clone -- <url> <thư mục>`.
+- **Quét repo:** tab Trên máy của trình duyệt repo chỉ đọc: nó liệt kê thư mục trong các thư mục gốc của công ty và chạy một lệnh `git config` chỉ đọc trong mỗi repo tìm được. Nó không ghi gì; bản thân gitid không mở tệp nào bên trong repo, trừ tệp `.git` một dòng của worktree hay submodule (git tự đọc cấu hình của repo).
 - **Mạng:** không dùng, trừ khi bạn clone hoặc tự bấm bài thử `ssh -T`. Không có telemetry.
 - **Gỡ bỏ:** xóa hết công ty trong TUI rồi áp dụng; tệp của bạn trở về đúng từng byte ban đầu. Hoặc khôi phục thủ công (bên dưới). Để gỡ chính chương trình gitid, xem [Gỡ cài đặt chương trình](#gỡ-cài-đặt-chương-trình).
 
@@ -332,31 +334,32 @@ clone: ["c", "n"]   # hai phím cho một hành động
 | `quit` | `q` | danh sách |
 | `help` | `?` | mọi màn hình trừ biểu mẫu |
 | `back` | `q` (`esc` luôn quay lại) | mọi màn hình trừ danh sách |
-| `filter` | `/` | danh sách |
+| `filter` | `/` | danh sách, trình duyệt repo |
 | `add_account` | `a` | danh sách, chi tiết |
 | `add_company` | `A` | danh sách |
 | `edit` | `e` | danh sách, chi tiết |
 | `delete` | `d` | danh sách, chi tiết |
 | `clone` | `c` | danh sách, chi tiết, áp dụng (xong), kiểm tra |
-| `check` | `k` | danh sách, chi tiết, áp dụng (xong) |
+| `check` | `k` | danh sách, chi tiết, áp dụng (xong), trình duyệt repo |
 | `doctor` | `D` | danh sách, chi tiết |
 | `apply` | `p` | danh sách, chi tiết, kết quả SSH key |
 | `ssh_key` | `g` | danh sách, chi tiết |
 | `import` | `i` | danh sách |
-| `reload` | `r` | danh sách |
+| `reload` | `r` | danh sách, trình duyệt repo (quét lại) |
 | `yes` / `no` | `y` / `n` | màn hình xem trước, hộp xác nhận (cả câu hỏi «bỏ những gì đã nhập?») |
-| `fix` | `f` | kiểm tra |
+| `fix` | `f` | kiểm tra, trình duyệt repo |
 | `retry` | `r` | áp dụng, kiểm tra, chẩn đoán |
-| `copy` | `c` | kết quả SSH key |
+| `copy` | `c` | kết quả SSH key, trình duyệt repo (chép đường dẫn) |
 | `open` | `o` | kết quả SSH key |
 | `ssh_test` | `s` | chẩn đoán |
 | `terminal` | `t` | clone |
+| `problems` | `!` | trình duyệt repo (chỉ hiện repo có vấn đề) |
 
 Một phím là một ký tự ASCII in được (`v`, `V`, `/`, `5`), `ctrl+<chữ>`, `alt+<ký tự>` hoặc `f1` đến `f12`. Không hợp lệ: chữ có dấu (`â`, `đ`), từ (`ab`) và phím có tên như `enter`, `esc`, `tab`, mũi tên hay `space`. Đặt phím trong dấu nháy khi YAML sẽ hiểu khác đi: `"?"`, `"#"`, `"&"`, `"*"`, `"!"`, `"|"`, `">"`, `"%"`, `"@"`, `` "`" ``.
 
 Các phím sau không đổi được: `ctrl+c`, `esc` (luôn quay lại một bước), `enter`, `tab` và `shift+tab`, mũi tên, `pgup`/`pgdn`, `home`/`end`, `ctrl+p`/`ctrl+n`/`ctrl+b`/`ctrl+f`, `space`, `h` và `l` trong hộp hai nút, phím của ô chọn trong biểu mẫu (`y n h l j k`) và mọi chữ bạn gõ vào ô nhập. Trong các phím `ctrl+<chữ>`, `ctrl+h`, `ctrl+i` và `ctrl+m` (backspace, tab, enter ở nhiều terminal) cũng bị từ chối.
 
-Hai hành động cùng hoạt động trên một màn hình không được dùng chung phím (ví dụ `check` và `clone` ở danh sách), nhưng một phím có thể có nghĩa khác ở những màn hình không bao giờ hiện cùng lúc. Hoán đổi hai phím thì được: `clone: "k"` cùng `check: "c"`. Một vấn đề không bao giờ làm gitid dừng: hành động bị ảnh hưởng giữ phím mặc định và gitid báo cho bạn, trên thanh trạng thái khi mở TUI, ở cuối bảng `?`, trong `gitid keys` (thoát với mã 2) và trong `gitid doctor` (cảnh báo). Tệp không đọc được hoặc sai cú pháp thì mọi phím về mặc định. Tên hành động không có (ví dụ từ gitid bản mới hơn) được báo và bỏ qua.
+Hai hành động cùng hoạt động trên một màn hình không được dùng chung phím (ví dụ `check` và `clone` ở danh sách), nhưng một phím có thể có nghĩa khác ở những màn hình không bao giờ hiện cùng lúc. Hoán đổi hai phím thì được: `clone: "e"` cùng `edit: "c"`. Một vấn đề không bao giờ làm gitid dừng: hành động bị ảnh hưởng giữ phím mặc định và gitid báo cho bạn, trên thanh trạng thái khi mở TUI, ở cuối bảng `?`, trong `gitid keys` (thoát với mã 2) và trong `gitid doctor` (cảnh báo). Tệp không đọc được hoặc sai cú pháp thì mọi phím về mặc định. Tên hành động không có (ví dụ từ gitid bản mới hơn) được báo và bỏ qua.
 
 Bấm `r` ở danh sách để tải lại `config.yaml` và `keys.yaml` mà không thoát TUI. Phím tắt cần bàn phím gửi chữ thường thuần: khi bộ gõ tiếng Việt (Telex, VNI) đang bật, gitid không đọc được `a`, `k`… và báo trên thanh trạng thái; hãy chuyển sang EN (ABC) trước. Vì lý do đó `keys.yaml` cũng không nhận phím có ký tự ngoài ASCII.
 
@@ -385,9 +388,11 @@ Bên phải thanh trạng thái luôn cho biết còn việc gì: thay đổi ch
 
 `A` thêm công ty, `a` thêm tài khoản vào công ty đang chọn, `e` sửa, `d` xóa. Biểu mẫu kiểm tra dữ liệu ngay khi nhập, theo đúng các luật mà CLI dùng. Nếu chọn SSH, gitid đề nghị tạo key ngay sau khi lưu. Sau mỗi thay đổi bạn xem diff rồi xác nhận.
 
-### Clone
+### Clone và trình duyệt repo
 
-`c` hỏi URL, xếp hạng các tài khoản (tài khoản cùng host lên trước), xem trước URL đã viết lại và thư mục đích, rồi clone ở chế độ nền với thanh tiến trình. Xong, gitid kiểm tra email mà git sẽ dùng trong repo mới.
+`c` mở trình duyệt repo. Nó có ba tab, đổi bằng `tab` và `shift+tab`: **Trên máy**, **URL** và **Online**. Nó mở ở tab **URL**, nên dán URL rồi bấm `enter` vẫn hoạt động y như trước.
+
+**Tab URL.** gitid hỏi URL, xếp hạng các tài khoản (tài khoản cùng host lên trước), xem trước URL đã viết lại và thư mục đích, rồi clone ở chế độ nền với thanh tiến trình. Xong, gitid kiểm tra email mà git sẽ dùng trong repo mới. Không đổi tab được khi đang clone.
 
 ```text
 URL gốc:   https://github.com/org/repo.git
@@ -398,6 +403,38 @@ Thư mục:    ~/Code/acme/repo
 ```
 
 Nếu xác thực thất bại ở chế độ nền, gitid đề nghị chạy lại ngay trên terminal, nơi bạn nhập được mật khẩu hoặc passphrase.
+
+**Tab Trên máy.** Khi trình duyệt mở, gitid quét thư mục gốc của từng công ty ở chế độ nền và liệt kê các repo tìm được, theo công ty, kèm tài khoản mà remote khớp và điều gì đang sai. Nhãn tab hiện tổng số (`Trên máy 42`; `Trên máy …` khi đang quét).
+
+```text
+◂ Tất cả công ty ▸  7 repo · 5 vấn đề
+acme  ~/Code/acme/  5 repo · 3 vấn đề
+▌✓ api            acme/alice
+ ! org/x          acme/alice   sai username/alias
+ ! bb                          host lạ
+ ! dup            acme/alice   ×2
+globex  ~/Code/globex/  0 repo · 0 vấn đề
+  ! ~/Code/globex/ chưa tồn tại. Clone một repo để tạo thư mục này.
+```
+
+| Phím | Tác dụng |
+| ---- | -------- |
+| `k` hoặc `enter` | kiểm tra repo đang chọn (màn hình Kiểm tra bên dưới) |
+| `f` | kiểm tra rồi hỏi sửa remote ngay; chỉ hiện khi có gì để sửa |
+| `c` | chép đường dẫn tuyệt đối (nếu chép lỗi, đường dẫn hiện ở thanh trạng thái) |
+| `/` | lọc theo đường dẫn, tài khoản hoặc công ty |
+| `!` | chỉ hiện repo có vấn đề |
+| `←` `→` | chuyển giữa tất cả công ty và từng công ty |
+| `r` | quét lại |
+| `esc` | dừng lần quét đang chạy; `esc` lần hai rời màn hình |
+
+Mỗi dòng có một dấu (`✓` ổn, `!` cần chú ý, `✗` git không đọc được, `·` repo bare), đường dẫn bên dưới thư mục công ty, tài khoản và một ghi chú ngắn. Trạng thái có thể là: sai username/alias (tài khoản khớp nhưng remote không đúng dạng của nó), tài khoản lạ (host đã biết nhưng không có tài khoản nào có username đó), host lạ, không có remote, remote không đọc được, chưa rõ tài khoản, lỗi git và chủ sở hữu lạ (git từ chối thư mục vì `safe.directory`). Cờ: email đang dùng khác email của tài khoản, `user.email` được đặt trong `.git/config` của chính repo, repo nằm trong thư mục của công ty khác, cùng một remote được clone nhiều lần (`×2`; worktree không tính) và symlink trỏ tới repo. Worktree, submodule và repo bare được ghi rõ. Khối dưới danh sách cho biết chi tiết của repo đang chọn và, khi có thể sửa, remote sẽ được đặt thành gì.
+
+Cách quét: tìm sâu tối đa 4 thư mục bên dưới mỗi thư mục công ty, thăm tối đa 20 000 thư mục mỗi công ty (quá thì báo và hiện những gì đã tìm được), và bỏ qua `node_modules`, `vendor` cùng các thư mục ẩn. Nó không bao giờ đi vào trong một repo và không theo symlink (symlink trỏ thẳng tới một repo thì được liệt kê và ghi là symlink). Thư mục không đọc được sẽ được báo cùng ba đường dẫn đầu tiên. Mỗi repo một lệnh `git config`, chạy 8 repo cùng lúc, để đọc remote và email mà git sẽ dùng. Kết quả được giữ đến khi bạn thoát gitid: mở lại trình duyệt là thấy ngay, `r` quét lại, cấu hình đổi thì áp dụng lên cùng kết quả mà không quét lại, và một lần clone hoặc sửa xong chỉ cập nhật đúng repo đó. Rời màn hình sẽ dừng lần quét đang chạy.
+
+Công ty chưa có thư mục sẽ được báo («chưa tồn tại, clone một repo để tạo»); chưa có công ty nào thì tab nhắc bạn thêm công ty ở danh sách chính trước.
+
+**Tab Online.** Liệt kê repo của các tài khoản sẽ có trong bản sau; hiện giờ tab chỉ báo như vậy.
 
 ### Kiểm tra và sửa remote
 

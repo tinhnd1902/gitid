@@ -84,8 +84,8 @@ func TestKM1DefaultsInvariant(t *testing.T) {
 			}
 		}
 	}
-	// the plan's table has 23 actions
-	if n := len(keymap.Defs()); n != 23 {
+	// the plan's table has 24 actions (23, plus problems of the repo browser)
+	if n := len(keymap.Defs()); n != 24 {
 		t.Errorf("%d actions", n)
 	}
 }
@@ -213,9 +213,11 @@ func TestKM9Conflict(t *testing.T) {
 }
 
 func TestKM10Swap(t *testing.T) {
-	m, is := parse(t, "clone: k\ncheck: c\n")
-	if len(is) != 0 || keysOf(m, keymap.Clone) != "k" || keysOf(m, keymap.Check) != "c" {
-		t.Fatalf("%v %v %v", m.Keys(keymap.Clone), m.Keys(keymap.Check), is)
+	// clone and edit swap keys (check and copy share the repos scope since the
+	// repo browser, so a swap with check would conflict there)
+	m, is := parse(t, "clone: e\nedit: c\n")
+	if len(is) != 0 || keysOf(m, keymap.Clone) != "e" || keysOf(m, keymap.Edit) != "c" {
+		t.Fatalf("%v %v %v", m.Keys(keymap.Clone), m.Keys(keymap.Edit), is)
 	}
 }
 
@@ -342,9 +344,10 @@ func TestKM20ScalarTags(t *testing.T) {
 }
 
 func TestKM21Alias(t *testing.T) {
-	m, is := parse(t, "check: &k v\nfix: *k\n")
-	if len(is) != 0 || keysOf(m, keymap.Check) != "v" || keysOf(m, keymap.Fix) != "v" {
-		t.Fatalf("%v %v %v", m.Keys(keymap.Check), m.Keys(keymap.Fix), is)
+	// (check and fix share the repos scope, so the alias goes to retry)
+	m, is := parse(t, "check: &k v\nretry: *k\n")
+	if len(is) != 0 || keysOf(m, keymap.Check) != "v" || keysOf(m, keymap.Retry) != "v" {
+		t.Fatalf("%v %v %v", m.Keys(keymap.Check), m.Keys(keymap.Retry), is)
 	}
 	// an alias to a non-key is a normal bad value, not a crash
 	_, is = parse(t, "a: &x {b: c}\ncheck: *x\n")
@@ -489,7 +492,7 @@ func checkNoConflicts(t *testing.T, m keymap.Map) {
 }
 
 func TestResolvedMapsNeverConflict(t *testing.T) {
-	// every pair of single-key bindings of the 23 actions, resolved together
+	// every pair of single-key bindings of the 24 actions, resolved together
 	letters := []string{"a", "c", "k", "q", "r", "y", "n", "h", "j", "x", "?", "/"}
 	rng := rand.New(rand.NewSource(7))
 	defs := keymap.Defs()
@@ -839,6 +842,88 @@ func TestExampleFits80Columns(t *testing.T) {
 	for i, l := range strings.Split(keymap.Example("~/.config/gitid/keys.yaml"), "\n") {
 		if n := len([]rune(l)); n > 80 {
 			t.Errorf("line %d has %d columns: %q", i+1, n, l)
+		}
+	}
+}
+
+// ---- repo browser (K-1 .. K-6) ----
+
+// K-1: the repos scope holds the documented actions with unique defaults.
+func TestK1ReposScope(t *testing.T) {
+	var keysSeen []string
+	owner := map[string]keymap.Action{}
+	for _, d := range keymap.Defs() {
+		if !slices.Contains(d.Scopes, keymap.ScopeRepos) {
+			continue
+		}
+		for _, k := range d.Default {
+			if o, dup := owner[k]; dup {
+				t.Errorf("repos: %q is the default of %s and %s", k, o, d.Action)
+			}
+			owner[k] = d.Action
+			keysSeen = append(keysSeen, k)
+		}
+	}
+	slices.Sort(keysSeen)
+	want := []string{"!", "/", "?", "c", "f", "k", "q", "r"}
+	if !slices.Equal(keysSeen, want) {
+		t.Fatalf("repos defaults %v, want %v", keysSeen, want)
+	}
+	if !slices.Contains(keymap.Scopes(), keymap.ScopeRepos) {
+		t.Fatal("repos is not in Scopes()")
+	}
+	if keymap.DefaultKeys(keymap.Problems)[0] != "!" || !keymap.Known("problems") {
+		t.Fatal("problems action")
+	}
+}
+
+// K-2: problems can be rebound.
+func TestK2ProblemsRebound(t *testing.T) {
+	m, is := parse(t, "problems: x\n")
+	if len(is) != 0 || m.Label(keymap.Problems) != "x" || !m.Custom(keymap.Problems) {
+		t.Fatalf("%v %v", m.Keys(keymap.Problems), is)
+	}
+}
+
+// K-3: copy on k conflicts with check in the repos scope; both keep defaults.
+func TestK3CopyConflictsWithCheck(t *testing.T) {
+	m, is := parse(t, "copy: k\n")
+	if keysOf(m, keymap.Copy) != "c" || keysOf(m, keymap.Check) != "k" {
+		t.Fatal("conflict not reverted")
+	}
+	if len(is) != 1 || is[0].Code != keymap.ErrConflict || is[0].Scope != keymap.ScopeRepos || is[0].Other != "check" {
+		t.Fatalf("%+v", is)
+	}
+}
+
+// K-4: the example lists problems and parses back to the defaults.
+func TestK4ExampleHasProblems(t *testing.T) {
+	ex := keymap.Example("~/.config/gitid/keys.yaml")
+	if !strings.Contains(ex, `problems: "!"`) {
+		t.Fatalf("no problems line:\n%s", ex)
+	}
+	if !strings.Contains(ex, "repos") {
+		t.Fatal("no repos scope in the example")
+	}
+}
+
+// K-5: the sentinel space (alt+a..z, alt+A..Z) holds every action.
+func TestK5SentinelKeysFit(t *testing.T) {
+	if n := len(keymap.Defs()); n > 52 {
+		t.Fatalf("%d actions do not fit 52 sentinel keys", n)
+	}
+	for _, k := range []string{"alt+A", "alt+Z", "alt+a", "alt+z"} {
+		if got, ok := keymap.ValidKey(k); !ok || got != k {
+			t.Errorf("ValidKey(%q) = %q, %v", k, got, ok)
+		}
+	}
+}
+
+// K-6: the problems description exists in both languages.
+func TestK6ProblemsTranslated(t *testing.T) {
+	for _, lang := range []string{"vi", "en"} {
+		if v := i18n.Messages(lang)["tui.key.problems"]; v == "" {
+			t.Errorf("tui.key.problems missing in %s", lang)
 		}
 	}
 }

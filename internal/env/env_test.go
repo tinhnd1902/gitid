@@ -104,3 +104,15 @@ func TestKeyBindingsFilePath(t *testing.T) {
 		}
 	}
 }
+
+// ENV-1: New fills LookupEnv (the process environment by default).
+func TestNewHasLookupEnv(t *testing.T) {
+	e := New("/h", "")
+	if e.LookupEnv == nil {
+		t.Fatal("LookupEnv is nil")
+	}
+	t.Setenv("GITID_ENV_TEST_VAR", "x")
+	if v, ok := e.LookupEnv("GITID_ENV_TEST_VAR"); !ok || v != "x" {
+		t.Fatalf("LookupEnv = %q, %v", v, ok)
+	}
+}

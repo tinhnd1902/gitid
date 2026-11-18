@@ -22,6 +22,7 @@ import (
 // Errors.
 var (
 	ErrNotRepo      = errors.New("gitops: not a git repository")
+	ErrDubious      = errors.New("gitops: dubious ownership (safe.directory)")
 	ErrNotSet       = errors.New("gitops: config key is not set")
 	ErrAuth         = errors.New("gitops: authentication failed")
 	ErrNotFound     = errors.New("gitops: repository not found")
@@ -154,6 +155,65 @@ func Remotes(ctx context.Context, r execx.Runner, dir string) ([]Remote, error) 
 		}
 	}
 	return out, nil
+}
+
+// RepoConfig is what one `git config` call reads from a repository: its
+// remotes and the effective user.email.
+type RepoConfig struct {
+	Remotes  []Remote
+	Email    ConfigValue
+	HasEmail bool
+}
+
+// repoConfigRegexp selects the remote URLs and the email in one call.
+const repoConfigRegexp = `^(remote\..*\.url|user\.email)$`
+
+// ReadRepoConfig reads the remotes and the effective user.email of the
+// repository at dir with a single git process:
+//
+//	git -C dir config -z --show-origin --get-regexp ^(remote\..*\.url|user\.email)$
+//
+// Exit 1 (nothing set) gives an empty RepoConfig. A repository git refuses
+// because of its owner gives ErrDubious, any other git failure ErrNotRepo.
+// The effective email is the last user.email value (includes and includeIf
+// are applied by git, exactly as `git config --get` does).
+func ReadRepoConfig(ctx context.Context, r execx.Runner, dir string) (RepoConfig, error) {
+	res, err := git(ctx, r, dir, "config", "-z", "--show-origin", "--get-regexp", repoConfigRegexp)
+	if err != nil {
+		var ee *execx.ExitError
+		if errors.As(err, &ee) {
+			switch {
+			case ee.Code == 1:
+				return RepoConfig{}, nil
+			case strings.Contains(res.Stderr, "dubious ownership"):
+				return RepoConfig{}, ErrDubious
+			}
+			return RepoConfig{}, ErrNotRepo
+		}
+		return RepoConfig{}, err
+	}
+	return parseRepoConfig(res.Stdout), nil
+}
+
+// parseRepoConfig parses the -z --show-origin output: NUL-terminated
+// "origin", then NUL-terminated "key\nvalue", repeated.
+func parseRepoConfig(out string) RepoConfig {
+	var rc RepoConfig
+	toks := strings.Split(out, "\x00")
+	for i := 0; i+1 < len(toks); i += 2 {
+		origin, kv := toks[i], toks[i+1]
+		key, val, ok := strings.Cut(kv, "\n")
+		if !ok {
+			continue
+		}
+		switch {
+		case key == "user.email":
+			rc.Email, rc.HasEmail = ConfigValue{Value: strings.TrimSpace(val), Origin: origin}, true
+		case strings.HasPrefix(key, "remote.") && strings.HasSuffix(key, ".url") && len(key) > len("remote..url"):
+			rc.Remotes = append(rc.Remotes, Remote{Name: key[len("remote.") : len(key)-len(".url")], URL: val})
+		}
+	}
+	return rc
 }
 
 // SetURL runs `git remote set-url <name> <url>`.

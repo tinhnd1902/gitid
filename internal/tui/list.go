@@ -660,7 +660,7 @@ func (s *listScreen) action(msg tea.KeyMsg, km *KeyMap) (tea.Cmd, bool) {
 		}
 		return sh.pushNow(newDeleteScreen(sh, r.company, r.account)), true
 	case key.Matches(msg, km.Clone):
-		return sh.pushNow(newCloneScreen(sh, cloneHint(r, has))), true
+		return sh.pushNow(newReposScreen(sh, cloneHint(r, has))), true
 	case key.Matches(msg, km.Check):
 		return sh.pushNow(newCheckScreen(sh)), true
 	case key.Matches(msg, km.Doctor):
@@ -1269,7 +1269,7 @@ func (d *detailScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		case key.Matches(k, km.Check):
 			return d, d.sh.pushNow(newCheckScreen(d.sh))
 		case key.Matches(k, km.Clone):
-			return d, d.sh.pushNow(newCloneScreen(d.sh, cloneHint(r, true)))
+			return d, d.sh.pushNow(newReposScreen(d.sh, cloneHint(r, true)))
 		case key.Matches(k, km.Doctor):
 			return d, d.sh.pushNow(newDoctorScreen(d.sh))
 		case key.Matches(k, km.Delete):

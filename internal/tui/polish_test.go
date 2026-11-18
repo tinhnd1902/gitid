@@ -656,7 +656,7 @@ func TestC4DoneOpensClone(t *testing.T) {
 	h := newHarness(t, oneAccCfg())
 	h.applyToDone()
 	h.key("c")
-	if _, ok := h.top().(*cloneScreen); !ok {
+	if cloneOf(h) == nil {
 		t.Fatalf("top is %T", h.top())
 	}
 	if h.depth() != 2 {
@@ -864,7 +864,7 @@ func TestD9DetailScreenOpensClone(t *testing.T) {
 		t.Fatalf("top is %T", h.top())
 	}
 	h.key("c")
-	if _, ok := h.top().(*cloneScreen); !ok {
+	if cloneOf(h) == nil {
 		t.Fatalf("top is %T", h.top())
 	}
 	h.key("esc")
@@ -1142,7 +1142,7 @@ func TestG1CheckOnANonRepoExplainsItself(t *testing.T) {
 		t.Fatalf("help bar %q", hb)
 	}
 	h.key("c")
-	if _, ok := h.top().(*cloneScreen); !ok {
+	if cloneOf(h) == nil {
 		t.Fatalf("top is %T", h.top())
 	}
 	if h.depth() != 2 {

@@ -43,6 +43,7 @@ const (
 	Open       Action = "open"
 	SSHTest    Action = "ssh_test"
 	Terminal   Action = "terminal"
+	Problems   Action = "problems"
 )
 
 // Scope is a set of keys that are live at the same time on one screen. A
@@ -58,6 +59,7 @@ const (
 	ScopeCheck     Scope = "check"
 	ScopeDialog    Scope = "dialog"
 	ScopeClone     Scope = "clone"
+	ScopeRepos     Scope = "repos"
 	ScopeKeyResult Scope = "key_result"
 	ScopeDoctor    Scope = "doctor"
 	ScopeImport    Scope = "import"
@@ -78,7 +80,7 @@ const MaxFileSize = maxKeyFileBytes
 
 var scopeOrder = []Scope{
 	ScopeList, ScopeDetail, ScopeApply, ScopeApplyDone, ScopeCheck, ScopeDialog,
-	ScopeClone, ScopeKeyResult, ScopeDoctor, ScopeImport, ScopeForm,
+	ScopeClone, ScopeRepos, ScopeKeyResult, ScopeDoctor, ScopeImport, ScopeForm,
 }
 
 // reserved are the letters a scope uses itself (they are handled inside
@@ -98,7 +100,7 @@ type Def struct {
 
 func (d Def) in(s Scope) bool { return slices.Contains(d.Scopes, s) }
 
-var allScopesButForm = []Scope{ScopeDetail, ScopeApply, ScopeApplyDone, ScopeCheck, ScopeDialog, ScopeClone, ScopeKeyResult, ScopeDoctor, ScopeImport}
+var allScopesButForm = []Scope{ScopeDetail, ScopeApply, ScopeApplyDone, ScopeCheck, ScopeDialog, ScopeClone, ScopeRepos, ScopeKeyResult, ScopeDoctor, ScopeImport}
 
 func scopes(s ...Scope) []Scope { return s }
 
@@ -107,26 +109,27 @@ var defs = []Def{
 	{Quit, []string{"q"}, scopes(ScopeList), "tui.key.quit"},
 	{Help, []string{"?"}, append(scopes(ScopeList), allScopesButForm...), "tui.key.help"},
 	{Back, []string{"q"}, append(slices.Clone(allScopesButForm), ScopeForm), "tui.key.back"},
-	{Filter, []string{"/"}, scopes(ScopeList), "tui.key.filter"},
+	{Filter, []string{"/"}, scopes(ScopeList, ScopeRepos), "tui.key.filter"},
 	{AddAccount, []string{"a"}, scopes(ScopeList, ScopeDetail), "tui.key.add_account"},
 	{AddCompany, []string{"A"}, scopes(ScopeList), "tui.key.add_company"},
 	{Edit, []string{"e"}, scopes(ScopeList, ScopeDetail), "tui.key.edit"},
 	{Delete, []string{"d"}, scopes(ScopeList, ScopeDetail), "tui.key.delete"},
 	{Clone, []string{"c"}, scopes(ScopeList, ScopeDetail, ScopeApplyDone, ScopeCheck), "tui.key.clone"},
-	{Check, []string{"k"}, scopes(ScopeList, ScopeDetail, ScopeApplyDone), "tui.key.check"},
+	{Check, []string{"k"}, scopes(ScopeList, ScopeDetail, ScopeApplyDone, ScopeRepos), "tui.key.check"},
 	{Doctor, []string{"D"}, scopes(ScopeList, ScopeDetail), "tui.key.doctor"},
 	{Apply, []string{"p"}, scopes(ScopeList, ScopeDetail, ScopeKeyResult), "tui.key.apply"},
 	{SSHKey, []string{"g"}, scopes(ScopeList, ScopeDetail), "tui.key.genkey"},
 	{Import, []string{"i"}, scopes(ScopeList), "tui.key.import"},
-	{Reload, []string{"r"}, scopes(ScopeList), "tui.key.reload"},
+	{Reload, []string{"r"}, scopes(ScopeList, ScopeRepos), "tui.key.reload"},
 	{Yes, []string{"y"}, scopes(ScopeApply, ScopeDialog), "tui.key.yes"},
 	{No, []string{"n"}, scopes(ScopeApply, ScopeDialog), "tui.key.no"},
-	{Fix, []string{"f"}, scopes(ScopeCheck), "tui.key.fix"},
+	{Fix, []string{"f"}, scopes(ScopeCheck, ScopeRepos), "tui.key.fix"},
 	{Retry, []string{"r"}, scopes(ScopeApply, ScopeCheck, ScopeDoctor), "tui.key.retry"},
-	{Copy, []string{"c"}, scopes(ScopeKeyResult), "tui.key.copy"},
+	{Copy, []string{"c"}, scopes(ScopeKeyResult, ScopeRepos), "tui.key.copy"},
 	{Open, []string{"o"}, scopes(ScopeKeyResult), "tui.key.open"},
 	{SSHTest, []string{"s"}, scopes(ScopeDoctor), "tui.key.ssh_test"},
 	{Terminal, []string{"t"}, scopes(ScopeClone), "tui.key.terminal"},
+	{Problems, []string{"!"}, scopes(ScopeRepos), "tui.key.problems"},
 }
 
 var defIndex = func() map[Action]int {

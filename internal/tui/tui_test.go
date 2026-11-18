@@ -385,7 +385,7 @@ func TestT7CloneFlow(t *testing.T) {
 	h.mustContain(tr("tui.clone.paste"))
 	h.typeText("https://github.com/org/repo.git")
 	h.key("enter")
-	cs := h.top().(*cloneScreen)
+	cs := cloneOf(h)
 	if cs.phase != clPick || len(cs.cands) != 5 {
 		t.Fatalf("phase %v cands %d", cs.phase, len(cs.cands))
 	}
@@ -436,7 +436,7 @@ func TestCloneDoneVerifiesEmail(t *testing.T) {
 	h.typeText("https://github.com/org/repo.git")
 	h.key("enter")
 	h.key("enter")
-	cs := h.top().(*cloneScreen)
+	cs := cloneOf(h)
 	h.waitFor("done", func() bool { return cs.phase == clDone })
 	h.mustContain(tr("tui.clone.done"), tr("tui.clone.email_ok", "alice@acme.com"))
 	h.key("enter")
@@ -451,12 +451,12 @@ func TestCloneEscCancelsAndInputErrors(t *testing.T) {
 	h.fake.On("git clone", execx.Response{Block: release})
 	h.key("c")
 	h.key("enter") // empty URL: ignored
-	if h.top().(*cloneScreen).phase != clURL {
+	if cloneOf(h).phase != clURL {
 		t.Fatal("empty URL must be ignored")
 	}
 	h.typeText("-oProxyCommand=x")
 	h.key("enter")
-	cs := h.top().(*cloneScreen)
+	cs := cloneOf(h)
 	if cs.phase != clPick || cs.prevErr == nil {
 		t.Fatalf("a bad URL must show an error in the preview: %v %v", cs.phase, cs.prevErr)
 	}

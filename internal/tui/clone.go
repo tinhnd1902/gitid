@@ -59,6 +59,15 @@ type cloneScreen struct {
 	spin      spinner.Model
 	prefer    *config.AccountRef // account the pick step starts on, when it is a candidate
 	w, h      int
+
+	// embedded: the screen is the URL tab of the repo browser, which draws
+	// the tab bar (the title) and gives the screen one row less.
+	embedded bool
+	// backPops: esc in the pick step leaves the screen instead of going back
+	// to the URL step (the URL was given, there is no step to go back to).
+	backPops bool
+	// dir is the clone target folder; "" takes <base_dir>/<repo>.
+	dir string
 }
 
 // newCloneScreen starts the clone flow. prefer (optional) is the account the
@@ -71,6 +80,17 @@ func newCloneScreen(sh *shared, prefer *config.AccountRef) *cloneScreen {
 	in.CharLimit = 1024
 	p := progress.New(progress.WithGradient("#7C6BFF", "#2DD4BF"), progress.WithoutPercentage())
 	return &cloneScreen{sh: sh, id: sh.id(), input: in, prog: p, spin: sh.st.Spinner, prefer: prefer}
+}
+
+// newCloneScreenFor opens the clone flow on a URL that is already known: it
+// starts at the account pick, with prefer pre-selected, and clones into dir
+// ("" for <base_dir>/<repo>). esc in the pick step leaves the screen.
+func newCloneScreenFor(sh *shared, prefer *config.AccountRef, url, dir string) *cloneScreen {
+	c := newCloneScreen(sh, prefer)
+	c.input.SetValue(url)
+	c.dir, c.backPops = dir, true
+	c.submitURL()
+	return c
 }
 
 func (c *cloneScreen) Title() string { return tr("tui.clone.title") }
@@ -172,6 +192,9 @@ func (c *cloneScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		case clPick:
 			switch {
 			case msg.Type == tea.KeyEsc, key.Matches(msg, km.Back):
+				if c.backPops {
+					return c, c.sh.popNow()
+				}
 				c.phase = clURL
 				return c, c.input.Focus()
 			case key.Matches(msg, km.Up):
@@ -244,7 +267,7 @@ func (c *cloneScreen) move(d int) {
 // computes strings and checks that the target does not exist.
 func (c *cloneScreen) refreshPreview() {
 	ref := c.cands[c.cur]
-	c.preview, c.prevErr = c.sh.svc.PlanClone(c.sh.cfg, app.CloneRequest{URL: c.url, Account: ref.String(), Cwd: c.sh.cwd})
+	c.preview, c.prevErr = c.sh.svc.PlanClone(c.sh.cfg, app.CloneRequest{URL: c.url, Account: ref.String(), Cwd: c.sh.cwd, Dir: c.dir})
 }
 
 func (c *cloneScreen) start() tea.Cmd {
@@ -298,7 +321,12 @@ func (c *cloneScreen) finish(res app.CloneResult, err error) (Screen, tea.Cmd) {
 		return c, nil
 	}
 	c.phase, c.res = clDone, res
-	return c, say(levelOK, tr("tui.status.cloned", c.sh.svc.Env.Contract(res.Plan.Dir)))
+	// the repo browser reads the new repository
+	dir, company := res.Plan.Dir, res.Plan.Account.Company.Slug
+	return c, tea.Batch(
+		say(levelOK, tr("tui.status.cloned", c.sh.svc.Env.Contract(res.Plan.Dir))),
+		func() tea.Msg { return repoClonedMsg{dir: dir, company: company} },
+	)
 }
 
 // clonePhaseKeys maps the first word of git's progress phase ("Receiving
@@ -364,7 +392,11 @@ func (c *cloneScreen) View() string {
 			b.WriteString("\n" + st.ButtonOn.Render(c.sh.km.keys.Label(keymap.Terminal)+"  "+tr("tui.clone.terminal_mode")))
 		}
 	}
-	return c.sh.panel(tr("tui.clone.title"), b.String(), c.w, c.h, true)
+	title := tr("tui.clone.title")
+	if c.embedded {
+		title = "" // the tab bar above is the title
+	}
+	return c.sh.panel(title, b.String(), c.w, c.h, true)
 }
 
 func (c *cloneScreen) candidateList(w int) string {

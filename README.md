@@ -35,6 +35,7 @@ page never shows a broken image.
 - **Safe by default:** every change is shown as a diff first, files are backed up before they are written, managed blocks are idempotent, and `--dry-run` writes nothing at all.
 - **SSH without the pain:** one ed25519 key and one `Host` alias per account, the public key one keypress from your clipboard, and private keys are never read.
 - **Clone and repair:** clone with the right account and a live progress bar, check which identity a repository really uses, and rewrite a wrong remote.
+- **Repo browser:** one screen with a Local tab (every repository under your company folders, the account its remote maps to, and what is wrong), a URL tab (clone) and an Online tab (coming soon).
 - **Doctor and import:** diagnose the whole setup with per-check progress, and bootstrap from the `includeIf` entries you already have.
 - **Two languages:** Vietnamese (default) and English, switchable per run.
 
@@ -225,6 +226,7 @@ gitid edits files in your home directory, so it is strict about it:
 - **Private keys:** gitid never reads, prints, modifies or overwrites a private key. It only checks that the file exists and its permissions; it reads the `.pub` file. Removing an account keeps its keys unless you type the account id to confirm deleting them, and only keys under `~/.ssh/gitid/` can be deleted.
 - **Secrets in URLs:** a password or token pasted inside a URL is dropped and masked everywhere it would be shown.
 - **Injection-safe:** names, emails, hosts and usernames are validated and escaped before they reach git or ssh configuration; clone commands always use `git clone -- <url> <dir>`.
+- **Repo scan:** the Local tab of the repo browser only reads: it lists folders under your company base folders and runs one read-only `git config` in each repository it finds. It writes nothing; gitid itself opens no file inside a repository except the one-line `.git` file of a worktree or submodule (git reads the repository's configuration).
 - **Network:** none, except when you clone or press the opt-in `ssh -T` test. There is no telemetry.
 - **Uninstall:** delete all companies in the TUI and apply; your files return to their original bytes. Or restore by hand (below). To remove the gitid program itself, see [Uninstall the binary](#uninstall-the-binary).
 
@@ -332,31 +334,32 @@ clone: ["c", "n"]   # two keys for one action
 | `quit` | `q` | list |
 | `help` | `?` | every screen except forms |
 | `back` | `q` (`esc` always goes back too) | every screen except the list |
-| `filter` | `/` | list |
+| `filter` | `/` | list, repo browser |
 | `add_account` | `a` | list, detail |
 | `add_company` | `A` | list |
 | `edit` | `e` | list, detail |
 | `delete` | `d` | list, detail |
 | `clone` | `c` | list, detail, apply (done), check |
-| `check` | `k` | list, detail, apply (done) |
+| `check` | `k` | list, detail, apply (done), repo browser |
 | `doctor` | `D` | list, detail |
 | `apply` | `p` | list, detail, SSH key result |
 | `ssh_key` | `g` | list, detail |
 | `import` | `i` | list |
-| `reload` | `r` | list |
+| `reload` | `r` | list, repo browser (rescan) |
 | `yes` / `no` | `y` / `n` | apply review, confirmation dialogs (also the "discard what you typed?" question) |
-| `fix` | `f` | check |
+| `fix` | `f` | check, repo browser |
 | `retry` | `r` | apply, check, doctor |
-| `copy` | `c` | SSH key result |
+| `copy` | `c` | SSH key result, repo browser (copy the path) |
 | `open` | `o` | SSH key result |
 | `ssh_test` | `s` | doctor |
 | `terminal` | `t` | clone |
+| `problems` | `!` | repo browser (show only repos with a problem) |
 
 A key is one printable ASCII character (`v`, `V`, `/`, `5`), `ctrl+<letter>`, `alt+<character>` or `f1` to `f12`. These are not valid: letters with accents (`â`, `đ`), words (`ab`), and named keys such as `enter`, `esc`, `tab`, the arrows or `space`. Quote the key when YAML would read it differently: `"?"`, `"#"`, `"&"`, `"*"`, `"!"`, `"|"`, `">"`, `"%"`, `"@"`, `` "`" ``.
 
 These keys cannot be changed: `ctrl+c`, `esc` (always goes back one step), `enter`, `tab` and `shift+tab`, the arrows, `pgup`/`pgdn`, `home`/`end`, `ctrl+p`/`ctrl+n`/`ctrl+b`/`ctrl+f`, `space`, `h` and `l` in two-button dialogs, the keys of choice fields in forms (`y n h l j k`) and any text you type into a field. Among the `ctrl+<letter>` keys, `ctrl+h`, `ctrl+i` and `ctrl+m` (backspace, tab and enter on many terminals) are refused too.
 
-Two actions that are live on the same screen cannot share a key (the list for `check` and `clone`, for example), but a key may mean different things on screens that never show together. Swapping two keys is fine: `clone: "k"` with `check: "c"`. A problem never stops gitid: the affected action keeps its default key and gitid says so, in the status bar when the TUI starts, at the bottom of the `?` overlay, in `gitid keys` (which exits with 2) and in `gitid doctor` (a warning). A file that cannot be read or parsed leaves every default in place. An unknown action name (for example one from a newer gitid) is reported and ignored.
+Two actions that are live on the same screen cannot share a key (the list for `check` and `clone`, for example), but a key may mean different things on screens that never show together. Swapping two keys is fine: `clone: "e"` with `edit: "c"`. A problem never stops gitid: the affected action keeps its default key and gitid says so, in the status bar when the TUI starts, at the bottom of the `?` overlay, in `gitid keys` (which exits with 2) and in `gitid doctor` (a warning). A file that cannot be read or parsed leaves every default in place. An unknown action name (for example one from a newer gitid) is reported and ignored.
 
 Press `r` on the list to reload `config.yaml` and `keys.yaml` without leaving the TUI. Shortcuts need a keyboard layout that sends plain letters: with a Vietnamese input method switched on (Telex, VNI) gitid cannot read `a`, `k` and the others, and says so in the status bar; switch to EN (ABC) first. For the same reason keys with non-ASCII characters are not accepted in `keys.yaml`.
 
@@ -385,9 +388,11 @@ The right side of the status bar always says what is left to do: unapplied chang
 
 `A` adds a company, `a` adds an account to the selected company, `e` edits, `d` deletes. Forms validate as you go with the same rules the CLI uses. Choosing SSH offers to create the key right after saving. After every change you see the diff and confirm it.
 
-### Clone
+### Clone and the repo browser
 
-`c` asks for a URL, ranks your accounts (the ones on the same host first), previews the rewritten URL and the target folder, then clones in the background with a progress bar. Afterwards it checks which email git will use in the new repository.
+`c` opens the repo browser. It has three tabs, switched with `tab` and `shift+tab`: **Local**, **URL** and **Online**. It opens on **URL**, so pasting a URL and pressing `enter` works exactly as before.
+
+**URL tab.** gitid asks for a URL, ranks your accounts (the ones on the same host first), previews the rewritten URL and the target folder, then clones in the background with a progress bar. Afterwards it checks which email git will use in the new repository. The tabs cannot be switched while a clone runs.
 
 ```text
 Original URL: https://github.com/org/repo.git
@@ -398,6 +403,38 @@ Directory:    ~/Code/acme/repo
 ```
 
 If authentication fails in the background, gitid offers to retry on the terminal, where a password or passphrase prompt works.
+
+**Local tab.** When the browser opens, gitid scans the base folder of every company in the background and lists the repositories it finds, grouped by company, with the account the remote maps to and what is wrong. The tab label shows the total (`Local 42`; `Local …` while it is scanning).
+
+```text
+◂ All companies ▸  7 repos · 5 problems
+acme  ~/Code/acme/  5 repos · 3 problems
+▌✓ api            acme/alice
+ ! org/x          acme/alice   wrong username/alias
+ ! bb                          foreign host
+ ! dup            acme/alice   ×2
+globex  ~/Code/globex/  0 repos · 0 problems
+  ! ~/Code/globex/ does not exist yet — clone a repo to create it
+```
+
+| Key | Action |
+| --- | ------ |
+| `k` or `enter` | check the selected repository (the Check screen below) |
+| `f` | check it and go straight to the fix-remote question; only offered when there is a fix |
+| `c` | copy the absolute path (if the copy fails, the path is shown in the status bar) |
+| `/` | filter by path, account or company |
+| `!` | show only the repositories with a problem |
+| `←` `→` | switch between all companies and one company |
+| `r` | scan again |
+| `esc` | stop a running scan; a second `esc` leaves the screen |
+
+Each row shows a mark (`✓` fine, `!` needs attention, `✗` git cannot read it, `·` a bare repository), the path below the company folder, the account and a short note. The status can be: wrong username/alias (the account matches but the remote is not in its form), unknown account (a known host, but no account with that username), foreign host, no remote, unreadable remote, ambiguous, git error, and unsafe owner (git refuses the folder because of `safe.directory`). Flags: the email in use differs from the account's, `user.email` is set in the repository's own `.git/config`, the repository is in another company's folder, the same remote is cloned more than once (`×2`; a worktree does not count), and a symlink to a repository. A worktree, a submodule and a bare repository are marked as such. The block under the list shows the details of the selected repository and, when there is a fix, the remote it would set.
+
+How the scan works: it looks up to 4 folders deep below each company folder, visits at most 20 000 folders per company (then it says so and shows what it found), and skips `node_modules`, `vendor` and hidden folders. It never goes into a repository and never follows a symlink (a symlink that points straight at a repository is listed, marked as a symlink). A folder it cannot read is reported, with the first three paths. One `git config` call per repository, 8 at a time, reads the remote and the email git would use. The result is kept until you quit gitid: opening the browser again shows it at once, `r` scans again, a changed configuration is applied to the same result without scanning, and a finished clone or fix updates just that repository. Leaving the screen stops a running scan.
+
+A company that has no folder yet says so ("does not exist yet — clone a repo to create it"); with no company the tab asks you to add one on the main list first.
+
+**Online tab.** Listing the repositories of your accounts is coming soon; the tab only says so for now.
 
 ### Check and fix remote
 

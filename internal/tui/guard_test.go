@@ -26,7 +26,8 @@ import (
 // fresh copy of the state and fails when nothing happens.
 //
 // It runs twice: with the default keys (GRD-1) and with a sentinel keymap
-// (GRD-2) in which every rebindable action sits on its own alt+<letter>. In
+// (GRD-2) in which every rebindable action sits on its own alt+<letter>
+// (lower-case first, then upper-case). In
 // the second run a hint that still names a hard-coded letter, or a key shown
 // that the screen does not handle, shows up at once, because the label of
 // every key is then a unique, recognisable token.
@@ -37,14 +38,19 @@ func sentinelKeys() (yaml string, label map[keymap.Action]string) {
 	label = map[keymap.Action]string{}
 	var b strings.Builder
 	for i, d := range keymap.Defs() {
+		// 52 labels: alt+a..z, then alt+A..Z (the registry outgrew 26 actions
+		// before; it holds 24 today)
 		l := "alt+" + string(rune('a'+i))
+		if i >= 26 {
+			l = "alt+" + string(rune('A'+i-26))
+		}
 		label[d.Action] = l
 		fmt.Fprintf(&b, "%s: %q\n", d.Action, l)
 	}
 	return b.String(), label
 }
 
-var sentinelLabelRe = regexp.MustCompile(`alt\+[a-z]`)
+var sentinelLabelRe = regexp.MustCompile(`alt\+[a-zA-Z]`)
 
 // grdState is one screen state of the guard. keysYAML is the keys.yaml of the
 // run (empty: the default keys); setup builds a fresh harness in the state.
@@ -77,6 +83,7 @@ var grdOverlay = map[string]bool{
 	"list welcome": true, "list account applied": true, "list pending": true, "detail ssh account": true,
 	"confirm ready": true, "confirm done": true, "check result": true, "clone pick": true,
 	"key result": true, "doctor": true, "import proposals": true, "delete step 0": true, "keygen mode": true,
+	"repos local list": true,
 }
 
 func grdStates() []grdState {
@@ -189,7 +196,7 @@ func grdStates() []grdState {
 			h.act(keymap.Clone)
 			h.typeText("https://github.com/org/repo.git")
 			h.key("enter")
-			cs := h.top().(*cloneScreen)
+			cs := cloneOf(h)
 			cs.phase, cs.err = clFailed, app.ErrAuth
 			return h
 		}},
@@ -198,11 +205,54 @@ func grdStates() []grdState {
 			h.act(keymap.Clone)
 			h.typeText("https://github.com/org/repo.git")
 			h.key("enter")
-			cs := h.top().(*cloneScreen)
+			cs := cloneOf(h)
 			cs.phase = clDone
 			cs.res = app.CloneResult{Plan: cs.preview, EmailOK: true}
 			return h
 		}},
+		{"repos local list", func(t *testing.T, y string) *harness {
+			h, p := localHarness(t, y)
+			h.resize(100, 30)
+			r := openLocal(h)
+			h.walkTo(r, p["acme/org/x"]) // a repository with a fix, so every key is offered
+			return h
+		}},
+		{"repos local problems", func(t *testing.T, y string) *harness {
+			h, _ := localHarness(t, y)
+			openLocal(h)
+			h.act(keymap.Problems)
+			return h
+		}},
+		{"repos local filter typing", func(t *testing.T, y string) *harness {
+			h, _ := localHarness(t, y)
+			openLocal(h)
+			h.act(keymap.Filter)
+			return h
+		}},
+		{"repos local filter applied", func(t *testing.T, y string) *harness {
+			h, _ := localHarness(t, y)
+			openLocal(h)
+			h.act(keymap.Filter)
+			h.typeText("a")
+			h.key("enter")
+			return h
+		}},
+		{"repos local empty", func(t *testing.T, y string) *harness {
+			h := harnessFor(t, basicCfg(), []string{y})
+			t.Cleanup(h.m.shutdown)
+			for _, d := range []string{"acme", "globex", "beta"} {
+				mustMkdir(t, filepath.Join(h.e.Home, "Code", d))
+			}
+			openLocal(h)
+			return h
+		}},
+		{"repos local no companies", func(t *testing.T, y string) *harness {
+			h := harnessFor(t, nil, []string{y})
+			t.Cleanup(h.m.shutdown)
+			openLocal(h)
+			return h
+		}},
+		{"repos local scanning", func(t *testing.T, y string) *harness { return scanningHarness(t, y) }},
 		{"delete step 0", func(t *testing.T, y string) *harness {
 			h := hk(t, basicCfg(), []string{y})
 			h.selectKey("acme/bob")
@@ -347,6 +397,9 @@ func guardState(t *testing.T, st grdState, keysYAML string) []string {
 		// the filter key is the mark in front of the text being typed; it is
 		// not an instruction, so it is not scanned as a hint
 		frame = strings.Replace(frame, probe.m.sh.km.keys.Label(keymap.Filter), "", 1)
+	}
+	if rs, ok := top.(*reposScreen); ok && rs.tab == tabLocal && rs.fmode == filterTyping {
+		frame = strings.Replace(frame, probe.m.sh.km.keys.Label(keymap.Filter), "", 1) // the same for the repo browser
 	}
 	if strings.Contains(frame, "%!") {
 		failf("%s: the frame shows a format error:\n%s", st.name, probe.view())

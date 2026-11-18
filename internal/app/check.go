@@ -53,15 +53,35 @@ func pickRemote(rs []gitops.Remote, name string) (gitops.Remote, bool) {
 	return gitops.Remote{}, false
 }
 
-// Check inspects the repository containing dir: which account its remote
-// maps to, which email git actually uses and why.
-func (s *Service) Check(ctx context.Context, cfg config.Config, dir string) (CheckResult, error) {
-	cfg = config.Normalize(cfg, s.Env)
-	top, err := gitops.Toplevel(ctx, s.Run, dir)
-	if err != nil {
-		return CheckResult{}, err
-	}
-	res := CheckResult{Repo: top, Warnings: []string{}}
+// evalInput is what is known about a repository before it is classified:
+// the data a git call (or a scan) collected, nothing else.
+type evalInput struct {
+	Top      string // repository root (used for the base dir rules)
+	Remotes  []gitops.Remote
+	Email    gitops.ConfigValue
+	HasEmail bool
+}
+
+// evalOutput is the classification of one repository. Check and the local
+// scan share it, so both always agree on what is wrong.
+type evalOutput struct {
+	Result     CheckResult // Warnings do not include WarnPendingApply
+	Remote     remote.Remote
+	HaveRemote bool
+	RawURL     string // the URL of the remote that was picked (origin, else the first)
+	NoRemote   bool
+	Unparsed   bool
+	Match      remote.MatchResult
+	Expected   *config.AccountRef
+	Ambiguous  bool
+}
+
+// evaluate classifies a repository: which account its remote maps to, what
+// the effective email says about it, and the warnings that follow. It is pure
+// (no I/O except the symlink resolution of the base dir rules).
+func evaluate(e env.Env, cfg config.Config, in evalInput) evalOutput {
+	out := evalOutput{Result: CheckResult{Repo: in.Top, Warnings: []string{}}}
+	res := &out.Result
 	add := func(w string) {
 		for _, x := range res.Warnings {
 			if x == w {
@@ -70,77 +90,105 @@ func (s *Service) Check(ctx context.Context, cfg config.Config, dir string) (Che
 		}
 		res.Warnings = append(res.Warnings, w)
 	}
-	remotes, err := gitops.Remotes(ctx, s.Run, top)
-	if err != nil {
-		return res, err
-	}
-	var rem remote.Remote
-	haveRemote := false
+	remotes := in.Remotes
 	if r, ok := pickRemote(remotes, "origin"); ok {
 		remotes = []gitops.Remote{r}
 	}
 	if len(remotes) > 0 {
+		out.RawURL = remotes[0].URL
 		res.Remote = remote.Redact(remotes[0].URL)
 		if parsed, perr := remote.Parse(remotes[0].URL); perr == nil {
-			rem, haveRemote = parsed, true
+			out.Remote, out.HaveRemote = parsed, true
 			res.Remote = parsed.String()
 		} else {
+			out.Unparsed = true
 			add(WarnRemoteUnparsed)
 		}
 	} else {
+		out.NoRemote = true
 		add(WarnNoRemote)
 	}
 
-	var expected *config.AccountRef
-	ambiguous := false
-	if haveRemote {
-		m := remote.Match(cfg, s.Env, rem, top)
+	if out.HaveRemote {
+		m := remote.Match(cfg, e, out.Remote, in.Top)
+		out.Match = m
 		for _, w := range m.Warnings {
 			add(w)
 		}
-		ambiguous = len(m.Ambiguous) > 0
+		out.Ambiguous = len(m.Ambiguous) > 0
 		if m.Account != nil {
-			expected = m.Account
+			out.Expected = m.Account
 			res.Account, res.Reason = m.Account.String(), m.Reason
 		}
 	} else {
 		// no usable remote: fall back to the company whose base dir holds the repo
 		for _, c := range cfg.Companies {
-			if def, ok := c.Default(); ok && baseDirContains(s.Env, c, top) {
+			if def, ok := c.Default(); ok && baseDirContains(e, c, in.Top) {
 				ref := config.AccountRef{Company: c, Account: def}
-				expected = &ref
+				out.Expected = &ref
 				res.Account, res.Reason = ref.String(), "default"
 				break
 			}
 		}
 	}
-	if expected == nil && haveRemote && !ambiguous {
+	if out.Expected == nil && out.HaveRemote && !out.Ambiguous {
 		add(WarnNoAccount)
-		if (rem.Kind == remote.KindHTTPS || rem.Kind == remote.KindHTTP) && rem.User == "" && !anyBaseDir(s.Env, cfg, top) {
+		if (out.Remote.Kind == remote.KindHTTPS || out.Remote.Kind == remote.KindHTTP) && out.Remote.User == "" && !anyBaseDir(e, cfg, in.Top) {
 			add(WarnNoUserOutside)
 		}
 	}
 
-	ev, err := gitops.ConfigGet(ctx, s.Run, top, "user.email")
-	switch {
-	case err == nil:
-		res.EffectiveEmail, res.EmailOrigin = ev.Value, ev.Origin
-		if ev.IsRepoLocal() {
+	if in.HasEmail {
+		res.EffectiveEmail, res.EmailOrigin = in.Email.Value, in.Email.Origin
+		if in.Email.IsRepoLocal() {
 			add(WarnLocalOverride)
 		}
-	case errors.Is(err, gitops.ErrNotSet):
+	} else {
 		add(WarnNoEmail)
-	default:
-		return res, err
 	}
-	if expected != nil {
-		res.ExpectedEmail = expected.Account.Email
-		if res.EffectiveEmail != "" && res.EffectiveEmail != expected.Account.Email {
+	if out.Expected != nil {
+		res.ExpectedEmail = out.Expected.Account.Email
+		if res.EffectiveEmail != "" && res.EffectiveEmail != out.Expected.Account.Email {
 			add(WarnEmailMismatch)
 		}
 	}
+	return out
+}
+
+// Check inspects the repository containing dir: which account its remote
+// maps to, which email git actually uses and why.
+func (s *Service) Check(ctx context.Context, cfg config.Config, dir string) (CheckResult, error) {
+	cfg = config.Normalize(cfg, s.Env)
+	top, err := gitops.Toplevel(ctx, s.Run, dir)
+	if err != nil {
+		return CheckResult{}, err
+	}
+	remotes, err := gitops.Remotes(ctx, s.Run, top)
+	if err != nil {
+		return CheckResult{Repo: top, Warnings: []string{}}, err
+	}
+	in := evalInput{Top: top, Remotes: remotes}
+	ev, err := gitops.ConfigGet(ctx, s.Run, top, "user.email")
+	switch {
+	case err == nil:
+		in.Email, in.HasEmail = ev, true
+	case errors.Is(err, gitops.ErrNotSet):
+	default:
+		// the warnings gathered so far are still reported with the error
+		partial := evaluate(s.Env, cfg, in).Result
+		partial.ExpectedEmail = ""
+		kept := []string{}
+		for _, w := range partial.Warnings {
+			if w != WarnNoEmail && w != WarnEmailMismatch {
+				kept = append(kept, w)
+			}
+		}
+		partial.Warnings = kept
+		return partial, err
+	}
+	res := evaluate(s.Env, cfg, in).Result
 	if p, perr := s.BuildPlan(cfg); perr == nil && !p.Empty() {
-		add(WarnPendingApply)
+		res.Warnings = append(res.Warnings, WarnPendingApply)
 	}
 	return res, nil
 }

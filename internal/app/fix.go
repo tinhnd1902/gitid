@@ -70,14 +70,25 @@ func (s *Service) PlanFix(ctx context.Context, cfg config.Config, req FixRequest
 			return FixResult{}, "", "", ErrNoAccount
 		}
 	}
-	newURL, _, err := remote.Rewrite(cfg, ref, cur.URL, remote.Options{Force: req.Force})
+	newURL, changed, err := rewriteFor(cfg, ref, cur.URL, remote.Options{Force: req.Force})
 	if err != nil {
 		return FixResult{}, "", "", err
 	}
-	res := FixResult{Remote: name, Old: parsed.String(), New: newURL, Account: ref.String(), DryRun: req.DryRun}
-	// compare against the original text without credentials
-	res.Changed = newURL != strings.TrimSpace(cur.URL)
+	res := FixResult{Remote: name, Old: parsed.String(), New: newURL, Account: ref.String(), DryRun: req.DryRun, Changed: changed}
 	return res, top, cur.URL, nil
+}
+
+// rewriteFor renders rawURL for the account (see remote.Rewrite) and says
+// whether that differs from the URL as it is stored. The comparison is on the
+// stored text, so a URL that only differs by its credentials counts as
+// changed. Shared by PlanFix and the local scan, so both agree on what "the
+// remote does not fit the account" means.
+func rewriteFor(cfg config.Config, ref config.AccountRef, rawURL string, opts remote.Options) (newURL string, changed bool, err error) {
+	newURL, _, err = remote.Rewrite(cfg, ref, rawURL, opts)
+	if err != nil {
+		return "", false, err
+	}
+	return newURL, newURL != strings.TrimSpace(rawURL), nil
 }
 
 func joinRefs(rs []config.AccountRef) string {

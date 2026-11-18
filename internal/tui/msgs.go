@@ -157,3 +157,15 @@ type (
 		err error
 	}
 )
+
+// Messages of the repo browser. All are broadcast to every screen of the
+// stack (see bgMsg).
+type (
+	// repoClonedMsg: a clone finished at dir for the company with this slug.
+	repoClonedMsg struct{ dir, company string }
+	// repoTouchedMsg: a fix changed the repository at dir.
+	repoTouchedMsg struct{ dir string }
+)
+
+func (repoClonedMsg) bgMsg()  {}
+func (repoTouchedMsg) bgMsg() {}
