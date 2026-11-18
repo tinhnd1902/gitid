@@ -784,9 +784,9 @@ func TestH4H6CompanyFormHints(t *testing.T) {
 	h.mustContain(tr("tui.form.eg", "ACME Corp"))
 }
 
-// H5/H10: the base directory hint follows the slug while it is typed. The
-// description function runs in another goroutine, so this test is also the
-// race check for the atomic snapshot (run with -race).
+// H5/H10: the base directory hint follows the slug while it is typed. The hint
+// is computed when the form is drawn, on the Update goroutine (no goroutine
+// and no atomic snapshot any more); the test still runs under -race.
 func TestH5BaseDirHintFollowsTheSlug(t *testing.T) {
 	h := newHarness(t, basicCfg())
 	h.key("A")

@@ -116,10 +116,3 @@ func breakLong(word string, w int) []string {
 	}
 	return out
 }
-
-// hintText prepares a form hint for huh, which wraps descriptions after "."
-// and "-" as well as spaces and would split a URL: the text is wrapped here,
-// word-aware, so every line already fits when huh sees it.
-func hintText(s string, w int) string {
-	return joinLines(wrapUnits(s, w))
-}

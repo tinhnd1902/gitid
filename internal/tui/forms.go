@@ -2,21 +2,20 @@ package tui
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
-	"sync/atomic"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh"
 
 	"github.com/tinhnd1902/gitid/internal/app"
 	"github.com/tinhnd1902/gitid/internal/config"
 	"github.com/tinhnd1902/gitid/internal/platform"
 )
 
-// fieldValidator adapts config.ValidateField to a huh validator, so the form
+// fieldValidator adapts config.ValidateField to a form validator, so the form
 // and the CLI share the same rules. An empty required field says what to do
 // ("Please enter <label>") instead of quoting the format rule.
 func (sh *shared) fieldValidator(field, label string, required bool) func(string) error {
@@ -35,15 +34,16 @@ func (sh *shared) fieldValidator(field, label string, required bool) func(string
 	}
 }
 
-// errorRows is the height reserved under the title for validation errors, so
-// the layout does not jump when one appears.
-const errorRows = 2
+// formErrMaxRows is the most rows the form-level error (a failed save, a
+// stale configuration) takes under the title; the area has no row at all
+// while there is no such error.
+const formErrMaxRows = 3
 
-// formHost wraps a huh form inside a panel with a title, an error area and
-// a saving spinner. companyForm and accountForm embed it.
+// formHost wraps a form inside a panel with a title, an error area and a
+// saving spinner. companyForm and accountForm embed it.
 type formHost struct {
 	sh     *shared
-	form   *huh.Form
+	form   *form
 	title  string
 	w, h   int
 	errMsg string
@@ -54,46 +54,12 @@ type formHost struct {
 	// preview, when set, draws a live block between the error area and the
 	// form. It is called from View, on the Update goroutine, with the usable
 	// width and the number of rows it may fill. It must read the form state
-	// only; huh's DescriptionFunc runs in another goroutine and is not used
-	// for this.
+	// only.
 	preview func(w, rows int) []string
 	// previewHead, when set, is the height the first part of the preview
 	// needs at width w (a remote that wraps); 1 when unset or when the body
 	// is too short to spend more.
 	previewHead func(w int) int
-	// hints are the descriptions that must be wrapped here (see hintText);
-	// they are set again whenever the width changes.
-	hints []hintSlot
-	// sizedRows is the preview height the form height was computed with.
-	sizedRows int
-}
-
-// hintSlot is a form description kept word-wrapped for the current width.
-type hintSlot struct {
-	text string
-	set  func(string)
-}
-
-// addHint registers a description: set receives the text wrapped for the
-// width of the form (the text itself while the width is unknown).
-func (f *formHost) addHint(text string, set func(string)) string {
-	f.hints = append(f.hints, hintSlot{text: text, set: set})
-	return text
-}
-
-// hintWidth is the width huh gives a description: the form width less the
-// frame (border and padding) of a field.
-func (f *formHost) hintWidth() int {
-	return maxInt(f.w-4, 20) - 2
-}
-
-func (f *formHost) applyHints() {
-	if f.w <= 0 {
-		return
-	}
-	for _, h := range f.hints {
-		h.set(hintText(h.text, f.hintWidth()))
-	}
 }
 
 // Preview block height: the remote line, plus up to two lines of notes when
@@ -111,27 +77,23 @@ func (f *formHost) initHost(sh *shared, title string) {
 	f.id = sh.id()
 }
 
-func (f *formHost) newForm(groups ...*huh.Group) *huh.Form {
-	form := huh.NewForm(groups...).
-		WithTheme(f.sh.st.huhTheme()).
-		WithShowHelp(false).
-		WithShowErrors(false) // errors are drawn by formHost.view, right under the title
-	f.applySize(form)
-	return form
-}
+// compact is true on a short terminal: no blank rows between the parts.
+func (f *formHost) compact() bool { return f.h < previewMinBody }
 
 // fixedLines is the height of the read-only header.
 func (f *formHost) fixedLines() int {
 	if len(f.fixed) == 0 {
 		return 0
 	}
+	if f.compact() {
+		return len(f.fixed)
+	}
 	return len(f.fixed) + 2 // values, the hint line and a blank line
 }
 
 // previewRows is the height reserved for the preview block (0 without one).
 func (f *formHost) previewRows() int {
-	switch {
-	case f.preview == nil:
+	if f.preview == nil {
 		return 0
 	}
 	head := 1
@@ -144,49 +106,72 @@ func (f *formHost) previewRows() int {
 	return head + previewNoteRows
 }
 
+// previewGap is the blank row between the preview and what follows it.
+func (f *formHost) previewGap() int {
+	if f.previewRows() == 0 || f.compact() {
+		return 0
+	}
+	return 1
+}
+
 func (f *formHost) previewWidth() int { return maxInt(f.w-6, 10) }
 
-func (f *formHost) applySize(form *huh.Form) {
-	if f.w > 0 {
-		f.applyHints()
-		f.sizedRows = f.previewRows()
-		form.WithWidth(maxInt(f.w-4, 20)).WithHeight(maxInt(f.h-3-errorRows-f.fixedLines()-f.previewRows(), 4))
+// errLines is the form-level error, wrapped: at most formErrMaxRows rows, the
+// last one cut at a word when the message is longer.
+func (f *formHost) errLines() []string {
+	if f.errMsg == "" {
+		return nil
 	}
+	w := maxInt(f.w-6, 10)
+	lines := wrapUnits(f.errMsg, w-2)
+	for i := range lines {
+		if i == 0 {
+			lines[i] = "✗ " + lines[i]
+		} else {
+			lines[i] = "  " + lines[i]
+		}
+	}
+	if len(lines) > formErrMaxRows {
+		lines = lines[:formErrMaxRows]
+		lines[formErrMaxRows-1] = ellipsize(lines[formErrMaxRows-1], w)
+	}
+	return lines
+}
+
+// formRows is the height left for the form fields inside the panel.
+func (f *formHost) formRows() int {
+	return maxInt(1, f.h-3-len(f.errLines())-f.previewRows()-f.previewGap()-f.fixedLines())
 }
 
 // previewView renders the preview block, always previewRows lines high.
-func (f *formHost) previewView() string {
+func (f *formHost) previewView() []string {
 	n := f.previewRows()
 	if n == 0 {
-		return ""
+		return nil
 	}
-	return fitHeight(joinLines(f.preview(f.previewWidth(), n)), n) + "\n"
+	return splitLines(fitHeight(joinLines(f.preview(f.previewWidth(), n)), n))
 }
 
-func (f *formHost) fixedView() string {
+func (f *formHost) fixedView() []string {
 	if len(f.fixed) == 0 {
-		return ""
+		return nil
 	}
 	st := f.sh.st
-	var b strings.Builder
+	var out []string
 	for _, kv := range f.fixed {
-		b.WriteString(st.Label.Render(pad(kv[0], 14)) + st.Text.Render(kv[1]) + "\n")
+		out = append(out, st.Label.Render(pad(kv[0], 14))+st.Text.Render(kv[1]))
 	}
-	b.WriteString(st.Faint.Render(trunc(tr("tui.form.immutable"), maxInt(f.w-6, 10))) + "\n\n")
-	return b.String()
+	if !f.compact() {
+		out = append(out, st.Faint.Render(trunc(tr("tui.form.immutable"), maxInt(f.w-6, 10))), "")
+	}
+	return out
 }
 
 func (f *formHost) Resize(w, h int) {
-	changed := f.w != w || f.h != h
-	had := f.w > 0
 	f.w, f.h = w, h
 	if f.form != nil {
-		f.applySize(f.form)
-		if changed && had {
-			// huh wraps the hints when it handles a message, not when the
-			// size changes: push one through so nothing stays cut.
-			f.form.Update(tea.WindowSizeMsg{Width: w, Height: h})
-		}
+		f.form.SetSize(maxInt(w-4, 1), f.formRows())
+		f.form.compact = f.compact()
 	}
 }
 
@@ -209,34 +194,44 @@ func (f *formHost) ContextHelp() []helpItem {
 	return out
 }
 
-// shownError is the message drawn in the error area: the first validation
-// error of the form, or the error of the last save.
+// shownError is the message of the focused field, or the error of the last
+// save.
 func (f *formHost) shownError() string {
-	if errs := f.form.Errors(); len(errs) > 0 {
-		return errs[0].Error()
+	if e := f.form.Err(); e != "" {
+		return e
 	}
 	return f.errMsg
 }
 
 func (f *formHost) view() string {
 	st := f.sh.st
+	title := f.title
 	var body string
 	switch {
 	case f.saving:
 		body = "\n  " + f.spin.View() + " " + st.Muted.Render(tr("tui.form.saving"))
 	default:
-		msg := f.shownError()
-		errBlock := ""
-		if msg != "" {
-			errBlock = st.Err.Render(wrap("✗ "+msg, maxInt(f.w-6, 10)))
+		var lines []string
+		for _, l := range f.errLines() {
+			lines = append(lines, st.Err.Render(l))
 		}
-		if f.previewRows() != f.sizedRows {
-			// the remote wrapped (or stopped wrapping) while typing
-			f.applySize(f.form)
+		if pv := f.previewView(); len(pv) > 0 {
+			lines = append(lines, pv...)
+			if f.previewGap() > 0 {
+				lines = append(lines, "")
+			}
 		}
-		body = fitHeight(errBlock, errorRows) + "\n" + f.previewView() + f.fixedView() + f.form.View()
+		lines = append(lines, f.fixedView()...)
+		f.form.SetSize(maxInt(f.w-4, 1), f.formRows())
+		f.form.compact = f.compact()
+		if f.form.Overflows() {
+			n, m := f.form.Position()
+			title += st.Faint.Render(fmt.Sprintf("  %d/%d", n, m))
+		}
+		lines = append(lines, f.form.View())
+		body = joinLines(lines)
 	}
-	return f.sh.panel(f.title, body, f.w, f.h, true)
+	return f.sh.panel(title, body, f.w, f.h, true)
 }
 
 // commit saves cfg in the background; the result is a savedMsg.
@@ -300,10 +295,6 @@ type companyForm struct {
 	slug    string
 	name    string
 	baseDir string
-	// slugSnap is the trimmed slug as of the last Update. huh evaluates a
-	// DescriptionFunc in another goroutine, which must not read f.slug (the
-	// input writes it from the Update goroutine); it reads this snapshot.
-	slugSnap atomic.Value // string
 }
 
 func newCompanyForm(sh *shared, edit *config.Company) *companyForm {
@@ -313,7 +304,6 @@ func newCompanyForm(sh *shared, edit *config.Company) *companyForm {
 		title = tr("tui.form.company_edit")
 		f.slug, f.name, f.baseDir = edit.Slug, edit.Name, edit.BaseDir
 	}
-	f.slugSnap.Store(strings.TrimSpace(f.slug))
 	f.initHost(sh, title)
 	if edit != nil {
 		f.fixed = [][2]string{{tr("tui.f.slug"), edit.Slug}}
@@ -333,16 +323,12 @@ func baseDirDesc(svc *app.Service, cfg config.Config, slug string) string {
 	return tr("tui.form.base_dir_hint") + "\n" + tr("tui.form.base_dir_default", svc.DefaultBaseDir(cfg, slug))
 }
 
-func (f *companyForm) build() *huh.Form {
+func (f *companyForm) build() *form {
 	sh := f.sh
-	var fields []huh.Field
+	var fields []*formField
 	if f.edit == nil {
-		fields = append(fields, huh.NewInput().
-			Title(tr("tui.f.slug")).
-			Description(tr("tui.form.slug_hint")).
-			Placeholder(tr("tui.form.eg", "acme")).
-			Value(&f.slug).
-			Validate(func(v string) error {
+		fields = append(fields, inputField(tr("tui.f.slug"), tr("tui.form.slug_hint"), tr("tui.form.eg", "acme"), &f.slug,
+			func(v string) error {
 				v = strings.TrimSpace(v)
 				if err := sh.fieldValidator("slug", tr("tui.f.slug"), true)(v); err != nil {
 					return err
@@ -353,35 +339,19 @@ func (f *companyForm) build() *huh.Form {
 				return nil
 			}))
 	}
-	base := huh.NewInput().
-		Title(tr("tui.f.base_dir")).
-		Value(&f.baseDir).
-		Validate(sh.fieldValidator("base_dir", tr("tui.f.base_dir"), false))
+	base := inputField(tr("tui.f.base_dir"), "", "", &f.baseDir, sh.fieldValidator("base_dir", tr("tui.f.base_dir"), false))
 	if f.edit != nil {
-		base.Description(baseDirDesc(sh.svc, sh.cfg, f.edit.Slug))
+		base.hint = baseDirDesc(sh.svc, sh.cfg, f.edit.Slug)
 	} else {
-		// "Leave empty for <default>" follows the slug as it is typed. The
-		// closure runs in another goroutine: it only reads the atomic snapshot
-		// and a copy of the settings (no slices shared with the shared config).
-		cfg := config.Config{Settings: sh.cfg.Settings}
-		svc := sh.svc
-		snap := &f.slugSnap
-		base.Description(baseDirDesc(svc, cfg, "")).
-			DescriptionFunc(func() string {
-				slug, _ := snap.Load().(string)
-				return baseDirDesc(svc, cfg, slug)
-			}, &f.slug)
+		// "Leave empty for <default>" follows the slug as it is typed.
+		base.hintf(func() string { return baseDirDesc(sh.svc, sh.cfg, strings.TrimSpace(f.slug)) })
 	}
 	fields = append(fields,
-		huh.NewInput().
-			Title(tr("tui.f.name")).
-			Description(tr("tui.form.company_name_hint")).
-			Placeholder(tr("tui.form.eg", "ACME Corp")).
-			Value(&f.name).
-			Validate(sh.fieldValidator("company_name", tr("tui.f.name"), true)),
+		inputField(tr("tui.f.name"), tr("tui.form.company_name_hint"), tr("tui.form.eg", "ACME Corp"), &f.name,
+			sh.fieldValidator("company_name", tr("tui.f.name"), true)),
 		base,
 	)
-	return f.newForm(huh.NewGroup(fields...))
+	return newForm(sh.st, sh.km, fields...)
 }
 
 func (f *companyForm) Init() tea.Cmd { return tea.Batch(f.form.Init(), f.spin.Tick) }
@@ -402,8 +372,7 @@ func (f *companyForm) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		}
 		if ok, cmd, rebuild := f.handleSaved(msg, next); ok {
 			if rebuild {
-				f.form = f.build()
-				return f, tea.Batch(f.form.Init(), cmd)
+				return f, tea.Batch(f.form.Reset(), cmd)
 			}
 			return f, cmd
 		}
@@ -425,10 +394,8 @@ func (f *companyForm) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	if f.saving {
 		return f, nil
 	}
-	m, cmd := f.form.Update(msg)
-	f.form = m.(*huh.Form)
-	f.slugSnap.Store(strings.TrimSpace(f.slug))
-	if f.form.State == huh.StateCompleted {
+	cmd, done := f.form.Update(msg)
+	if done {
 		return f, tea.Batch(cmd, f.submit())
 	}
 	return f, cmd
@@ -449,8 +416,7 @@ func (f *companyForm) submit() tea.Cmd {
 		cfg, err = app.UpdateCompany(sh.cfg, c)
 		if err != nil {
 			f.errMsg = errText(err)
-			f.form = f.build()
-			return f.form.Init()
+			return f.form.Reset()
 		}
 	} else {
 		cfg = app.AddCompany(sh.cfg, config.Company{Slug: slug, Name: name, BaseDir: base})
@@ -639,22 +605,19 @@ func (f *accountForm) remoteRows(w int) int { return len(f.remoteLines(w, 0)) }
 // sentUser stands in for an empty username while the example is rendered.
 const sentUser = "GITIDUSER"
 
-func (f *accountForm) build() *huh.Form {
+func (f *accountForm) build() *form {
 	sh := f.sh
-	var platOpts []huh.Option[string]
+	var platOpts []formOption
 	for _, p := range platform.All() {
-		platOpts = append(platOpts, huh.NewOption(p.DisplayName(), string(p)))
+		platOpts = append(platOpts, formOption{label: p.DisplayName(), value: string(p)})
 	}
 	userRequired := sh.fieldValidator("username", tr("tui.f.username"), true)
-	f.hints = nil
-	userIn, emailIn := huh.NewInput(), huh.NewInput()
-	main := []huh.Field{}
-	main = append(main,
-		huh.NewSelect[string]().Title(tr("tui.f.platform")).Description(tr("tui.form.platform_hint")).
-			Options(platOpts...).Inline(true).Value(&f.plat),
-		userIn.Title(tr("tui.f.username")).Description(f.addHint(tr("tui.form.username_hint"), func(s string) { userIn.Description(s) })).
-			Placeholder(tr("tui.form.eg", "alice")).Value(&f.username).
-			Validate(func(v string) error {
+	advanced := tr("tui.form.group_advanced")
+	showAdvanced := func() bool { return f.showAdvanced || f.plat == string(platform.Gitea) }
+	fields := []*formField{
+		selectField(tr("tui.f.platform"), tr("tui.form.platform_hint"), &f.plat, true, platOpts...),
+		inputField(tr("tui.f.username"), tr("tui.form.username_hint"), tr("tui.form.eg", "alice"), &f.username,
+			func(v string) error {
 				if err := userRequired(v); err != nil {
 					return err
 				}
@@ -663,62 +626,42 @@ func (f *accountForm) build() *huh.Form {
 				}
 				return nil
 			}),
-		huh.NewInput().Title(tr("tui.f.git_name")).Description(tr("tui.form.git_name_hint")).
-			Placeholder(tr("tui.form.eg", "Alice Tran")).Value(&f.name).
-			Validate(sh.fieldValidator("name", tr("tui.f.git_name"), true)),
-		emailIn.Title(tr("tui.f.email")).Description(f.addHint(tr("tui.form.email_hint"), func(s string) { emailIn.Description(s) })).
-			Placeholder(tr("tui.form.eg", "alice@acme.com")).Value(&f.email).
-			Validate(sh.fieldValidator("email", tr("tui.f.email"), true)),
-		huh.NewSelect[string]().Title(tr("tui.f.auth")).Description(tr("tui.form.auth_hint")).
-			Options(huh.NewOption("HTTPS ("+tr("tui.form.auth_https")+")", string(config.AuthHTTPS)),
-				huh.NewOption("SSH ("+tr("tui.form.auth_ssh")+")", string(config.AuthSSH))).
-			Value(&f.auth),
-		huh.NewConfirm().Title(tr("tui.form.show_advanced")).Description(tr("tui.form.advanced_hint")).
-			Value(&f.showAdvanced).Affirmative(tr("tui.yes")).Negative(tr("tui.no")),
-	)
-	advanced := []huh.Field{
-		huh.NewInput().Title(tr("tui.f.host")).Description(tr("tui.form.host_hint")).
-			Placeholder(tr("tui.form.eg", "git.acme.com")).
-			Value(&f.host).
-			Validate(func(v string) error {
+		inputField(tr("tui.f.git_name"), tr("tui.form.git_name_hint"), tr("tui.form.eg", "Alice Tran"), &f.name,
+			sh.fieldValidator("name", tr("tui.f.git_name"), true)),
+		inputField(tr("tui.f.email"), tr("tui.form.email_hint"), tr("tui.form.eg", "alice@acme.com"), &f.email,
+			sh.fieldValidator("email", tr("tui.f.email"), true)),
+		selectField(tr("tui.f.auth"), tr("tui.form.auth_hint"), &f.auth, false,
+			formOption{label: "HTTPS (" + tr("tui.form.auth_https") + ")", value: string(config.AuthHTTPS)},
+			formOption{label: "SSH (" + tr("tui.form.auth_ssh") + ")", value: string(config.AuthSSH)}),
+		confirmField(tr("tui.form.show_advanced"), tr("tui.form.advanced_hint"), &f.showAdvanced),
+		inputField(tr("tui.f.host"), tr("tui.form.host_hint"), tr("tui.form.eg", "git.acme.com"), &f.host,
+			func(v string) error {
 				v = strings.TrimSpace(v)
 				if v == "" && platform.DefaultHost(platform.Platform(f.plat)) == "" {
 					return errors.New(tr(config.ErrHostRequired))
 				}
 				return sh.fieldValidator("host", tr("tui.f.host"), false)(v)
-			}),
-		huh.NewInput().Title(tr("tui.f.orgs")).Description(tr("tui.form.orgs_hint")).Value(&f.orgs).
-			Validate(func(v string) error {
+			}).inSection(advanced).hideWhen(func() bool { return !showAdvanced() }),
+		inputField(tr("tui.f.orgs"), tr("tui.form.orgs_hint"), "", &f.orgs,
+			func(v string) error {
 				for _, o := range splitList(v) {
 					if code := sh.svc.ValidateField("org", o); code != "" {
 						return errors.New(tr(code))
 					}
 				}
 				return nil
-			}),
-		huh.NewInput().Title(tr("tui.f.ssh_host")).Description(tr("tui.form.ssh_host_hint")).Value(&f.sshHost).
-			Validate(sh.fieldValidator("ssh_host", tr("tui.f.ssh_host"), false)),
-		huh.NewInput().Title(tr("tui.f.ssh_port")).Value(&f.port).
-			Validate(sh.fieldValidator("ssh_port", tr("tui.f.ssh_port"), false)),
-	}
-	// The hide funcs run in Form.Update, on the Update goroutine, like the
-	// validators: they may read the form fields.
-	groups := []*huh.Group{
-		huh.NewGroup(main...).Title(tr("tui.form.group_main")),
-		huh.NewGroup(advanced...).Title(tr("tui.form.group_advanced")).
-			WithHideFunc(func() bool { return !f.showAdvanced && f.plat != string(platform.Gitea) }),
-		huh.NewGroup(
-			huh.NewConfirm().Title(tr("tui.f.make_default")).Value(&f.makeDefault).
-				Affirmative(tr("tui.yes")).Negative(tr("tui.no")),
-		).WithHideFunc(func() bool { return !f.hasOtherAccounts() }),
+			}).inSection(advanced).hideWhen(func() bool { return !showAdvanced() }),
+		inputField(tr("tui.f.ssh_host"), tr("tui.form.ssh_host_hint"), "", &f.sshHost,
+			sh.fieldValidator("ssh_host", tr("tui.f.ssh_host"), false)).inSection(advanced).hideWhen(func() bool { return !showAdvanced() }),
+		inputField(tr("tui.f.ssh_port"), "", "", &f.port,
+			sh.fieldValidator("ssh_port", tr("tui.f.ssh_port"), false)).inSection(advanced).hideWhen(func() bool { return !showAdvanced() }),
+		confirmField(tr("tui.f.make_default"), "", &f.makeDefault).hideWhen(func() bool { return !f.hasOtherAccounts() }),
 	}
 	if !f.hasKey() {
-		groups = append(groups, huh.NewGroup(
-			huh.NewConfirm().Title(tr("tui.form.gen_key")).Description(tr("tui.form.gen_key_hint")).Value(&f.genKey).
-				Affirmative(tr("tui.yes")).Negative(tr("tui.no")),
-		).WithHideFunc(func() bool { return f.auth != string(config.AuthSSH) }))
+		fields = append(fields, confirmField(tr("tui.form.gen_key"), tr("tui.form.gen_key_hint"), &f.genKey).
+			hideWhen(func() bool { return f.auth != string(config.AuthSSH) }))
 	}
-	return f.newForm(groups...)
+	return newForm(sh.st, sh.km, fields...)
 }
 
 func splitList(s string) []string {
@@ -747,8 +690,7 @@ func (f *accountForm) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		}
 		if ok, cmd, rebuild := f.handleSaved(msg, next); ok {
 			if rebuild {
-				f.form = f.build()
-				return f, tea.Batch(f.form.Init(), cmd)
+				return f, tea.Batch(f.form.Reset(), cmd)
 			}
 			return f, cmd
 		}
@@ -770,9 +712,8 @@ func (f *accountForm) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	if f.saving {
 		return f, nil
 	}
-	m, cmd := f.form.Update(msg)
-	f.form = m.(*huh.Form)
-	if f.form.State == huh.StateCompleted {
+	cmd, done := f.form.Update(msg)
+	if done {
 		return f, tea.Batch(cmd, f.submit())
 	}
 	return f, cmd
@@ -793,8 +734,7 @@ func (f *accountForm) accountID() string {
 // fail shows msg in the error area and starts the form over with its values.
 func (f *accountForm) fail(msg string) tea.Cmd {
 	f.errMsg = msg
-	f.form = f.build()
-	return f.form.Init()
+	return f.form.Reset()
 }
 
 func (f *accountForm) submit() tea.Cmd {

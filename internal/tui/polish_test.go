@@ -401,7 +401,7 @@ func TestA11PreviewKeepsTheFormUsable(t *testing.T) {
 			t.Errorf("%v: the id line is missing:\n%s", s, h.view())
 		}
 		// the form always keeps room for the focused field
-		if inner := s[1] - chromeRows - 3 - errorRows - f.previewRows(); s[1] >= 20 && inner < 4 {
+		if inner := f.formRows(); s[1] >= 20 && inner < 4 {
 			t.Errorf("%v: only %d rows left for the form", s, inner)
 		}
 	}

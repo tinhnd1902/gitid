@@ -228,7 +228,7 @@ func TestEditAccountKeepsID(t *testing.T) {
 	if f.edit == nil || f.username != "alice" {
 		t.Fatalf("prefill %+v", f)
 	}
-	// enter through: note, platform, username, name, email, auth, advanced (no) | default (only with other accounts)
+	// enter through: platform, username, name, email, auth, advanced (no) | default (only with other accounts)
 	for i := 0; i < 12; i++ {
 		h.key("enter")
 		if _, ok := h.top().(*confirmScreen); ok {

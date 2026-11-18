@@ -1,0 +1,24 @@
+  gitid   Danh sách › Thêm tài khoản vào acme                            ~  test
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ Thêm tài khoản vào acme  2/7                                                 │
+│ Remote sẽ là: https://dora@github.com/<owner>/<repo>.git                     │
+│ ID trong gitid: dora (tự đặt theo username)                                  │
+│                                                                              │
+│                                                                              │
+│ ┃ Username                                                                   │
+│ ┃ Tên đăng nhập (login) trên nền tảng, như trong URL hồ sơ:                  │
+│ ┃ github.com/<login>. Không phải email, không phải tên hiển thị.             │
+│ ┃ > dora                                                                     │
+│                                                                              │
+│   Tên git                                                                    │
+│   Tên hiển thị trong commit (user.name), vd Alice Tran. Khác với username.   │
+│     Alice Nguyen                                                             │
+│                                                                              │
+│   Email                                                                      │
+│   Chỉ để ghi tác giả commit (user.email), gitid không xác minh. Dùng email   │
+│   đã thêm trên nền tảng, hoặc email noreply: GitHub → Settings → Emails      │
+│   (ID+login@users.noreply.github.com).                                       │
+│     vd: alice@acme.com                                                       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+                                                    ● 11 thay đổi chưa áp dụng  
+ ▸ enter lưu / tiếp  tab ô tiếp theo  esc hủy  ? tất cả phím                    

@@ -108,7 +108,6 @@ var viTUI = map[string]string{
 	"tui.form.host_hint":         "Để trống để dùng host mặc định của nền tảng (bắt buộc với Gitea).",
 	"tui.form.orgs_hint":         "Tùy chọn. Các org của tài khoản, cách nhau bởi dấu phẩy.",
 	"tui.form.ssh_host_hint":     "Tùy chọn. Chỉ cần khi host SSH khác host HTTPS.",
-	"tui.form.group_main":        "Tài khoản",
 	"tui.form.group_advanced":    "Nâng cao",
 	"tui.form.gen_key":           "Tạo SSH key ngay sau khi lưu?",
 	"tui.form.gen_key_hint":      "Bạn sẽ nhập passphrase trực tiếp với ssh-keygen.",

@@ -5,7 +5,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
@@ -60,6 +59,20 @@ type Styles struct {
 	HelpPrimary  lipgloss.Style // the next-step item of the help bar
 	Help         help.Styles
 	Spinner      spinner.Model
+
+	// Form styles (form.go). Palette colors only.
+	FormTitle       lipgloss.Style // title of the focused field
+	FormTitleBlur   lipgloss.Style // title of the other fields
+	FormHint        lipgloss.Style
+	FormGutter      lipgloss.Style // the "┃" at the left of the focused field
+	FormPrompt      lipgloss.Style // the "> " of a text input
+	FormCursor      lipgloss.Style
+	FormValue       lipgloss.Style // text typed in the focused input
+	FormValueBlur   lipgloss.Style // a filled field reads as a value: bold
+	FormPlaceholder lipgloss.Style // faint italics, never mistaken for a value
+	FormOptionOn    lipgloss.Style // chosen option of the focused field
+	FormOption      lipgloss.Style
+	FormSection     lipgloss.Style
 }
 
 // NewStyles builds the theme.
@@ -104,6 +117,18 @@ func NewStyles() *Styles {
 		FullDesc:       lipgloss.NewStyle().Foreground(colMuted),
 		FullSeparator:  lipgloss.NewStyle().Foreground(colFaint),
 	}
+	s.FormTitle = lipgloss.NewStyle().Foreground(colAccent).Bold(true)
+	s.FormTitleBlur = lipgloss.NewStyle().Foreground(colMuted)
+	s.FormHint = lipgloss.NewStyle().Foreground(colMuted)
+	s.FormGutter = lipgloss.NewStyle().Foreground(colAccent)
+	s.FormPrompt = lipgloss.NewStyle().Foreground(colAccent)
+	s.FormCursor = lipgloss.NewStyle().Foreground(colTeal)
+	s.FormValue = lipgloss.NewStyle().Foreground(colText)
+	s.FormValueBlur = lipgloss.NewStyle().Foreground(colText).Bold(true)
+	s.FormPlaceholder = lipgloss.NewStyle().Foreground(colFaint).Italic(true)
+	s.FormOptionOn = lipgloss.NewStyle().Foreground(colAccent).Bold(true)
+	s.FormOption = lipgloss.NewStyle().Foreground(colText)
+	s.FormSection = lipgloss.NewStyle().Foreground(colText).Bold(true)
 	s.Spinner = spinner.New(spinner.WithSpinner(spinner.MiniDot), spinner.WithStyle(lipgloss.NewStyle().Foreground(colAccent)))
 	return s
 }
@@ -142,46 +167,6 @@ func (s *Styles) platformBadge(p platform.Platform) string {
 		c = colMuted
 	}
 	return lipgloss.NewStyle().Foreground(c).Bold(true).Render(platformTag(p))
-}
-
-// huhTheme maps the palette onto huh forms.
-func (s *Styles) huhTheme() *huh.Theme {
-	t := huh.ThemeBase()
-	t.Focused.Base = lipgloss.NewStyle().PaddingLeft(1).BorderStyle(lipgloss.ThickBorder()).BorderLeft(true).BorderForeground(colAccent)
-	t.Focused.Card = t.Focused.Base
-	t.Focused.Title = lipgloss.NewStyle().Foreground(colAccent).Bold(true)
-	t.Focused.NoteTitle = lipgloss.NewStyle().Foreground(colAccent).Bold(true).MarginBottom(1)
-	t.Focused.Description = lipgloss.NewStyle().Foreground(colMuted)
-	t.Focused.ErrorIndicator = lipgloss.NewStyle().Foreground(colErr).SetString(" *")
-	t.Focused.ErrorMessage = lipgloss.NewStyle().Foreground(colErr)
-	t.Focused.SelectSelector = lipgloss.NewStyle().Foreground(colAccent).SetString("> ")
-	t.Focused.NextIndicator = lipgloss.NewStyle().Foreground(colAccent).MarginLeft(1).SetString("→")
-	t.Focused.PrevIndicator = lipgloss.NewStyle().Foreground(colAccent).MarginRight(1).SetString("←")
-	t.Focused.Option = lipgloss.NewStyle().Foreground(colText)
-	t.Focused.SelectedOption = lipgloss.NewStyle().Foreground(colOK)
-	t.Focused.SelectedPrefix = lipgloss.NewStyle().Foreground(colOK).SetString("✓ ")
-	t.Focused.UnselectedPrefix = lipgloss.NewStyle().Foreground(colFaint).SetString("• ")
-	t.Focused.UnselectedOption = lipgloss.NewStyle().Foreground(colText)
-	t.Focused.FocusedButton = s.ButtonOn
-	t.Focused.Next = s.ButtonOn
-	t.Focused.BlurredButton = s.Button
-	t.Focused.TextInput.Cursor = lipgloss.NewStyle().Foreground(colTeal)
-	// Placeholders are faint italics; typed text stays at full color, so an
-	// example ("e.g. acme") never looks like a value the user already entered.
-	t.Focused.TextInput.Placeholder = lipgloss.NewStyle().Foreground(colFaint).Italic(true)
-	t.Focused.TextInput.Prompt = lipgloss.NewStyle().Foreground(colAccent)
-	t.Focused.TextInput.Text = lipgloss.NewStyle().Foreground(colText)
-
-	t.Blurred = t.Focused
-	t.Blurred.Base = lipgloss.NewStyle().PaddingLeft(1).BorderStyle(lipgloss.HiddenBorder()).BorderLeft(true)
-	t.Blurred.Card = t.Blurred.Base
-	t.Blurred.Title = lipgloss.NewStyle().Foreground(colMuted)
-	t.Blurred.TextInput.Text = lipgloss.NewStyle().Foreground(colText).Bold(true) // a filled field reads as a value
-	t.Blurred.NextIndicator = lipgloss.NewStyle()
-	t.Blurred.PrevIndicator = lipgloss.NewStyle()
-	t.Group.Title = t.Focused.Title
-	t.Group.Description = t.Focused.Description
-	return t
 }
 
 // trunc cuts s (which may contain ANSI escapes) to at most w cells.

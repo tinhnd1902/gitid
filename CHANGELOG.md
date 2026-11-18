@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Terminal UI: the forms (company, account, import) use a built-in form
+  component instead of the `huh` library. Hints and errors never split a URL
+  or an email address, validation errors appear right under the field, the
+  form scrolls to the focused field and shows its position (`n/m`) when it
+  does not fit, the remote preview stays visible while you type, and a
+  resize re-wraps everything at once. One dependency fewer (`huh` and the
+  libraries only it needed).
+
 ## [0.1.5] - 2026-11-17
 
 ### Improved

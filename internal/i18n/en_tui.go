@@ -108,7 +108,6 @@ var enTUI = map[string]string{
 	"tui.form.host_hint":         "Leave empty for the platform's default host (required for Gitea).",
 	"tui.form.orgs_hint":         "Optional. Orgs of the account, separated by commas.",
 	"tui.form.ssh_host_hint":     "Optional. Only needed when the SSH host differs from the HTTPS host.",
-	"tui.form.group_main":        "Account",
 	"tui.form.group_advanced":    "Advanced",
 	"tui.form.gen_key":           "Generate the SSH key right after saving?",
 	"tui.form.gen_key_hint":      "You will type the passphrase directly into ssh-keygen.",

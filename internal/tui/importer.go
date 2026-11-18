@@ -2,12 +2,12 @@ package tui
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh"
 
 	"github.com/tinhnd1902/gitid/internal/app"
 	"github.com/tinhnd1902/gitid/internal/config"
@@ -34,7 +34,7 @@ type importScreen struct {
 	res    importer.Result
 	err    error
 	cur    int
-	form   *huh.Form
+	form   *form
 	plat   string
 	auth   string
 	user   string
@@ -42,7 +42,6 @@ type importScreen struct {
 	errMsg string
 	spin   spinner.Model
 	w, h   int
-	userIn *huh.Input
 }
 
 func newImportScreen(sh *shared) *importScreen {
@@ -53,9 +52,14 @@ func (s *importScreen) Title() string { return tr("tui.import.title") }
 func (s *importScreen) Resize(w, h int) {
 	s.w, s.h = w, h
 	if s.form != nil {
-		s.hint()
-		s.form.WithWidth(maxInt(w-4, 20)).WithHeight(maxInt(h-3-errorRows, 4))
+		s.sizeForm()
 	}
+}
+
+// sizeForm gives the form the panel's inner area (the title takes one row).
+func (s *importScreen) sizeForm() {
+	s.form.SetSize(maxInt(s.w-4, 1), maxInt(s.h-3, 1))
+	s.form.compact = s.h < previewMinBody
 }
 
 func (s *importScreen) Capturing() bool { return s.phase == imForm || s.phase == imSaving }
@@ -82,34 +86,22 @@ func (s *importScreen) Help() []key.Binding {
 	return nil
 }
 
-// hint sets the username hint wrapped word-aware for the form width (huh
-// would split the URL in it at the dot).
-func (s *importScreen) hint() {
-	if s.userIn != nil && s.w > 0 {
-		s.userIn.Description(hintText(tr("tui.form.username_hint"), maxInt(s.w-4, 20)-2))
-	}
-}
-
 func (s *importScreen) buildForm() {
 	sh := s.sh
-	var opts []huh.Option[string]
+	var opts []formOption
 	for _, p := range platform.All() {
-		opts = append(opts, huh.NewOption(p.DisplayName(), string(p)))
+		opts = append(opts, formOption{label: p.DisplayName(), value: string(p)})
 	}
-	s.userIn = huh.NewInput()
-	s.form = huh.NewForm(huh.NewGroup(
-		huh.NewSelect[string]().Title(tr("tui.f.platform")).Options(opts...).Inline(true).Value(&s.plat),
-		s.userIn.Title(tr("tui.f.username")).Description(tr("tui.form.username_hint")).Placeholder(tr("tui.form.eg", "alice")).Value(&s.user).
-			Validate(sh.fieldValidator("username", tr("tui.f.username"), true)),
-		huh.NewSelect[string]().Title(tr("tui.f.auth")).
-			Options(huh.NewOption("HTTPS", string(config.AuthHTTPS)), huh.NewOption("SSH", string(config.AuthSSH))).Value(&s.auth),
-		huh.NewInput().Title(tr("tui.f.host")).Description(tr("tui.form.host_hint")).
-			Placeholder(tr("tui.form.eg", "git.acme.com")).
-			Value(&s.host).
-			Validate(sh.fieldValidator("host", tr("tui.f.host"), false)),
-	)).WithTheme(sh.st.huhTheme()).WithShowHelp(false).WithShowErrors(false)
-	s.hint()
-	s.form.WithWidth(maxInt(s.w-4, 20)).WithHeight(maxInt(s.h-3-errorRows, 4))
+	s.form = newForm(sh.st, sh.km,
+		selectField(tr("tui.f.platform"), "", &s.plat, true, opts...),
+		inputField(tr("tui.f.username"), tr("tui.form.username_hint"), tr("tui.form.eg", "alice"), &s.user,
+			sh.fieldValidator("username", tr("tui.f.username"), true)),
+		selectField(tr("tui.f.auth"), "", &s.auth, false,
+			formOption{label: "HTTPS", value: string(config.AuthHTTPS)}, formOption{label: "SSH", value: string(config.AuthSSH)}),
+		inputField(tr("tui.f.host"), tr("tui.form.host_hint"), tr("tui.form.eg", "git.acme.com"), &s.host,
+			sh.fieldValidator("host", tr("tui.f.host"), false)),
+	)
+	s.sizeForm()
 }
 
 func (s *importScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
@@ -169,9 +161,8 @@ func (s *importScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		}
 	}
 	if s.phase == imForm && s.form != nil {
-		m, cmd := s.form.Update(msg)
-		s.form = m.(*huh.Form)
-		if s.form.State == huh.StateCompleted {
+		cmd, done := s.form.Update(msg)
+		if done {
 			return s, tea.Batch(cmd, s.save())
 		}
 		return s, cmd
@@ -224,12 +215,13 @@ func (s *importScreen) View() string {
 	case imSaving:
 		b.WriteString(s.spin.View() + " " + st.Muted.Render(tr("tui.form.saving")))
 	case imForm:
-		errBlock := ""
-		if errs := s.form.Errors(); len(errs) > 0 {
-			errBlock = st.Err.Render(wrap("✗ "+errs[0].Error(), inner))
+		s.sizeForm()
+		title := tr("tui.import.form_title", s.res.Proposals[s.cur].Slug)
+		if s.form.Overflows() {
+			n, m := s.form.Position()
+			title += st.Faint.Render(fmt.Sprintf("  %d/%d", n, m))
 		}
-		body := fitHeight(errBlock, errorRows) + "\n" + s.form.View()
-		return s.sh.panel(tr("tui.import.form_title", s.res.Proposals[s.cur].Slug), body, s.w, s.h, true)
+		return s.sh.panel(title, s.form.View(), s.w, s.h, true)
 	default:
 		if s.err != nil {
 			b.WriteString(st.Err.Render("✗ " + wrap(errText(s.err), inner)))

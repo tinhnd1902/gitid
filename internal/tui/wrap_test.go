@@ -136,7 +136,7 @@ func TestFix2RemotePreviewIsNotCut(t *testing.T) {
 		assertFits(t, v, s[0], s[1], "account form")
 		// the form keeps room for the focused field at the wrapped height
 		f := h.top().(*accountForm)
-		if inner := s[1] - chromeRows - 3 - errorRows - f.previewRows(); inner < 4 {
+		if inner := f.formRows(); inner < 4 {
 			t.Errorf("%v: only %d rows left for the form", s, inner)
 		}
 	}
