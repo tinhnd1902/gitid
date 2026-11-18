@@ -19,11 +19,11 @@ import (
 )
 
 // Layout breakpoints. The terminal body is the area between the header and
-// the status bar (terminal height minus chromeRows).
+// the status bar (terminal height minus Model.chromeRows).
 const (
 	sideWidth     = 84 // from this width the detail pane sits next to the list
 	stackMinWidth = 60 // from this width (and stackMinBodyH rows) it sits below
-	stackMinBodyH = 21 // body rows needed for the stacked layout (24-row terminal)
+	stackMinBodyH = 20 // body rows needed for the stacked layout (24-row terminal, two help rows)
 	idCol         = 14 // width of the account id column
 )
 
@@ -348,9 +348,9 @@ func (s *listScreen) ContextHelp() []helpItem {
 	prim := func(b key.Binding) helpItem { return helpItem{b: b, primary: true} }
 	switch {
 	case !s.sh.loaded:
-		return []helpItem{it(km.Quit)}
+		return nil
 	case s.welcome():
-		return []helpItem{prim(withDesc(km.Detail, "enter", tr("tui.key.add_company"))), it(km.Import), it(km.Quit)}
+		return []helpItem{prim(withDesc(km.Detail, "enter", tr("tui.key.add_company"))), it(km.Import)}
 	case s.mode == filterTyping:
 		return []helpItem{
 			prim(withDesc(km.Enter, "enter", tr("tui.key.filter_keep"))),
@@ -363,21 +363,20 @@ func (s *listScreen) ContextHelp() []helpItem {
 	var out []helpItem
 	switch {
 	case !has:
-		out = []helpItem{it(km.Quit)}
+		// nothing is selected: only the always-on keys of row 2 apply
 	case r.isCompany() && len(r.company.Accounts) == 0:
-		out = []helpItem{prim(km.AddAccount), it(relabel(km.Edit, tr("tui.key.edit_company"))), it(km.Delete), it(km.AddCompany), it(km.Quit)}
+		out = []helpItem{prim(km.AddAccount), it(relabel(km.Edit, tr("tui.key.edit_company"))), it(km.Delete)}
 	case pending:
-		out = []helpItem{prim(km.Apply), it(km.AddAccount), it(km.Edit), it(km.Delete), it(km.Quit)}
+		out = []helpItem{prim(km.Apply), it(km.AddAccount), it(km.Edit), it(km.Delete)}
 	case !r.isCompany() && r.account.Auth == config.AuthSSH && s.keyFor == r.key() && !s.keyInfo.Exists:
-		out = []helpItem{prim(km.GenKey), it(km.Edit), it(km.Delete), it(km.Check), it(km.Quit)}
+		out = []helpItem{prim(km.GenKey), it(km.Edit), it(km.Delete), it(km.Check)}
 	case r.isCompany():
-		out = []helpItem{it(km.AddAccount), it(km.Edit), it(km.Delete), it(km.Clone), it(km.Check), it(km.Quit)}
+		out = []helpItem{it(km.AddAccount), it(km.Edit), it(km.Delete), it(km.Clone), it(km.Check)}
 	default:
 		out = []helpItem{it(km.Edit), it(km.Delete), it(km.Check), it(km.Clone)}
 		if r.account.Auth == config.AuthSSH {
 			out = append(out, it(km.GenKey))
 		}
-		out = append(out, it(km.Quit))
 	}
 	// insert puts an item right after the primary one (or first when there is none)
 	insert := func(h helpItem) {
@@ -394,6 +393,30 @@ func (s *listScreen) ContextHelp() []helpItem {
 		insert(it(withDesc(km.Back, "esc", tr("tui.key.filter_clear"))))
 	}
 	return out
+}
+
+// AlwaysHelp is row 2 of the help bar: the keys that work in every state of
+// the list, then the quit key (the exit, drawn last).
+func (s *listScreen) AlwaysHelp() []helpItem {
+	km := s.sh.km
+	exit := helpItem{b: km.Quit, role: roleExit}
+	switch {
+	case !s.sh.loaded:
+		return []helpItem{exit}
+	case s.mode == filterTyping:
+		return nil
+	case s.welcome():
+		return []helpItem{{b: km.AddCompany, prio: 3}, exit}
+	}
+	var out []helpItem
+	if len(s.l.Items()) > 1 {
+		out = append(out, helpItem{b: withDesc(km.Up, "↑↓", tr("tui.key.move")), prio: 2})
+	}
+	out = append(out, helpItem{b: km.AddCompany, prio: 3})
+	if _, has := s.selected(); has {
+		out = append(out, helpItem{b: km.AddAccount, prio: 1})
+	}
+	return append(out, exit)
 }
 
 func (s *listScreen) Resize(w, h int) {
@@ -723,7 +746,7 @@ func (s *listScreen) View() string {
 		return ""
 	}
 	if s.welcome() {
-		return s.sh.panel(tr("tui.list.panel", 0, 0), s.welcomeBody(s.w-4, s.h-3), s.w, s.h, true)
+		return s.sh.activePanel(tr("tui.list.panel", 0, 0), s.welcomeBody(s.w-4, s.h-3), s.w, s.h)
 	}
 	lw, lh, dw, dh := s.dims()
 	left := s.listPanel(lw, lh)
@@ -779,7 +802,14 @@ func (s *listScreen) listPanel(w, h int) string {
 	}
 	content := s.filterLine() + "\n" + body
 	title := tr("tui.list.panel", len(s.sh.cfg.Companies), len(s.sh.cfg.All()))
-	return s.sh.panel(title, content, w, h, true)
+	// the list pane has the keyboard: say how to move in it, when there is
+	// something to move over and the whole hint fits
+	if s.sh.loaded && len(s.l.Items()) > 1 {
+		if full := title + "  (" + tr("tui.list.panel_hint") + ")"; lipgloss.Width(full) <= inner {
+			title = full
+		}
+	}
+	return s.sh.activePanel(title, content, w, h)
 }
 
 // rowHint is the centered "add the first account" hint shown under the rows

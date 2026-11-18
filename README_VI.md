@@ -354,6 +354,7 @@ clone: ["c", "n"]   # hai phím cho một hành động
 | `ssh_test` | `s` | chẩn đoán |
 | `terminal` | `t` | clone |
 | `problems` | `!` | trình duyệt repo (chỉ hiện repo có vấn đề) |
+| `palette` | `ctrl+k` | mọi màn hình trừ form (mở cùng bảng với `help`) |
 
 Một phím là một ký tự ASCII in được (`v`, `V`, `/`, `5`), `ctrl+<chữ>`, `alt+<ký tự>` hoặc `f1` đến `f12`. Không hợp lệ: chữ có dấu (`â`, `đ`), từ (`ab`) và phím có tên như `enter`, `esc`, `tab`, mũi tên hay `space`. Đặt phím trong dấu nháy khi YAML sẽ hiểu khác đi: `"?"`, `"#"`, `"&"`, `"*"`, `"!"`, `"|"`, `">"`, `"%"`, `"@"`, `` "`" ``.
 
@@ -361,13 +362,15 @@ Các phím sau không đổi được: `ctrl+c`, `esc` (luôn quay lại một b
 
 Hai hành động cùng hoạt động trên một màn hình không được dùng chung phím (ví dụ `check` và `clone` ở danh sách), nhưng một phím có thể có nghĩa khác ở những màn hình không bao giờ hiện cùng lúc. Hoán đổi hai phím thì được: `clone: "e"` cùng `edit: "c"`. Một vấn đề không bao giờ làm gitid dừng: hành động bị ảnh hưởng giữ phím mặc định và gitid báo cho bạn, trên thanh trạng thái khi mở TUI, ở cuối bảng `?`, trong `gitid keys` (thoát với mã 2) và trong `gitid doctor` (cảnh báo). Tệp không đọc được hoặc sai cú pháp thì mọi phím về mặc định. Tên hành động không có (ví dụ từ gitid bản mới hơn) được báo và bỏ qua.
 
-Bấm `r` ở danh sách để tải lại `config.yaml` và `keys.yaml` mà không thoát TUI. Phím tắt cần bàn phím gửi chữ thường thuần: khi bộ gõ tiếng Việt (Telex, VNI) đang bật, gitid không đọc được `a`, `k`… và báo trên thanh trạng thái; hãy chuyển sang EN (ABC) trước. Vì lý do đó `keys.yaml` cũng không nhận phím có ký tự ngoài ASCII.
+Bấm `r` ở danh sách để tải lại `config.yaml` và `keys.yaml` mà không thoát TUI. Phím tắt cần bàn phím gửi chữ thường thuần: khi bộ gõ tiếng Việt (Telex, VNI) đang bật, gitid không đọc được `a`, `k`… và báo trên thanh trạng thái; hãy chuyển sang EN (ABC) trước. Ngoại lệ duy nhất là ô lọc của bảng `?`, vì đó là ô nhập chữ: gõ tiếng Việt ở đó được. Vì lý do đó `keys.yaml` cũng không nhận phím có ký tự ngoài ASCII. Nếu một `keys.yaml` viết trước khi có `palette` gán `ctrl+k` cho hành động khác trong màn hình mà palette dùng chung, phím đó bị báo là xung đột và hành động quay về phím mặc định; hãy gán lại `palette` để giữ phím của bạn.
 
 ## Tính năng chi tiết
 
 ### Danh sách
 
 Màn hình chính là cây công ty và tài khoản với thẻ nền tảng (`GH`, `GL`, `BB`, `GT`, `AZ`), kiểu xác thực, `★` cho tài khoản mặc định của công ty và email. Nhấn `/` để lọc theo tên, username, email, host hoặc nền tảng; việc so khớp là mờ trong từng từ và giữ nguyên thứ tự của cây. Từ 84 cột, khung chi tiết nằm cạnh danh sách; từ 60 cột (và 24 dòng) nó nằm dưới danh sách; terminal nhỏ hơn thì nhấn `enter` để mở. Khung này giải thích công ty hoặc tài khoản đang chọn sẽ làm gì ("Điều gì sẽ xảy ra"); với tài khoản, nó còn hiện remote được tạo ra, thư mục và bước tiếp theo. Hai tài khoản cùng công ty có cùng nền tảng, host và username được đánh dấu `!`. Công ty chưa có tài khoản được đánh dấu `chưa có tài khoản`: gitid chưa ghi gì cho nó cho tới khi bạn thêm tài khoản bằng `a`.
+
+Cuối mỗi màn hình có thanh trợ giúp hai dòng (một dòng khi terminal dưới 14 dòng). Dòng 1 là phím của dòng đang chọn hoặc của bước hiện tại, `▸` đánh dấu bước nên làm tiếp; dòng 2 là các phím luôn dùng được (ở danh sách: `↑↓` di chuyển, `A` thêm công ty, `a` thêm tài khoản), rồi `? tất cả phím`, và phím thoát (`q` thoát ở danh sách, `esc` ở nơi khác) đứng cuối. Nhãn đứng trước mỗi dòng ("Dòng này:", "Luôn có:") chỉ hiện khi mọi phím của dòng đều vừa chỗ cùng nhãn. Khung danh sách có viền đậm, cho biết phím mũi tên đang tác động vào đâu; khung chi tiết bên cạnh hoặc bên dưới có viền mảnh. Nhấn `?` hoặc `ctrl+k` để mở bảng phím tắt: bảng này tìm kiếm được. Gõ để lọc theo mô tả (không phân biệt dấu và chữ hoa: `cong ty` tìm ra "thêm công ty") hoặc theo phím, di chuyển bằng `↑`/`↓`, nhấn `enter` để chạy dòng đang chọn, đúng như khi bạn bấm phím của nó. `esc` xóa bộ lọc rồi mới đóng; `?` và `ctrl+k` đóng bất cứ lúc nào; `q` đóng khi ô lọc còn trống. Dòng chỉ để di chuyển (`↑/↓`, cuộn trang) và các dòng "mọi màn hình" hiện mờ và không chạy được.
 
 ```text
 ▌ acme  ACME Corp                 ~/Code/acme/  2 tài khoản

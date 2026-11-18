@@ -164,7 +164,7 @@ func TestIME8SelectFieldGetsTheHint(t *testing.T) {
 	}
 }
 
-func TestIME9To11ConfirmDeleteAndOverlay(t *testing.T) {
+func TestIME9To10ConfirmAndDeleteWarnAboutIME(t *testing.T) {
 	h := readyHarness(t)
 	h.sendRunes("ý")
 	if h.status() != imeVi || h.top().(*confirmScreen).state != confReady {
@@ -181,13 +181,8 @@ func TestIME9To11ConfirmDeleteAndOverlay(t *testing.T) {
 	if _, err := h.m.sh.cfg.ParseRef("acme/bob"); err != nil {
 		t.Fatal("nothing may be deleted")
 	}
-
-	h = newHarness(t, basicCfg())
-	h.key("?")
-	h.sendRunes("â")
-	if h.status() != imeVi || !h.m.showHelp {
-		t.Fatalf("overlay: status %q open=%v", h.status(), h.m.showHelp)
-	}
+	// the overlay has a text filter: composed input goes into it instead of
+	// the warning (see OV-13 in overlay_test.go)
 }
 
 func TestIME12English(t *testing.T) {

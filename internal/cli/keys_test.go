@@ -177,6 +177,10 @@ func TestCLI4JSON(t *testing.T) {
 	if len(doc.Bindings) != len(keymap.Defs()) {
 		t.Fatalf("%d bindings", len(doc.Bindings))
 	}
+	// PK-8: the palette (alias of the help overlay) is listed with its key
+	if last := doc.Bindings[len(doc.Bindings)-1]; last.Action != "palette" || !slices.Equal(last.Keys, []string{"ctrl+k"}) {
+		t.Errorf("last binding %+v", last)
+	}
 	for i, d := range keymap.Defs() {
 		b := doc.Bindings[i]
 		if b.Action != string(d.Action) || !slices.Equal(b.Default, d.Default) || len(b.Scopes) != len(d.Scopes) || b.Description == "" || len(b.Keys) == 0 {

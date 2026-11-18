@@ -48,7 +48,7 @@ var viTUI = map[string]string{
 
 	"tui.help.title":  "Phím tắt",
 	"tui.help.global": "Mọi màn hình",
-	"tui.help.close":  "Nhấn %[1]s, %[2]s hoặc esc để đóng.",
+	"tui.help.close":  "Nhấn %[1]s, %[2]s, %[3]s hoặc esc để đóng.",
 
 	// list
 	"tui.list.title":        "Danh sách",
@@ -347,6 +347,18 @@ var viTUI = map[string]string{
 	"tui.key.back_global":     "quay lại một bước",
 	"tui.key.nav_page":        "trang trước/sau",
 	"tui.key.nav_ends":        "đầu/cuối danh sách",
+
+	// two-row help bar and searchable overlay
+	"tui.help.row_this":     "Dòng này:",
+	"tui.help.row_step":     "Bước này:",
+	"tui.help.row_always":   "Luôn có:",
+	"tui.help.filter_hint":  "gõ để lọc · ↑↓ chọn · enter chạy",
+	"tui.help.close_filter": "esc bỏ lọc · %[1]s hoặc %[2]s để đóng",
+	"tui.help.no_match":     "Không có phím nào khớp “%s”.",
+	"tui.key.run":           "chạy",
+	"tui.key.close":         "đóng",
+	"tui.key.palette":       "tìm và chạy lệnh",
+	"tui.list.panel_hint":   "↑↓ chọn",
 }
 
 func init() {

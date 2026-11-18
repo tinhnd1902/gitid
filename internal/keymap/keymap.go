@@ -44,6 +44,7 @@ const (
 	SSHTest    Action = "ssh_test"
 	Terminal   Action = "terminal"
 	Problems   Action = "problems"
+	Palette    Action = "palette"
 )
 
 // Scope is a set of keys that are live at the same time on one screen. A
@@ -130,6 +131,10 @@ var defs = []Def{
 	{SSHTest, []string{"s"}, scopes(ScopeDoctor), "tui.key.ssh_test"},
 	{Terminal, []string{"t"}, scopes(ScopeClone), "tui.key.terminal"},
 	{Problems, []string{"!"}, scopes(ScopeRepos), "tui.key.problems"},
+	// Palette opens the same overlay as Help (an alias that works without a
+	// shifted key). Appended last so the sentinel labels of the actions above
+	// do not move.
+	{Palette, []string{"ctrl+k"}, append(scopes(ScopeList), allScopesButForm...), "tui.key.palette"},
 }
 
 var defIndex = func() map[Action]int {

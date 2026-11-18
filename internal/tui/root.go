@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/cursor"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -25,7 +26,6 @@ const (
 	minWidth     = 40
 	minHeight    = 10
 	statusExpiry = 5 * time.Second
-	chromeRows   = 3 // header + status bar + help bar
 )
 
 // Model is the root Bubble Tea model: a stack of screens plus the header,
@@ -38,6 +38,7 @@ type Model struct {
 	statSeq  int
 	planSeq  int
 	showHelp bool
+	ov       helpOverlay // filter and selection of the "?" overlay
 	// reloading is set by the reload key: the next cfgLoadedMsg then says so.
 	reloading bool
 	// keyShown are the keys.yaml problems the status bar already announced,
@@ -48,7 +49,7 @@ type Model struct {
 // New creates the root model. The configuration is loaded by Init.
 func New(svc *app.Service, opts Options) *Model {
 	sh := &shared{svc: svc, st: NewStyles(), km: NewKeyMap(keymap.Defaults()), cwd: opts.Cwd, version: opts.Version}
-	m := &Model{sh: sh}
+	m := &Model{sh: sh, ov: helpOverlay{filter: newOverlayFilter(sh.st)}}
 	m.stack = []Screen{newListScreen(sh)}
 	return m
 }
@@ -69,7 +70,7 @@ func Run(svc *app.Service, opts Options) error {
 
 func (m *Model) top() Screen { return m.stack[len(m.stack)-1] }
 
-func (m *Model) bodySize() (int, int) { return m.w, maxInt(m.h-chromeRows, 1) }
+func (m *Model) bodySize() (int, int) { return m.w, maxInt(m.h-m.chromeRows(), 1) }
 
 // Init loads the configuration and initializes the home screen.
 func (m *Model) Init() tea.Cmd {
@@ -215,21 +216,17 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// A Vietnamese input method sends composed or multi-rune input that
 		// no shortcut matches: say so instead of doing nothing. Screens that
 		// capture the keyboard decide for themselves (a text input takes the
-		// text).
-		if imeLike(msg) && (m.showHelp || !isCapturing(m.top())) {
+		// text). The overlay has a text filter too: composed input goes into it.
+		if imeLike(msg) && !m.showHelp && !isCapturing(m.top()) {
 			return m, m.setStatus(imeStatus())
 		}
 		if m.showHelp {
-			if msg.Type == tea.KeyEsc || key.Matches(msg, m.sh.km.Help) || key.Matches(msg, m.sh.km.Back) || key.Matches(msg, m.sh.km.Quit) {
-				m.showHelp = false
-			}
-			return m, nil
+			return m.overlayUpdate(msg)
 		}
 		if !isCapturing(m.top()) {
 			switch {
-			case key.Matches(msg, m.sh.km.Help):
-				m.showHelp = true
-				return m, nil
+			case key.Matches(msg, m.sh.km.Help), key.Matches(msg, m.sh.km.Palette):
+				return m, m.openOverlay()
 			case key.Matches(msg, m.sh.km.Back) && len(m.stack) > 1:
 				// one step: a screen with an inner step (a confirmation) goes
 				// back inside itself first
@@ -307,6 +304,15 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.broadcast(msg)
 	}
 
+	// the cursor of the overlay's filter blinks through the root model
+	if bm, ok := msg.(cursor.BlinkMsg); ok && m.showHelp {
+		var c1 tea.Cmd
+		m.ov.filter, c1 = m.ov.filter.Update(bm)
+		ns, c2 := m.top().Update(bm)
+		m.stack[len(m.stack)-1] = ns
+		return m, tea.Batch(c1, c2)
+	}
+
 	// results of background work may belong to a screen below the top one (a
 	// scan goes on behind a pushed check screen): every screen sees them
 	if _, ok := msg.(bgMsg); ok {
@@ -333,7 +339,9 @@ func (m *Model) View() string {
 	} else {
 		body = m.top().View()
 	}
-	out := strings.Join([]string{m.headerView(), fitHeight(body, bh), m.statusView(), m.helpBar()}, "\n")
+	parts := []string{m.headerView(), fitHeight(body, bh), m.statusView()}
+	parts = append(parts, renderHelpBar(m.sh.st, m.helpBarItems(), m.w, m.helpRowCount())...)
+	out := strings.Join(parts, "\n")
 	return lipgloss.NewStyle().MaxWidth(m.w).MaxHeight(m.h).Render(out)
 }
 
@@ -453,6 +461,7 @@ func (m *Model) globalHelp() []key.Binding {
 			key.WithHelp("pgup/pgdn", tr("tui.key.nav_page"))),
 		key.NewBinding(key.WithKeys("home", "end"), key.WithHelp("home/end", tr("tui.key.nav_ends"))),
 		km.Help,
+		km.Palette,
 		km.ForceQuit,
 	}
 }
@@ -476,8 +485,9 @@ func imeStatus() statusMsg {
 // imeCmd is imeStatus as a command, for screens.
 func imeCmd() tea.Cmd { return func() tea.Msg { return imeStatus() } }
 
-// helpItems are the entries of the short help bar: the screen's own choice
-// when it has one, otherwise its full list. "? all keys" is always last.
+// helpItems are the enabled entries of the screen's context help: the
+// screen's own choice when it has one, otherwise its full list. helpBarItems
+// splits them into the two rows of the help bar.
 func (m *Model) helpItems() []helpItem {
 	var items []helpItem
 	if ch, ok := m.top().(contextHelper); ok {
@@ -494,211 +504,6 @@ func (m *Model) helpItems() []helpItem {
 		}
 	}
 	return out
-}
-
-// helpBar draws the short help bar. It never truncates with an ellipsis:
-// when the bar is too wide, whole low-priority items are dropped from the
-// end. The primary item and "? all keys" are never dropped.
-func (m *Model) helpBar() string {
-	st := m.sh.st
-	km := m.sh.km
-	more := helpItem{b: relabel(km.Help, tr("tui.key.all_keys"))}
-	// A screen that captures the keyboard never opens the overlay (the "?"
-	// would be typed), so the item is not offered there.
-	showMore := !isCapturing(m.top())
-	items := m.helpItems()
-	render := func(it helpItem) string {
-		h := it.b.Help()
-		if it.primary {
-			return st.HelpPrimary.Render("▸ " + h.Key + " " + h.Desc)
-		}
-		return st.Help.ShortKey.Render(h.Key) + " " + st.Help.ShortDesc.Render(h.Desc)
-	}
-	sep := "  "
-	width := func(items []helpItem) int {
-		w := 1
-		if showMore {
-			w += lipgloss.Width(render(more))
-		}
-		for _, it := range items {
-			w += lipgloss.Width(render(it)) + len(sep)
-		}
-		return w
-	}
-	for width(items) > m.w {
-		drop := -1
-		for i := len(items) - 1; i >= 0; i-- {
-			if !items[i].primary {
-				drop = i
-				break
-			}
-		}
-		if drop < 0 {
-			break
-		}
-		items = append(items[:drop:drop], items[drop+1:]...)
-	}
-	var b strings.Builder
-	b.WriteString(" ")
-	for _, it := range items {
-		b.WriteString(render(it))
-		b.WriteString(st.Help.ShortSeparator.Render(sep))
-	}
-	if !showMore {
-		return strings.TrimRight(b.String(), " ")
-	}
-	b.WriteString(render(more))
-	return b.String()
-}
-
-// helpView lists every key of the current screen, then the global keys. When
-// the bindings do not fit the height they go in two or three columns, and as
-// a last resort the blank separator lines go; the global section and the
-// close hint are always visible.
-func (m *Model) helpView(w, h int) string {
-	st := m.sh.st
-	enabled := func(bs []key.Binding) []key.Binding {
-		var out []key.Binding
-		for _, k := range bs {
-			if k.Enabled() {
-				out = append(out, k)
-			}
-		}
-		return out
-	}
-	screen, global := enabled(m.top().Help()), enabled(m.globalHelp())
-	// the overlay shows every key of an action ("c/n"), the help bar the first
-	keyText := func(b key.Binding) string { return m.overlayKey(b) }
-	kw := 10 // key column: the widest key text plus one space, so it never touches its description
-	for _, l := range [][]key.Binding{screen, global} {
-		for _, b := range l {
-			kw = maxInt(kw, minInt(lipgloss.Width(keyText(b))+1, 18))
-		}
-	}
-	inner := maxInt(w-4, 10)
-	avail := maxInt(h-2, 1) // panel border
-
-	perCol := func(n, cols int) int { return (n + cols - 1) / cols }
-	// fixed lines around the bindings: title, screen name, global title, the
-	// close hint, the rows of the global section, plus four blank separators
-	warn := len(m.sh.keyIssues) > 0
-	fixed := func(compact bool, cols int) int {
-		n := 4 + perCol(len(global), cols) + 1
-		if warn {
-			n++ // the keys.yaml problem line
-		}
-		if !compact {
-			n += 4
-		}
-		return n
-	}
-	// colWidths gives each of n columns the room its longest description
-	// needs (cell: 2 indent + 9 key + the text); fits says whether all of
-	// them are shown in full. When they are not, the widest columns shrink.
-	colWidths := func(list []key.Binding, n int) (ws []int, fits bool) {
-		rows := perCol(len(list), n)
-		ws = make([]int, n)
-		total := 0
-		for c := range ws {
-			ws[c] = kw + 3
-			for r := 0; r < rows; r++ {
-				if idx := c*rows + r; idx < len(list) {
-					ws[c] = maxInt(ws[c], kw+2+lipgloss.Width(list[idx].Help().Desc))
-				}
-			}
-			if c < n-1 {
-				ws[c] += 2 // gap before the next column
-			}
-			total += ws[c]
-		}
-		fits = total <= inner
-		// shrink from the last column: the first ones keep their text
-		for c := n - 1; c >= 0 && total > inner; c-- {
-			cut := minInt(total-inner, ws[c]-(kw+3))
-			if cut > 0 {
-				ws[c] -= cut
-				total -= cut
-			}
-		}
-		return ws, fits
-	}
-	roomy := func(n int) bool {
-		_, a := colWidths(screen, n)
-		_, b := colWidths(global, n)
-		return a && b
-	}
-	cols, compact := 1, false
-	pick := func(needRoom bool) bool {
-		for _, c := range []bool{false, true} {
-			for n := 1; n <= 3; n++ {
-				if needRoom && !roomy(n) {
-					continue
-				}
-				if fixed(c, n)+perCol(len(screen), n) <= avail {
-					cols, compact = n, c
-					return true
-				}
-			}
-		}
-		return false
-	}
-	// prefer full descriptions; else the fewest columns that fit the height
-	// (their text is then cut at a word, see cell)
-	if !pick(true) && !pick(false) {
-		cols, compact = 3, true
-	}
-
-	cell := func(k key.Binding, cw int) string {
-		hp := k.Help()
-		desc := hp.Desc
-		if cw > 0 {
-			desc = truncWords(desc, maxInt(cw-(kw+2), 1))
-		}
-		out := "  " + st.Accent.Render(pad(keyText(k), kw)) + st.Muted.Render(desc)
-		if cw > 0 {
-			out += spaces(cw - lipgloss.Width(out))
-		}
-		return out
-	}
-	blank := func(b *strings.Builder) {
-		if !compact {
-			b.WriteString("\n")
-		}
-	}
-	// section writes a list of bindings in cols columns (one: a plain list)
-	section := func(b *strings.Builder, list []key.Binding) {
-		if cols == 1 {
-			for _, k := range list {
-				b.WriteString(cell(k, 0) + "\n")
-			}
-			return
-		}
-		cws, _ := colWidths(list, cols)
-		rows := perCol(len(list), cols)
-		for r := 0; r < rows; r++ {
-			var line strings.Builder
-			for c := 0; c < cols; c++ {
-				if idx := c*rows + r; idx < len(list) {
-					line.WriteString(cell(list[idx], cws[c]))
-				}
-			}
-			b.WriteString(strings.TrimRight(line.String(), " ") + "\n")
-		}
-	}
-	var b strings.Builder
-	b.WriteString(st.PanelTitle.Render(tr("tui.help.title")) + "\n")
-	blank(&b)
-	b.WriteString(st.Bold.Render(m.top().Title()) + "\n")
-	section(&b, screen)
-	blank(&b)
-	b.WriteString(st.Bold.Render(tr("tui.help.global")) + "\n")
-	section(&b, global)
-	blank(&b)
-	b.WriteString(st.Faint.Render(m.sh.km.T("tui.help.close")))
-	if warn {
-		b.WriteString("\n" + st.Warn.Render("! "+tr("tui.help.keys_warn", len(m.sh.keyIssues))))
-	}
-	return m.sh.panel("", b.String(), w, h, true)
 }
 
 // overlayKey is the key text of a binding in the "?" overlay: all the keys of

@@ -43,9 +43,34 @@ func (h *harness) resize(w, hh int) {
 
 func (h *harness) lines() []string { return strings.Split(h.view(), "\n") }
 
-// helpLine is the help bar, statusLine the status bar.
-func (h *harness) helpLine() string   { l := h.lines(); return strings.TrimSpace(l[len(l)-1]) }
-func (h *harness) statusLine() string { l := h.lines(); return l[len(l)-2] }
+// helpRows are the lines of the help bar (one or two), each trimmed and
+// without its row label ("Dòng này:", "Luôn có:"…).
+func (h *harness) helpRows() []string {
+	l := h.lines()
+	rows := l[len(l)-h.m.helpRowCount():]
+	out := make([]string, len(rows))
+	for i, r := range rows {
+		r = strings.TrimSpace(r)
+		for _, k := range []string{"tui.help.row_this", "tui.help.row_step", "tui.help.row_always"} {
+			r = strings.TrimSpace(strings.TrimPrefix(r, tr(k)))
+		}
+		out[i] = r
+	}
+	return out
+}
+
+// helpLine is the whole help bar as one string (the rows joined with two
+// spaces, row 1 first), statusLine the status bar.
+func (h *harness) helpLine() string {
+	var parts []string
+	for _, r := range h.helpRows() {
+		if r != "" {
+			parts = append(parts, r)
+		}
+	}
+	return strings.Join(parts, "  ")
+}
+func (h *harness) statusLine() string { l := h.lines(); return l[len(l)-1-h.m.helpRowCount()] }
 
 // badge is the right part of the status bar as plain text.
 func (h *harness) badge() string { return strings.TrimSpace(h.m.syncBadge()) }
@@ -53,7 +78,7 @@ func (h *harness) badge() string { return strings.TrimSpace(h.m.syncBadge()) }
 // plain flattens box drawing and whitespace so that text wrapped by the UI
 // can be compared with the translated sentence.
 func plain(s string) string {
-	for _, c := range []string{"│", "┃", "╭", "╮", "╰", "╯", "─"} {
+	for _, c := range []string{"│", "┃", "╭", "╮", "╰", "╯", "─", "┏", "┓", "┗", "┛", "━"} {
 		s = strings.ReplaceAll(s, c, " ")
 	}
 	return strings.Join(strings.Fields(s), " ")
@@ -541,8 +566,11 @@ func TestF1PendingHelpBar(t *testing.T) {
 	if !strings.HasPrefix(hb, "▸ p "+tr("tui.key.apply")) || strings.Contains(hb, "ctrl+c") || strings.Contains(hb, "…") {
 		t.Fatalf("help bar %q", hb)
 	}
-	if n := len(strings.Split(hb, "  ")); n > 7 {
-		t.Fatalf("%d items: %q", n, hb)
+	// the bar is short: at most 7 items on each of its two rows
+	for _, row := range h.helpRows() {
+		if n := len(strings.Split(row, "  ")); n > 7 {
+			t.Fatalf("%d items: %q", n, row)
+		}
 	}
 }
 
@@ -558,7 +586,7 @@ func TestF2F3HelpBarWhenApplied(t *testing.T) {
 		t.Fatalf("ssh account without key: %q", hb)
 	}
 	h.selectKey("acme/bob")
-	if hb := h.helpLine(); strings.Contains(hb, "▸") || strings.Contains(hb, "g ") {
+	if hb := h.helpLine(); strings.Contains(hb, "▸") || strings.Contains(hb, "g "+tr("tui.key.genkey")) {
 		t.Fatalf("https account: %q", hb)
 	}
 }
@@ -595,11 +623,15 @@ func TestF4HelpBarFitsEveryWidth(t *testing.T) {
 			for _, w := range []int{40, 60, 80, 100, 120, 200} {
 				h.update(tea.WindowSizeMsg{Width: w, Height: 30})
 				hb := h.helpLine()
-				if strings.Contains(hb, "…") {
-					t.Errorf("w=%d: ellipsis in %q", w, hb)
+				// row 1 shows "…" when it dropped items; row 2 never does
+				if rows := h.helpRows(); len(rows) == 2 && strings.Contains(rows[1], "…") {
+					t.Errorf("w=%d: ellipsis in row 2 %q", w, rows[1])
 				}
-				if lipgloss.Width(" "+hb) > w {
-					t.Errorf("w=%d: help bar is %d wide: %q", w, lipgloss.Width(hb), hb)
+				all := h.lines()
+				for _, l := range all[len(all)-h.m.helpRowCount():] {
+					if lipgloss.Width(l) > w {
+						t.Errorf("w=%d: a help row is %d wide: %q", w, lipgloss.Width(l), l)
+					}
 				}
 				// a screen that captures the keyboard cannot open the overlay
 				// ("?" is typed there), so it does not offer it

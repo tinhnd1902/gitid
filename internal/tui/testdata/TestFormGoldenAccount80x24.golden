@@ -18,7 +18,7 @@
 │   Chỉ để ghi tác giả commit (user.email), gitid không xác minh. Dùng email   │
 │   đã thêm trên nền tảng, hoặc email noreply: GitHub → Settings → Emails      │
 │   (ID+login@users.noreply.github.com).                                       │
-│     vd: alice@acme.com                                                       │
 ╰──────────────────────────────────────────────────────────────────────────────╯
                                                     ● 11 thay đổi chưa áp dụng  
- ▸ enter lưu / tiếp  tab ô tiếp theo  esc hủy                                   
+ Bước này: ▸ enter lưu / tiếp  tab ô tiếp theo                                  
+ Luôn có:  esc hủy                                                              

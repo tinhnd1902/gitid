@@ -100,7 +100,7 @@ type form struct {
 	// starts and focusEnd are set by layout: the first row of every visible
 	// field and the row after the focused one.
 	starts   []int
-	wrapped  []bool // the field at the same index of starts has a wrapped value
+	vstarts  []int // per field of starts: the row of its wrapped value, else -1
 	focusEnd int
 }
 
@@ -677,7 +677,7 @@ func (f *form) condense(p fparts, rows int) fparts {
 func (f *form) layout() (lines []string, focusStart int, condensed bool) {
 	prevSection := ""
 	first := true
-	f.starts, f.wrapped = f.starts[:0], f.wrapped[:0]
+	f.starts, f.vstarts = f.starts[:0], f.vstarts[:0]
 	for i := range f.fields {
 		if !f.visible(i) {
 			continue
@@ -702,8 +702,13 @@ func (f *form) layout() (lines []string, focusStart int, condensed bool) {
 			focusStart = len(lines)
 		}
 		f.starts = append(f.starts, len(lines))
-		f.wrapped = append(f.wrapped, !focused && ff.kind == fieldInput && len(p.ctrl) > 1)
-		lines = append(lines, f.assemble(p, focused)...)
+		asm := f.assemble(p, focused)
+		vs := -1
+		if !focused && ff.kind == fieldInput && len(p.ctrl) > 1 {
+			vs = len(lines) + len(asm) - len(p.errs) - len(p.ctrl)
+		}
+		f.vstarts = append(f.vstarts, vs)
+		lines = append(lines, asm...)
 		if focused {
 			f.focusEnd = len(lines)
 		}
@@ -726,18 +731,23 @@ func (f *form) View() string {
 	return joinLines(lines)
 }
 
-// wholeAbove moves the top of the window up to the start of a wrapped value
-// it would cut, when the focused field still fits below it: a value wrapped over
-// several rows is then shown whole instead of by its last rows.
+// wholeAbove moves the top of the window up so that a wrapped value just above
+// it is shown whole, when the focused field still fits below: from the start of
+// the field, else (a tall focused field) from the first row of the value.
 func (f *form) wholeAbove(off int) int {
-	start, wrapped := -1, false
+	at := -1
 	for i, s := range f.starts {
-		if s <= off {
-			start, wrapped = s, f.wrapped[i]
+		if s < off {
+			at = i
 		}
 	}
-	if start < 0 || !wrapped || start == off || f.focusEnd > start+f.rows {
+	if at < 0 || f.vstarts[at] < 0 || f.vstarts[at] >= off {
 		return off
 	}
-	return start
+	for _, c := range []int{f.starts[at], f.vstarts[at]} {
+		if f.focusEnd <= c+f.rows {
+			return c
+		}
+	}
+	return off
 }

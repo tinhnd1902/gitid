@@ -1,30 +1,30 @@
   gitid   Danh sách                                                                   ~  v0.0.0-test
-╭─────────────────────────────────────────────────────╮╭───────────────────────────────────────────╮
-│ Công ty 3 · Tài khoản 5                             ││ Chi tiết                                  │
-│ / để lọc theo tên, email, host…                     ││ acme · ACME Corp                          │
-│ ▌ acme  ACME Corp         ~/Code/acme/  3 tài khoản ││                                           │
-│  ├─ ★ alice           GH https       alice@acme.com ││ Thư mục gốc ~/Code/acme/                  │
-│  ├─   bob             GH https         bob@acme.com ││ Mặc định    alice                         │
-│  └─   carol           GH ssh         carol@acme.com ││ Tài khoản   3                             │
-│ ▪ globex  Globex        ~/Code/globex/  1 tài khoản ││                                           │
-│  └─ ★ dave            GL ssh    dave@globex.example ││ ★ alice  GH https                         │
-│ ▪ beta  Beta              ~/Code/beta/  1 tài khoản ││   bob  GH https                           │
-│  └─ ★ alice           GH https        alice@beta.io ││   carol  GH ssh                           │
-│                                                     ││                                           │
-│                                                     ││ Điều gì sẽ xảy ra                         │
-│                                                     ││ Repo trong ~/Code/acme/ dùng Alice Nguyen │
-│                                                     ││ <alice@acme.com>.                         │
-│                                                     ││ Tài khoản khác được chọn theo remote của  │
-│                                                     ││ repo: có username của nó (https://user@…) │
-│                                                     ││ hoặc alias SSH riêng.                     │
-│                                                     ││ Còn thay đổi chưa áp dụng. Bấm p để xem   │
-│                                                     ││ trước và ghi vào ~/.gitconfig.            │
-│                                                     ││                                           │
-│                                                     ││                                           │
-│                                                     ││                                           │
-│                                                     ││                                           │
-│                                                     ││                                           │
-│                                                     ││                                           │
-╰─────────────────────────────────────────────────────╯╰───────────────────────────────────────────╯
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓╭───────────────────────────────────────────╮
+┃ Công ty 3 · Tài khoản 5  (↑↓ chọn)                  ┃│ Chi tiết                                  │
+┃ / để lọc theo tên, email, host…                     ┃│ acme · ACME Corp                          │
+┃ ▌ acme  ACME Corp         ~/Code/acme/  3 tài khoản ┃│                                           │
+┃  ├─ ★ alice           GH https       alice@acme.com ┃│ Thư mục gốc ~/Code/acme/                  │
+┃  ├─   bob             GH https         bob@acme.com ┃│ Mặc định    alice                         │
+┃  └─   carol           GH ssh         carol@acme.com ┃│ Tài khoản   3                             │
+┃ ▪ globex  Globex        ~/Code/globex/  1 tài khoản ┃│                                           │
+┃  └─ ★ dave            GL ssh    dave@globex.example ┃│ ★ alice  GH https                         │
+┃ ▪ beta  Beta              ~/Code/beta/  1 tài khoản ┃│   bob  GH https                           │
+┃  └─ ★ alice           GH https        alice@beta.io ┃│   carol  GH ssh                           │
+┃                                                     ┃│                                           │
+┃                                                     ┃│ Điều gì sẽ xảy ra                         │
+┃                                                     ┃│ Repo trong ~/Code/acme/ dùng Alice Nguyen │
+┃                                                     ┃│ <alice@acme.com>.                         │
+┃                                                     ┃│ Tài khoản khác được chọn theo remote của  │
+┃                                                     ┃│ repo: có username của nó (https://user@…) │
+┃                                                     ┃│ hoặc alias SSH riêng.                     │
+┃                                                     ┃│ Còn thay đổi chưa áp dụng. Bấm p để xem   │
+┃                                                     ┃│ trước và ghi vào ~/.gitconfig.            │
+┃                                                     ┃│                                           │
+┃                                                     ┃│                                           │
+┃                                                     ┃│                                           │
+┃                                                     ┃│                                           │
+┃                                                     ┃│                                           │
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛╰───────────────────────────────────────────╯
                                                                 ● 11 thay đổi chưa áp dụng — bấm p  
- ▸ p xem trước & áp dụng  a thêm tài khoản  e sửa  d xóa  q thoát  ? tất cả phím                    
+ Dòng này: ▸ p xem trước & áp dụng  e sửa  d xóa                                                    
+ Luôn có:  ↑↓ di chuyển  A thêm công ty  a thêm tài khoản  ? tất cả phím  q thoát                   

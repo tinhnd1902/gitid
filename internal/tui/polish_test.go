@@ -393,7 +393,7 @@ func TestA11PreviewKeepsTheFormUsable(t *testing.T) {
 			t.Errorf("%v: no preview", s)
 		}
 		// a short body shows the remote line alone, a tall one adds the note
-		short := s[1]-chromeRows < previewMinBody
+		short := s[1]-h.m.chromeRows() < previewMinBody
 		hasID := strings.Contains(plain(h.view()), plain(tr("tui.form.preview_id", "alice")))
 		if s[0] >= 60 && short && hasID {
 			t.Errorf("%v: the id line must give way on a short terminal", s)

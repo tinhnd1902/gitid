@@ -48,7 +48,7 @@ var enTUI = map[string]string{
 
 	"tui.help.title":  "Keyboard shortcuts",
 	"tui.help.global": "Every screen",
-	"tui.help.close":  "Press %[1]s, %[2]s or esc to close.",
+	"tui.help.close":  "Press %[1]s, %[2]s, %[3]s or esc to close.",
 
 	// list
 	"tui.list.title":        "Overview",
@@ -347,6 +347,18 @@ var enTUI = map[string]string{
 	"tui.key.back_global":     "go back one step",
 	"tui.key.nav_page":        "page up/down",
 	"tui.key.nav_ends":        "first/last row",
+
+	// two-row help bar and searchable overlay
+	"tui.help.row_this":     "This row:",
+	"tui.help.row_step":     "This step:",
+	"tui.help.row_always":   "Always:",
+	"tui.help.filter_hint":  "type to filter · ↑↓ select · enter run",
+	"tui.help.close_filter": "esc clears the filter · %[1]s or %[2]s closes",
+	"tui.help.no_match":     "No key matches “%s”.",
+	"tui.key.run":           "run",
+	"tui.key.close":         "close",
+	"tui.key.palette":       "search and run a command",
+	"tui.list.panel_hint":   "↑↓ select",
 }
 
 func init() {

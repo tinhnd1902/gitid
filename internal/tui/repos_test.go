@@ -1079,7 +1079,7 @@ func TestT71HelpBar(t *testing.T) {
 	r := openLocal(h)
 	h.walkTo(r, p["acme/org/x"])
 	bar := plain(h.helpLine())
-	order := []string{"▸ k " + tr("tui.key.check"), "f " + tr("tui.key.fix"), "c " + tr("tui.key.copy_path"), "/ " + tr("tui.key.filter"), "! " + tr("tui.key.problems"), "r " + tr("tui.key.rescan"), "tab " + tr("tui.key.tab"), "esc " + tr("tui.key.back"), "? " + tr("tui.key.all_keys")}
+	order := []string{"▸ k " + tr("tui.key.check"), "f " + tr("tui.key.fix"), "c " + tr("tui.key.copy_path"), "/ " + tr("tui.key.filter"), "! " + tr("tui.key.problems"), "r " + tr("tui.key.rescan"), "tab " + tr("tui.key.tab"), "? " + tr("tui.key.all_keys"), "esc " + tr("tui.key.back")}
 	last := -1
 	for _, part := range order {
 		i := strings.Index(bar, part)

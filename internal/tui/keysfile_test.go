@@ -23,7 +23,7 @@ var actionField = map[keymap.Action]string{
 	keymap.Clone: "Clone", keymap.Check: "Check", keymap.Doctor: "Doctor", keymap.Apply: "Apply",
 	keymap.SSHKey: "GenKey", keymap.Import: "Import", keymap.Reload: "Reload", keymap.Yes: "Yes", keymap.No: "No",
 	keymap.Fix: "Fix", keymap.Retry: "Retry", keymap.Copy: "Copy", keymap.Open: "Open", keymap.SSHTest: "SSHTest",
-	keymap.Terminal: "TerminalMode", keymap.Problems: "Problems",
+	keymap.Terminal: "TerminalMode", keymap.Problems: "Problems", keymap.Palette: "Palette",
 }
 
 func TestKM2RegistryMatchesKeyMap(t *testing.T) {

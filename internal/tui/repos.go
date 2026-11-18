@@ -422,6 +422,49 @@ func (s *reposScreen) ContextHelp() []helpItem {
 	return out
 }
 
+// AlwaysHelp is row 2 of the help bar: the keys that work whatever repository
+// is selected. The exit (esc) comes from ContextHelp. The Local tab mirrors the
+// conditions of localHelp.
+func (s *reposScreen) AlwaysHelp() []helpItem {
+	km := s.sh.km
+	var out []helpItem
+	switch s.tab {
+	case tabLocal:
+		if s.fmode == filterTyping {
+			return nil
+		}
+		if len(s.sh.cfg.Companies) > 0 {
+			if s.repoCount() > 1 {
+				out = append(out, helpItem{b: withDesc(km.Up, "↑↓", tr("tui.key.move")), prio: 1})
+			}
+			if len(s.scans) > 0 {
+				out = append(out, helpItem{b: key.NewBinding(key.WithKeys("left", "right"), key.WithHelp("←/→", tr("tui.key.group")))})
+			}
+			out = append(out,
+				helpItem{b: km.Filter, prio: 2},
+				helpItem{b: km.Problems, prio: 2},
+				helpItem{b: relabel(km.Reload, tr("tui.key.rescan")), prio: 1})
+		}
+		return append(out, helpItem{b: s.tabBinding(), prio: 3})
+	case tabURL:
+		if s.tabLocked() {
+			return nil
+		}
+	}
+	return []helpItem{{b: s.tabBinding(), prio: 3}}
+}
+
+// repoCount is the number of repositories the Local tab can select.
+func (s *reposScreen) repoCount() int {
+	n := 0
+	for _, r := range s.rows {
+		if r.kind == rowRepo {
+			n++
+		}
+	}
+	return n
+}
+
 // ---- tab bar and view ----
 
 func (s *reposScreen) tabLabel(t reposTab) string {

@@ -30,35 +30,41 @@ var (
 
 // Styles is the single theme used by the whole TUI.
 type Styles struct {
-	Brand        lipgloss.Style // "gitid" pill in the header
-	Crumb        lipgloss.Style
-	CrumbSep     lipgloss.Style
-	Text         lipgloss.Style
-	Muted        lipgloss.Style
-	Faint        lipgloss.Style
-	Accent       lipgloss.Style
-	Bold         lipgloss.Style
-	OK           lipgloss.Style
-	Warn         lipgloss.Style
-	Err          lipgloss.Style
-	Info         lipgloss.Style
-	Panel        lipgloss.Style // blurred panel
-	PanelFocus   lipgloss.Style // focused panel
-	PanelTitle   lipgloss.Style
-	Label        lipgloss.Style // "Email:" style labels
-	Selected     lipgloss.Style // selected list row
-	Button       lipgloss.Style
-	ButtonOn     lipgloss.Style
-	ButtonDanger lipgloss.Style
-	DiffAdd      lipgloss.Style
-	DiffDel      lipgloss.Style
-	DiffHunk     lipgloss.Style
-	DiffMeta     lipgloss.Style
-	StatusBar    lipgloss.Style
-	Badge        lipgloss.Style // highlighted status badge (pending changes)
-	HelpPrimary  lipgloss.Style // the next-step item of the help bar
-	Help         help.Styles
-	Spinner      spinner.Model
+	Brand          lipgloss.Style // "gitid" pill in the header
+	Crumb          lipgloss.Style
+	CrumbSep       lipgloss.Style
+	Text           lipgloss.Style
+	Muted          lipgloss.Style
+	Faint          lipgloss.Style
+	Accent         lipgloss.Style
+	Bold           lipgloss.Style
+	OK             lipgloss.Style
+	Warn           lipgloss.Style
+	Err            lipgloss.Style
+	Info           lipgloss.Style
+	Panel          lipgloss.Style // blurred panel
+	PanelFocus     lipgloss.Style // focused panel
+	PanelActive    lipgloss.Style // the pane that has the keyboard when two panes are shown (heavy border)
+	PanelTitle     lipgloss.Style
+	PanelTitleBlur lipgloss.Style // title of a pane that does not have the keyboard
+	Label          lipgloss.Style // "Email:" style labels
+	Selected       lipgloss.Style // selected list row
+	Button         lipgloss.Style
+	ButtonOn       lipgloss.Style
+	ButtonDanger   lipgloss.Style
+	DiffAdd        lipgloss.Style
+	DiffDel        lipgloss.Style
+	DiffHunk       lipgloss.Style
+	DiffMeta       lipgloss.Style
+	StatusBar      lipgloss.Style
+	Badge          lipgloss.Style // highlighted status badge (pending changes)
+	HelpPrimary    lipgloss.Style // the next-step item of the help bar
+	HelpLabel      lipgloss.Style // "This row:" / "Always:" in front of a help row
+	HelpAlwaysKey  lipgloss.Style // keys of row 2 while the row labels are hidden
+	HelpAlwaysDesc lipgloss.Style
+	HelpSelected   lipgloss.Style // the selected row of the "?" overlay
+	Help           help.Styles
+	Spinner        spinner.Model
 
 	// Form styles (form.go). Palette colors only.
 	FormTitle       lipgloss.Style // title of the focused field
@@ -92,7 +98,11 @@ func NewStyles() *Styles {
 	s.Info = lipgloss.NewStyle().Foreground(colInfo)
 	s.Panel = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(colLine).Padding(0, 1)
 	s.PanelFocus = s.Panel.BorderForeground(colAccent)
+	// a heavy border has the same frame size as a rounded one (one cell per
+	// side), so no layout arithmetic changes
+	s.PanelActive = s.Panel.Border(lipgloss.ThickBorder()).BorderForeground(colAccent)
 	s.PanelTitle = lipgloss.NewStyle().Bold(true).Foreground(colAccent)
+	s.PanelTitleBlur = lipgloss.NewStyle().Foreground(colMuted)
 	s.Label = lipgloss.NewStyle().Foreground(colMuted)
 	s.Selected = lipgloss.NewStyle().Background(colSelBg).Foreground(colText).Bold(true)
 	s.Button = lipgloss.NewStyle().Padding(0, 2).Foreground(colText).Background(colSelBg)
@@ -108,6 +118,10 @@ func NewStyles() *Styles {
 	// dark warn, which keeps the contrast readable in both themes.
 	s.Badge = lipgloss.NewStyle().Bold(true).Foreground(colOnAcc).Background(colWarn).Padding(0, 1)
 	s.HelpPrimary = lipgloss.NewStyle().Bold(true).Foreground(colAccent)
+	s.HelpLabel = lipgloss.NewStyle().Foreground(colFaint)
+	s.HelpAlwaysKey = lipgloss.NewStyle().Foreground(colTeal)
+	s.HelpAlwaysDesc = lipgloss.NewStyle().Foreground(colMuted)
+	s.HelpSelected = s.Selected
 	s.Help = help.Styles{
 		ShortKey:       lipgloss.NewStyle().Foreground(colAccent),
 		ShortDesc:      lipgloss.NewStyle().Foreground(colMuted),

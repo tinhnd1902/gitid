@@ -612,7 +612,7 @@ func (s *reposScreen) geom() localGeom {
 	}
 	avail := g.ih - head
 	switch {
-	case avail >= 13:
+	case avail >= 12:
 		g.detail = 6
 	case avail >= 8:
 		g.detail = 3

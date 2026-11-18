@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- TUI help bar: every screen now has a two-row bar (one row below 14 terminal
+  rows). Row 1 holds the keys of the selected row or step (`▸` marks the next
+  step), row 2 the keys that are always available, then `? all keys`, then the
+  exit key last. On the list, row 2 shows `↑↓ move`, `A add company` and
+  `a add account`. The row labels show only while every key of the row fits
+  with them. The body is one row shorter in two-row mode.
+- TUI focus: the list pane of the list screen has a heavy border (and the
+  hint `(↑↓ select)` when it has rows to move over); the detail pane has a thin
+  one.
+- TUI `?` overlay is searchable: type to filter by description (accents and
+  capitals are ignored, Vietnamese input works) or key, `↑`/`↓` select,
+  `enter` runs the row exactly like its key. `esc` clears the filter, then
+  closes.
+- New rebindable action `palette` (default `ctrl+k`, same screens as `help`)
+  that opens the overlay. Note: a `keys.yaml` written earlier that binds
+  `ctrl+k` to another action in a screen the palette shares now conflicts with
+  the new default; that binding is reported and the action keeps its default
+  key. Bind `palette` to another key to keep yours.
 - Repo browser: the clone key (`c`) now opens a screen with three tabs, Local,
   URL and Online, switched with `tab` and `shift+tab`. It opens on the URL tab,
   which is the clone flow exactly as before (paste, pick the account, clone,

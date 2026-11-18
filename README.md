@@ -354,6 +354,7 @@ clone: ["c", "n"]   # two keys for one action
 | `ssh_test` | `s` | doctor |
 | `terminal` | `t` | clone |
 | `problems` | `!` | repo browser (show only repos with a problem) |
+| `palette` | `ctrl+k` | every screen except forms (opens the same overlay as `help`) |
 
 A key is one printable ASCII character (`v`, `V`, `/`, `5`), `ctrl+<letter>`, `alt+<character>` or `f1` to `f12`. These are not valid: letters with accents (`â`, `đ`), words (`ab`), and named keys such as `enter`, `esc`, `tab`, the arrows or `space`. Quote the key when YAML would read it differently: `"?"`, `"#"`, `"&"`, `"*"`, `"!"`, `"|"`, `">"`, `"%"`, `"@"`, `` "`" ``.
 
@@ -361,13 +362,15 @@ These keys cannot be changed: `ctrl+c`, `esc` (always goes back one step), `ente
 
 Two actions that are live on the same screen cannot share a key (the list for `check` and `clone`, for example), but a key may mean different things on screens that never show together. Swapping two keys is fine: `clone: "e"` with `edit: "c"`. A problem never stops gitid: the affected action keeps its default key and gitid says so, in the status bar when the TUI starts, at the bottom of the `?` overlay, in `gitid keys` (which exits with 2) and in `gitid doctor` (a warning). A file that cannot be read or parsed leaves every default in place. An unknown action name (for example one from a newer gitid) is reported and ignored.
 
-Press `r` on the list to reload `config.yaml` and `keys.yaml` without leaving the TUI. Shortcuts need a keyboard layout that sends plain letters: with a Vietnamese input method switched on (Telex, VNI) gitid cannot read `a`, `k` and the others, and says so in the status bar; switch to EN (ABC) first. For the same reason keys with non-ASCII characters are not accepted in `keys.yaml`.
+Press `r` on the list to reload `config.yaml` and `keys.yaml` without leaving the TUI. Shortcuts need a keyboard layout that sends plain letters: with a Vietnamese input method switched on (Telex, VNI) gitid cannot read `a`, `k` and the others, and says so in the status bar; switch to EN (ABC) first. The one exception is the filter of the `?` overlay, which is a text box: Vietnamese input works there. For the same reason keys with non-ASCII characters are not accepted in `keys.yaml`. If a `keys.yaml` written before `palette` existed binds `ctrl+k` to another action in a screen the palette shares, that binding is reported as a conflict and the action goes back to its default key; rebind `palette` to keep your key.
 
 ## Features in Detail
 
 ### List
 
 The home screen is a tree of companies and accounts with a platform tag (`GH`, `GL`, `BB`, `GT`, `AZ`), the auth mode, `★` for the company default and the email. Press `/` to filter by name, username, email, host or platform; matching is fuzzy inside each word and the tree order is kept. From 84 columns a detail pane sits next to the list; from 60 columns (and 24 rows) it sits below the list; on smaller terminals `enter` opens it. The pane explains what the selected company or account does ("What happens"); for an account it also shows the remote it produces, its folder and the next step. Two accounts of one company with the same platform, host and username are flagged with `!`. A company without an account is marked `no accounts yet`: gitid writes nothing for it until you add one with `a`.
+
+The bottom of every screen has a two-row help bar (one row on terminals under 14 rows). Row 1 holds the keys of the selected row or of the current step, with `▸` on the next step to take; row 2 holds the keys that are always available (on the list: `↑↓` move, `A` add company, `a` add account), then `? all keys`, then the exit key (`q` quit on the list, `esc` elsewhere) last. Labels in front of the rows ("This row:", "Always:") show only while every key of the row fits with them. The list pane has a heavy border, which marks where the arrow keys act; the detail pane next to it or below it has a thin one. Press `?` or `ctrl+k` for the shortcuts overlay: it is searchable. Type to filter by description (accents and capitals do not matter: `cong ty` finds "thêm công ty") or by key, move with `↑`/`↓`, and press `enter` to run the selected row, exactly as if you had pressed its key. `esc` clears the filter, then closes; `?` and `ctrl+k` close at any time; `q` closes while the filter is empty. Rows that only move (`↑/↓`, paging) and the "every screen" rows are shown dimmed and cannot be run.
 
 ```text
 ▌ acme  ACME Corp                   ~/Code/acme/  2 accounts

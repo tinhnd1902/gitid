@@ -39,7 +39,7 @@ func sentinelKeys() (yaml string, label map[keymap.Action]string) {
 	var b strings.Builder
 	for i, d := range keymap.Defs() {
 		// 52 labels: alt+a..z, then alt+A..Z (the registry outgrew 26 actions
-		// before; it holds 24 today)
+		// before; it holds 25 today)
 		l := "alt+" + string(rune('a'+i))
 		if i >= 26 {
 			l = "alt+" + string(rune('A'+i-26))
@@ -84,6 +84,8 @@ var grdOverlay = map[string]bool{
 	"confirm ready": true, "confirm done": true, "check result": true, "clone pick": true,
 	"key result": true, "doctor": true, "import proposals": true, "delete step 0": true, "keygen mode": true,
 	"repos local list": true,
+	// the mutation of GRD-4b: the swallowed add-account key must show up via the overlay too
+	"detail ssh account (blind)": true,
 }
 
 func grdStates() []grdState {
@@ -358,7 +360,14 @@ func allowedHint(h *harness, state, label string) bool {
 	return false
 }
 
-type grdProbe struct{ key, why string }
+// grdProbe is one key to press. A probe with overlay set is not pressed
+// directly: it is run through the "?" overlay, as the row number idx of the
+// runnable rows of the screen section (open, select, enter).
+type grdProbe struct {
+	key, why string
+	overlay  bool
+	idx      int
+}
 
 // guardState runs the guard on one state and returns what is wrong with it.
 func guardState(t *testing.T, st grdState, keysYAML string) []string {
@@ -377,15 +386,46 @@ func guardState(t *testing.T, st grdState, keysYAML string) []string {
 			return
 		}
 		seen[k] = true
-		todo = append(todo, grdProbe{k, why})
+		todo = append(todo, grdProbe{key: k, why: why})
 	}
-	for _, it := range probe.m.helpItems() {
+	// In the overlay states every runnable row of the overlay is run through
+	// the overlay; a key that is also on the help bar is then probed only that
+	// way (the overlay wins), so no state needs more harnesses than before.
+	if !capturing && grdOverlay[st.name] {
+		screen, _ := probe.m.overlayAllRows()
+		idx := 0
+		for _, r := range screen {
+			if !r.runnable {
+				continue
+			}
+			if k := r.b.Keys()[0]; !seen[k] {
+				seen[k] = true
+				todo = append(todo, grdProbe{key: k, why: "overlay " + r.keyText, overlay: true, idx: idx})
+			}
+			idx++
+		}
+	}
+	for _, it := range probe.m.helpBarItems().all() {
 		add(it.b.Keys()[0], "help bar "+it.b.Help().Key)
 	}
 	if !capturing && grdOverlay[st.name] {
+		// navigation rows cannot be run from the overlay: press them directly
 		for _, b := range top.Help() {
 			if b.Enabled() {
 				add(b.Keys()[0], "overlay "+b.Help().Key)
+			}
+		}
+	}
+	if !capturing {
+		// GRD-8: the last line of the frame offers the overlay and the exit
+		lines := strings.Split(probe.view(), "\n")
+		last := plain(lines[len(lines)-1])
+		bar := probe.m.helpBarItems()
+		for name, it := range map[string]*helpItem{"all keys": bar.more, "exit": bar.exit} {
+			if it == nil {
+				failf("%s: the help bar has no %s item", st.name, name)
+			} else if want := plain(it.b.Help().Key + " " + it.b.Help().Desc); !strings.Contains(last, want) {
+				failf("%s: the last line %q lacks the %s item %q", st.name, last, name, want)
 			}
 		}
 	}
@@ -427,6 +467,29 @@ func guardState(t *testing.T, st grdState, keysYAML string) []string {
 
 	for _, pk := range todo {
 		h := st.setup(t, keysYAML)
+		if pk.overlay {
+			before := h.snapshot()
+			h.send(keyMsg(helpKey))
+			// the selection starts on the next step: go to the first row, then
+			// down to the row of the probe (no settling between the presses)
+			for i := 0; i < 40; i++ {
+				h.update(keyMsg("up"))
+			}
+			for i := 0; i < pk.idx; i++ {
+				h.update(keyMsg("down"))
+			}
+			h.drain()
+			h.key("enter")
+			if v := h.view(); strings.Contains(v, "%!") {
+				failf("%s: after running %q from the overlay the frame shows a format error:\n%s", st.name, pk.key, v)
+			}
+			if h.m.showHelp {
+				failf("%s (%s): running %q from the overlay left it open", st.name, pk.why, pk.key)
+			} else if h.snapshot() == before {
+				failf("%s (%s): key %q has no effect when run via the overlay", st.name, pk.why, pk.key)
+			}
+			continue
+		}
 		switch pk.key {
 		case "up":
 			h.key("down")
@@ -559,14 +622,21 @@ func TestGRD4TheGuardCanFail(t *testing.T) {
 			return h
 		}}
 		fails := guardState(t, blind, keysYAML)
-		found := false
+		found, viaOverlay := false, false
 		for _, f := range fails {
 			if strings.Contains(f, "has no effect") && strings.Contains(f, keymapLabel(keysYAML, keymap.AddAccount)) {
 				found = true
 			}
+			// GRD-4b: the overlay probe reports it too
+			if strings.Contains(f, "via the overlay") && strings.Contains(f, "has no effect") && strings.Contains(f, keymapLabel(keysYAML, keymap.AddAccount)) {
+				viaOverlay = true
+			}
 		}
 		if !found {
 			t.Errorf("sentinel=%v: the guard did not report the swallowed add-account key; got %v", keysYAML != "", fails)
+		}
+		if !viaOverlay {
+			t.Errorf("sentinel=%v: the guard did not report the swallowed add-account key via the overlay; got %v", keysYAML != "", fails)
 		}
 	}
 }
@@ -640,7 +710,7 @@ func defaultLetters() map[string]keymap.Action {
 // rawFrame is a frame with the border characters blanked but the spacing
 // kept (plain collapses runs of spaces, which hides "k  text").
 func rawFrame(s string) string {
-	for _, c := range []string{"│", "┃", "╭", "╮", "╰", "╯", "─"} {
+	for _, c := range []string{"│", "┃", "╭", "╮", "╰", "╯", "─", "┏", "┓", "┗", "┛", "━"} {
 		s = strings.ReplaceAll(s, c, " ")
 	}
 	return s
@@ -665,7 +735,7 @@ func staleLabels(t *testing.T, st grdState, probe *harness, keysYAML, frame stri
 			}
 		}
 	}
-	for _, it := range probe.m.helpItems() {
+	for _, it := range probe.m.helpBarItems().all() {
 		check("help bar item "+it.b.Help().Desc, it.b.Help().Key)
 	}
 	scan := func(where, text string) {

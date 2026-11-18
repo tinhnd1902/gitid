@@ -38,7 +38,24 @@ type Screen interface {
 type helpItem struct {
 	b       key.Binding
 	primary bool
+	// prio orders the items of the second help row: the higher survives
+	// longer when the row is short of width.
+	prio int
+	role helpRole
 }
+
+// helpRole tells the help bar where an item belongs when the screen says so.
+type helpRole int
+
+const (
+	roleAuto   helpRole = iota // classified by the help bar
+	roleAlways                 // row 2
+	roleExit                   // the exit key, drawn last
+)
+
+// alwaysHelper is implemented by screens that have keys which are available in
+// every state (row 2 of the help bar), and name their exit key.
+type alwaysHelper interface{ AlwaysHelp() []helpItem }
 
 // contextHelper is implemented by screens that choose the entries of the
 // short help bar for their current state. Help() stays the full list shown by
@@ -187,14 +204,27 @@ func (sh *shared) panel(title, content string, w, h int, focus bool) string {
 	if w < 4 || h < 3 {
 		return ""
 	}
-	st := sh.st.Panel
+	st, ts := sh.st.Panel, sh.st.PanelTitleBlur
 	if focus {
-		st = sh.st.PanelFocus
+		st, ts = sh.st.PanelFocus, sh.st.PanelTitle
 	}
+	return sh.framed(st, ts, title, content, w, h)
+}
+
+// activePanel is panel for the pane that has the keyboard while another pane
+// is shown beside or below it: a heavy border in the accent colour.
+func (sh *shared) activePanel(title, content string, w, h int) string {
+	if w < 4 || h < 3 {
+		return ""
+	}
+	return sh.framed(sh.st.PanelActive, sh.st.PanelTitle, title, content, w, h)
+}
+
+func (sh *shared) framed(st, titleStyle lipgloss.Style, title, content string, w, h int) string {
 	inner := w - st.GetHorizontalFrameSize()
 	body := content
 	if title != "" {
-		body = sh.st.PanelTitle.Render(trunc(title, inner)) + "\n" + content
+		body = titleStyle.Render(trunc(title, inner)) + "\n" + content
 	}
 	body = clipBlock(body, inner, h-st.GetVerticalFrameSize())
 	return st.Width(w - st.GetHorizontalBorderSize()).Height(h - st.GetVerticalBorderSize()).Render(body)

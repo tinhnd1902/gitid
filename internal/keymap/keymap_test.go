@@ -84,8 +84,9 @@ func TestKM1DefaultsInvariant(t *testing.T) {
 			}
 		}
 	}
-	// the plan's table has 24 actions (23, plus problems of the repo browser)
-	if n := len(keymap.Defs()); n != 24 {
+	// the plan's table has 25 actions (23, plus problems of the repo browser
+	// and palette, the alias of the help overlay)
+	if n := len(keymap.Defs()); n != 25 {
 		t.Errorf("%d actions", n)
 	}
 }
@@ -492,7 +493,7 @@ func checkNoConflicts(t *testing.T, m keymap.Map) {
 }
 
 func TestResolvedMapsNeverConflict(t *testing.T) {
-	// every pair of single-key bindings of the 24 actions, resolved together
+	// every pair of single-key bindings of the 25 actions, resolved together
 	letters := []string{"a", "c", "k", "q", "r", "y", "n", "h", "j", "x", "?", "/"}
 	rng := rand.New(rand.NewSource(7))
 	defs := keymap.Defs()
@@ -865,7 +866,7 @@ func TestK1ReposScope(t *testing.T) {
 		}
 	}
 	slices.Sort(keysSeen)
-	want := []string{"!", "/", "?", "c", "f", "k", "q", "r"}
+	want := []string{"!", "/", "?", "c", "ctrl+k", "f", "k", "q", "r"}
 	if !slices.Equal(keysSeen, want) {
 		t.Fatalf("repos defaults %v, want %v", keysSeen, want)
 	}
@@ -924,6 +925,83 @@ func TestK6ProblemsTranslated(t *testing.T) {
 	for _, lang := range []string{"vi", "en"} {
 		if v := i18n.Messages(lang)["tui.key.problems"]; v == "" {
 			t.Errorf("tui.key.problems missing in %s", lang)
+		}
+	}
+}
+
+// PK-1: palette is the last action, bound to ctrl+k in the scopes of help.
+func TestPK1PaletteDef(t *testing.T) {
+	defs := keymap.Defs()
+	last := defs[len(defs)-1]
+	if last.Action != keymap.Palette || string(last.Action) != "palette" || !slices.Equal(last.Default, []string{"ctrl+k"}) || last.DescKey != "tui.key.palette" {
+		t.Fatalf("last def %+v", last)
+	}
+	var help keymap.Def
+	for _, d := range defs {
+		if d.Action == keymap.Help {
+			help = d
+		}
+	}
+	if !slices.Equal(last.Scopes, help.Scopes) {
+		t.Fatalf("palette scopes %v, help scopes %v", last.Scopes, help.Scopes)
+	}
+}
+
+// PK-2: no other action shares ctrl+k with palette in any scope.
+func TestPK2NoDefaultSharesCtrlK(t *testing.T) {
+	for _, d := range keymap.Defs() {
+		if d.Action == keymap.Palette {
+			continue
+		}
+		if slices.Contains(d.Default, "ctrl+k") {
+			t.Errorf("%s defaults to ctrl+k", d.Action)
+		}
+	}
+	if k, ok := keymap.ValidKey("ctrl+k"); !ok || k != "ctrl+k" {
+		t.Error("ctrl+k must be a valid key")
+	}
+}
+
+// PK-4: another action on a key the palette shares a scope with is refused.
+func TestPK4PaletteConflict(t *testing.T) {
+	m, is := parse(t, "palette: k\n")
+	if keysOf(m, keymap.Palette) != "ctrl+k" || m.Custom(keymap.Palette) {
+		t.Fatalf("palette keys %v", m.Keys(keymap.Palette))
+	}
+	if len(is) != 1 || is[0].Code != keymap.ErrConflict || is[0].Scope != keymap.ScopeList || is[0].Other != "check" {
+		t.Fatalf("%+v", is)
+	}
+}
+
+// PK-5: an old keys.yaml that binds ctrl+k to another action conflicts with
+// the new default (documented in the changelog); the other action reverts.
+func TestPK5OldCtrlKBindingReverts(t *testing.T) {
+	m, is := parse(t, "check: ctrl+k\n")
+	if keysOf(m, keymap.Check) != "k" || keysOf(m, keymap.Palette) != "ctrl+k" {
+		t.Fatalf("check %v palette %v", m.Keys(keymap.Check), m.Keys(keymap.Palette))
+	}
+	if len(is) != 1 || is[0].Code != keymap.ErrConflict || is[0].Action != "check" || is[0].Other != "palette" {
+		t.Fatalf("%+v", is)
+	}
+}
+
+// PK-6: the example lists the palette.
+func TestPK6ExampleListsPalette(t *testing.T) {
+	if ex := keymap.Example("~/x/keys.yaml"); !strings.Contains(ex, `palette: "ctrl+k"`) {
+		t.Fatalf("no palette line in:\n%s", ex)
+	}
+}
+
+// PK-7: the descriptions exist in both languages.
+func TestPK7PaletteTranslated(t *testing.T) {
+	defer i18n.SetLang("vi")
+	for _, lang := range []string{"vi", "en"} {
+		i18n.SetLang(lang)
+		for _, k := range []string{"tui.key.palette", "tui.key.run", "tui.key.close", "tui.help.row_this", "tui.help.row_step",
+			"tui.help.row_always", "tui.help.filter_hint", "tui.help.close_filter", "tui.help.no_match", "tui.list.panel_hint"} {
+			if got := i18n.T(k, "x"); got == k || strings.TrimSpace(got) == "" {
+				t.Errorf("%s: %q is not translated", lang, k)
+			}
 		}
 	}
 }

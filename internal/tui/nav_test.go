@@ -220,8 +220,10 @@ func TestDET9EmptyCompanyHelpBar(t *testing.T) {
 	if !strings.HasPrefix(h.helpLine(), "▸ a") {
 		t.Fatalf("help %q", h.helpLine())
 	}
-	if w := lipgloss.Width(h.helpLine()); w > 72 {
-		t.Fatalf("help width %d", w)
+	for i, row := range h.helpRows() {
+		if w := lipgloss.Width(row); w > 72 {
+			t.Fatalf("help row %d is %d wide", i, w)
+		}
 	}
 	assertFits(t, h.view(), 72, 24, "detail of empty company")
 }
