@@ -53,6 +53,15 @@ func (k *keygenScreen) Init() tea.Cmd   { return k.spin.Tick }
 func (k *keygenScreen) Resize(w, h int) { k.w, k.h = w, h }
 func (k *keygenScreen) Capturing() bool { return k.phase == kgRunning || k.phase == kgFinishing }
 
+// StepBack: esc/q in the no-passphrase confirmation returns to the mode choice.
+func (k *keygenScreen) StepBack() bool {
+	if k.phase == kgNoPassConfirm {
+		k.phase = kgMode
+		return true
+	}
+	return false
+}
+
 func (k *keygenScreen) Help() []key.Binding {
 	km := k.sh.km
 	switch k.phase {
@@ -117,7 +126,7 @@ func (k *keygenScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 				k.sure.toggle()
 			case key.Matches(msg, km.Yes):
 				return k, k.run(true)
-			case key.Matches(msg, km.No), msg.Type == tea.KeyEsc:
+			case key.Matches(msg, km.No):
 				k.phase = kgMode
 			case key.Matches(msg, km.Enter):
 				if k.sure.idx == 1 {

@@ -258,6 +258,9 @@ func (c *confirmScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 				return c, c.apply()
 			case key.Matches(msg, km.No):
 				return c, tea.Batch(c.sh.popNow(), hint(tr("tui.status.apply_later")))
+			case key.Matches(msg, km.Enter):
+				// enter does not apply: say which key does
+				return c, say(levelInfo, tr("tui.status.press_yes", km.Yes.Help().Key))
 			}
 			var cmd tea.Cmd
 			c.vp, cmd = c.vp.Update(msg)
@@ -270,7 +273,7 @@ func (c *confirmScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 				return c, c.sh.replaceNow(newCheckScreen(c.sh))
 			}
 			if c.state == confDone && key.Matches(msg, km.Clone) {
-				return c, c.sh.replaceNow(newCloneScreen(c.sh))
+				return c, c.sh.replaceNow(newCloneScreen(c.sh, nil))
 			}
 		case confFailed:
 			if key.Matches(msg, km.Retry) {

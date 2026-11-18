@@ -29,6 +29,10 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+// defaultIdle is the idle wait of new harnesses (0: 60ms). Tests run one at a
+// time, so a test that builds many harnesses may shorten it while it runs.
+var defaultIdle time.Duration
+
 // harness drives the root model with messages, the way Bubble Tea does:
 // commands run in goroutines and their results are fed back to Update.
 type harness struct {
@@ -42,6 +46,10 @@ type harness struct {
 	mu       sync.Mutex
 	inflight map[int]time.Time // commands that have started and not returned yet
 	nextCmd  int
+	quitSeen bool // a tea.QuitMsg was produced
+	// idle is how long drain waits for a late message once nothing is in
+	// flight (0: the default).
+	idle time.Duration
 }
 
 // newHarness builds a model over a temp HOME. cfg (optional) is saved first.
@@ -55,7 +63,7 @@ func newHarness(t *testing.T, cfg *config.Config) *harness {
 			t.Fatalf("seed config: %v", err)
 		}
 	}
-	h := &harness{t: t, e: e, fake: fake, svc: svc, msgs: make(chan tea.Msg, 256), inflight: map[int]time.Time{}}
+	h := &harness{t: t, e: e, fake: fake, svc: svc, msgs: make(chan tea.Msg, 256), inflight: map[int]time.Time{}, idle: defaultIdle}
 	h.m = New(svc, Options{Cwd: e.Home, Version: "test"})
 	h.send(tea.WindowSizeMsg{Width: 100, Height: 30})
 	h.run(h.m.Init())
@@ -128,6 +136,11 @@ func (h *harness) deliver(msg tea.Msg) {
 	if msg == nil {
 		return
 	}
+	if _, ok := msg.(tea.QuitMsg); ok {
+		h.mu.Lock()
+		h.quitSeen = true
+		h.mu.Unlock()
+	}
 	rv := reflect.ValueOf(msg)
 	if rv.Kind() == reflect.Slice && rv.Type().Elem() == reflect.TypeOf((tea.Cmd)(nil)) {
 		name := rv.Type().Name()
@@ -164,12 +177,19 @@ func (h *harness) drain() {
 				continue
 			}
 			h.update(msg)
-		case <-time.After(60 * time.Millisecond):
+		case <-time.After(h.idleWait()):
 			if !h.busy() {
 				return
 			}
 		}
 	}
+}
+
+func (h *harness) idleWait() time.Duration {
+	if h.idle > 0 {
+		return h.idle
+	}
+	return 60 * time.Millisecond
 }
 
 func (h *harness) update(msg tea.Msg) {
@@ -216,11 +236,33 @@ func keyMsg(s string) tea.KeyMsg {
 		return tea.KeyMsg{Type: tea.KeyHome}
 	case "ctrl+c":
 		return tea.KeyMsg{Type: tea.KeyCtrlC}
+	case "left":
+		return tea.KeyMsg{Type: tea.KeyLeft}
+	case "right":
+		return tea.KeyMsg{Type: tea.KeyRight}
+	case "pgup":
+		return tea.KeyMsg{Type: tea.KeyPgUp}
+	case "pgdown":
+		return tea.KeyMsg{Type: tea.KeyPgDown}
+	case "backspace":
+		return tea.KeyMsg{Type: tea.KeyBackspace}
+	case "shift+tab":
+		return tea.KeyMsg{Type: tea.KeyShiftTab}
+	}
+	if r := []rune(s); len(r) == 5 && strings.HasPrefix(s, "alt+") {
+		return tea.KeyMsg{Type: tea.KeyRunes, Runes: r[4:], Alt: true}
 	}
 	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}
 }
 
 func (h *harness) view() string { return h.m.View() }
+
+// quit reports whether the program was asked to quit.
+func (h *harness) quit() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.quitSeen
+}
 
 func (h *harness) mustContain(parts ...string) {
 	h.t.Helper()

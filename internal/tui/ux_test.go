@@ -138,7 +138,7 @@ func TestA1WelcomeGuide(t *testing.T) {
 func TestA2WelcomeHelpBar(t *testing.T) {
 	h := newHarness(t, nil)
 	hb := h.helpLine()
-	if !strings.HasPrefix(hb, "▸ A") || !strings.Contains(hb, " i ") || !strings.Contains(hb, "? "+tr("tui.key.all_keys")) || strings.Contains(hb, "…") {
+	if !strings.HasPrefix(hb, "▸ enter "+tr("tui.key.add_company")) || !strings.Contains(hb, " i ") || !strings.Contains(hb, "? "+tr("tui.key.all_keys")) || strings.Contains(hb, "…") {
 		t.Fatalf("help bar %q", hb)
 	}
 }
@@ -162,7 +162,7 @@ func TestA5WelcomeEnglish(t *testing.T) {
 	i18n.SetLang("en")
 	h := newHarness(t, nil)
 	h.mustContain("Welcome to gitid", "Get started in 3 steps:", "Press i to import")
-	if !strings.HasPrefix(h.helpLine(), "▸ A add company") {
+	if !strings.HasPrefix(h.helpLine(), "▸ enter add company") {
 		t.Fatalf("help bar %q", h.helpLine())
 	}
 }
@@ -569,7 +569,7 @@ func TestF4HelpBarFitsEveryWidth(t *testing.T) {
 		primary string
 	}
 	states := []state{
-		{"welcome", func(t *testing.T) *harness { return newHarness(t, nil) }, "▸ A"},
+		{"welcome", func(t *testing.T) *harness { return newHarness(t, nil) }, "▸ enter"},
 		{"empty company", func(t *testing.T) *harness { return newHarness(t, emptyCompanyCfg("personal")) }, "▸ a"},
 		{"pending", func(t *testing.T) *harness { return newHarness(t, basicCfg()) }, "▸ p"},
 		{"filter", func(t *testing.T) *harness { h := newHarness(t, basicCfg()); h.key("/"); return h }, "▸ enter"},
@@ -600,8 +600,11 @@ func TestF4HelpBarFitsEveryWidth(t *testing.T) {
 				if lipgloss.Width(" "+hb) > w {
 					t.Errorf("w=%d: help bar is %d wide: %q", w, lipgloss.Width(hb), hb)
 				}
-				if !strings.Contains(hb, "? "+tr("tui.key.all_keys")) {
-					t.Errorf("w=%d: no \"all keys\" in %q", w, hb)
+				// a screen that captures the keyboard cannot open the overlay
+				// ("?" is typed there), so it does not offer it
+				want := !isCapturing(h.top())
+				if got := strings.Contains(hb, "? "+tr("tui.key.all_keys")); got != want {
+					t.Errorf("w=%d: \"all keys\" shown=%v, want %v in %q", w, got, want, hb)
 				}
 				if s.primary != "" && !strings.HasPrefix(hb, s.primary) {
 					t.Errorf("w=%d: primary %q missing in %q", w, s.primary, hb)

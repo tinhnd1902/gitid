@@ -15,6 +15,7 @@ type KeyMap struct {
 	Apply, GenKey, Import, Detail                                  key.Binding
 	Yes, No, Toggle, Copy, Open, Fix, Retry, SSHTest, TerminalMode key.Binding
 	Save, Next, Cancel                                             key.Binding
+	Reload                                                         key.Binding
 }
 
 func bind(keys []string, h, desc string) key.Binding {
@@ -25,10 +26,12 @@ func bind(keys []string, h, desc string) key.Binding {
 func NewKeyMap() *KeyMap {
 	t := i18n.T
 	return &KeyMap{
-		Quit:         bind([]string{"q"}, "q", t("tui.key.quit")),
-		ForceQuit:    bind([]string{"ctrl+c"}, "ctrl+c", t("tui.key.quit")),
-		Help:         bind([]string{"?"}, "?", t("tui.key.help")),
-		Back:         bind([]string{"esc"}, "esc", t("tui.key.back")),
+		Quit:      bind([]string{"q"}, "q", t("tui.key.quit")),
+		ForceQuit: bind([]string{"ctrl+c"}, "ctrl+c", t("tui.key.quit")),
+		Help:      bind([]string{"?"}, "?", t("tui.key.help")),
+		// q goes back too; inside a text input it is typed, because the
+		// root only matches Back when the screen does not capture the keys.
+		Back:         bind([]string{"esc", "q"}, "esc", t("tui.key.back")),
 		Enter:        bind([]string{"enter"}, "enter", t("tui.key.select")),
 		Up:           bind([]string{"up", "ctrl+p"}, "↑", t("tui.key.up")),
 		Down:         bind([]string{"down", "ctrl+n"}, "↓", t("tui.key.down")),
@@ -58,6 +61,7 @@ func NewKeyMap() *KeyMap {
 		Save:         bind([]string{"enter"}, "enter", t("tui.key.save")),
 		Next:         bind([]string{"tab"}, "tab", t("tui.key.next")),
 		Cancel:       bind([]string{"esc"}, "esc", t("tui.key.cancel")),
+		Reload:       bind([]string{"r"}, "r", t("tui.key.reload")),
 	}
 }
 

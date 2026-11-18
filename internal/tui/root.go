@@ -36,6 +36,8 @@ type Model struct {
 	statSeq  int
 	planSeq  int
 	showHelp bool
+	// reloading is set by the reload key: the next cfgLoadedMsg then says so.
+	reloading bool
 }
 
 // New creates the root model. The configuration is loaded by Init.
@@ -174,8 +176,15 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if key.Matches(msg, m.sh.km.ForceQuit) {
 			return m, tea.Quit
 		}
+		// A Vietnamese input method sends composed or multi-rune input that
+		// no shortcut matches: say so instead of doing nothing. Screens that
+		// capture the keyboard decide for themselves (a text input takes the
+		// text).
+		if imeLike(msg) && (m.showHelp || !isCapturing(m.top())) {
+			return m, m.setStatus(imeStatus())
+		}
 		if m.showHelp {
-			if msg.Type == tea.KeyEsc || key.Matches(msg, m.sh.km.Help) || key.Matches(msg, m.sh.km.Quit) {
+			if msg.Type == tea.KeyEsc || key.Matches(msg, m.sh.km.Help) || key.Matches(msg, m.sh.km.Back) || key.Matches(msg, m.sh.km.Quit) {
 				m.showHelp = false
 			}
 			return m, nil
@@ -185,7 +194,12 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case key.Matches(msg, m.sh.km.Help):
 				m.showHelp = true
 				return m, nil
-			case msg.Type == tea.KeyEsc && len(m.stack) > 1:
+			case key.Matches(msg, m.sh.km.Back) && len(m.stack) > 1:
+				// one step: a screen with an inner step (a confirmation) goes
+				// back inside itself first
+				if sb, ok := m.top().(stepBacker); ok && sb.StepBack() {
+					return m, nil
+				}
 				m.stack = m.stack[:len(m.stack)-1]
 				return m, nil
 			}
@@ -210,13 +224,22 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case reloadMsg:
+		m.reloading = true
+		return m, m.loadCmd()
 	case cfgLoadedMsg:
 		var cmds []tea.Cmd
+		reloading := m.reloading
+		m.reloading = false
 		if msg.err != nil {
+			// the rows already shown stay: they are the last good state
 			cmds = append(cmds, m.setStatus(statusMsg{level: levelErr, text: errText(msg.err)}))
 		} else {
 			m.sh.cfg, m.sh.loaded = msg.cfg, true
 			cmds = append(cmds, m.planCmd())
+			if reloading {
+				cmds = append(cmds, m.setStatus(statusMsg{level: levelOK, text: tr("tui.status.reloaded")}))
+			}
 		}
 		cmds = append(cmds, m.broadcast(msg))
 		return m, tea.Batch(cmds...)
@@ -367,10 +390,38 @@ func (m *Model) statusView() string {
 	return " " + left + spaces(gap) + right + " "
 }
 
+// globalHelp are the keys that work on every screen, shown at the end of the
+// "?" overlay. Navigation keys only act where there is something to move.
 func (m *Model) globalHelp() []key.Binding {
 	km := m.sh.km
-	return []key.Binding{km.Help, km.ForceQuit}
+	return []key.Binding{
+		withDesc(km.Back, "esc/q", tr("tui.key.back_global")),
+		withDesc(km.Up, "↑/↓", tr("tui.key.move")),
+		withDesc(km.PageUp, "pgup/dn", tr("tui.key.nav_page")),
+		key.NewBinding(key.WithKeys("home", "end"), key.WithHelp("home/end", tr("tui.key.nav_ends"))),
+		km.Help,
+		km.ForceQuit,
+	}
 }
+
+// imeLike reports whether a key message looks like input from an input
+// method: a non-ASCII rune, or several runes at once that are not a paste.
+// No shortcut is bound to such input.
+func imeLike(k tea.KeyMsg) bool {
+	if k.Type != tea.KeyRunes || k.Paste || len(k.Runes) == 0 {
+		return false
+	}
+	return len(k.Runes) > 1 || k.Runes[0] > 0x7F
+}
+
+// imeStatus is the warning shown for such input on a screen without a text
+// input.
+func imeStatus() statusMsg {
+	return statusMsg{level: levelWarn, text: tr("tui.status.ime"), ttl: hintTTL}
+}
+
+// imeCmd is imeStatus as a command, for screens.
+func imeCmd() tea.Cmd { return func() tea.Msg { return imeStatus() } }
 
 // helpItems are the entries of the short help bar: the screen's own choice
 // when it has one, otherwise its full list. "? all keys" is always last.
@@ -399,6 +450,9 @@ func (m *Model) helpBar() string {
 	st := m.sh.st
 	km := m.sh.km
 	more := helpItem{b: withDesc(km.Help, "?", tr("tui.key.all_keys"))}
+	// A screen that captures the keyboard never opens the overlay (the "?"
+	// would be typed), so the item is not offered there.
+	showMore := !isCapturing(m.top())
 	items := m.helpItems()
 	render := func(it helpItem) string {
 		h := it.b.Help()
@@ -409,7 +463,10 @@ func (m *Model) helpBar() string {
 	}
 	sep := "  "
 	width := func(items []helpItem) int {
-		w := 1 + lipgloss.Width(render(more))
+		w := 1
+		if showMore {
+			w += lipgloss.Width(render(more))
+		}
 		for _, it := range items {
 			w += lipgloss.Width(render(it)) + len(sep)
 		}
@@ -434,6 +491,9 @@ func (m *Model) helpBar() string {
 		b.WriteString(render(it))
 		b.WriteString(st.Help.ShortSeparator.Render(sep))
 	}
+	if !showMore {
+		return strings.TrimRight(b.String(), " ")
+	}
 	b.WriteString(render(more))
 	return b.String()
 }
@@ -457,28 +517,28 @@ func (m *Model) helpView(w, h int) string {
 	inner := maxInt(w-4, 10)
 	avail := maxInt(h-2, 1) // panel border
 
-	// fixed lines around the bindings: title, screen name, global title, its
-	// rows and the close hint, plus four blank separators
-	fixed := func(compact bool) int {
-		n := 4 + len(global) + 1
+	perCol := func(n, cols int) int { return (n + cols - 1) / cols }
+	// fixed lines around the bindings: title, screen name, global title, the
+	// close hint, the rows of the global section, plus four blank separators
+	fixed := func(compact bool, cols int) int {
+		n := 4 + perCol(len(global), cols) + 1
 		if !compact {
 			n += 4
 		}
 		return n
 	}
-	perCol := func(cols int) int { return (len(screen) + cols - 1) / cols }
 	// colWidths gives each of n columns the room its longest description
-	// needs (cell: 2 indent + 8 key + the text); fits says whether all of
+	// needs (cell: 2 indent + 9 key + the text); fits says whether all of
 	// them are shown in full. When they are not, the widest columns shrink.
-	colWidths := func(n int) (ws []int, fits bool) {
-		rows := perCol(n)
+	colWidths := func(list []key.Binding, n int) (ws []int, fits bool) {
+		rows := perCol(len(list), n)
 		ws = make([]int, n)
 		total := 0
 		for c := range ws {
-			ws[c] = 11
+			ws[c] = 12
 			for r := 0; r < rows; r++ {
-				if idx := c*rows + r; idx < len(screen) {
-					ws[c] = maxInt(ws[c], 10+lipgloss.Width(screen[idx].Help().Desc))
+				if idx := c*rows + r; idx < len(list) {
+					ws[c] = maxInt(ws[c], 11+lipgloss.Width(list[idx].Help().Desc))
 				}
 			}
 			if c < n-1 {
@@ -489,7 +549,7 @@ func (m *Model) helpView(w, h int) string {
 		fits = total <= inner
 		// shrink from the last column: the first ones keep their text
 		for c := n - 1; c >= 0 && total > inner; c-- {
-			cut := minInt(total-inner, ws[c]-11)
+			cut := minInt(total-inner, ws[c]-12)
 			if cut > 0 {
 				ws[c] -= cut
 				total -= cut
@@ -497,7 +557,11 @@ func (m *Model) helpView(w, h int) string {
 		}
 		return ws, fits
 	}
-	roomy := func(n int) bool { _, ok := colWidths(n); return ok }
+	roomy := func(n int) bool {
+		_, a := colWidths(screen, n)
+		_, b := colWidths(global, n)
+		return a && b
+	}
 	cols, compact := 1, false
 	pick := func(needRoom bool) bool {
 		for _, c := range []bool{false, true} {
@@ -505,7 +569,7 @@ func (m *Model) helpView(w, h int) string {
 				if needRoom && !roomy(n) {
 					continue
 				}
-				if fixed(c)+perCol(n) <= avail {
+				if fixed(c, n)+perCol(len(screen), n) <= avail {
 					cols, compact = n, c
 					return true
 				}
@@ -523,9 +587,9 @@ func (m *Model) helpView(w, h int) string {
 		hp := k.Help()
 		desc := hp.Desc
 		if cw > 0 {
-			desc = truncWords(desc, maxInt(cw-10, 1))
+			desc = truncWords(desc, maxInt(cw-11, 1))
 		}
-		out := "  " + st.Accent.Render(pad(hp.Key, 8)) + st.Muted.Render(desc)
+		out := "  " + st.Accent.Render(pad(hp.Key, 9)) + st.Muted.Render(desc)
 		if cw > 0 {
 			out += spaces(cw - lipgloss.Width(out))
 		}
@@ -536,32 +600,34 @@ func (m *Model) helpView(w, h int) string {
 			b.WriteString("\n")
 		}
 	}
-	var b strings.Builder
-	b.WriteString(st.PanelTitle.Render(tr("tui.help.title")) + "\n")
-	blank(&b)
-	b.WriteString(st.Bold.Render(m.top().Title()) + "\n")
-	if cols == 1 {
-		for _, k := range screen {
-			b.WriteString(cell(k, 0) + "\n")
+	// section writes a list of bindings in cols columns (one: a plain list)
+	section := func(b *strings.Builder, list []key.Binding) {
+		if cols == 1 {
+			for _, k := range list {
+				b.WriteString(cell(k, 0) + "\n")
+			}
+			return
 		}
-	} else {
-		cws, _ := colWidths(cols)
-		rows := perCol(cols)
+		cws, _ := colWidths(list, cols)
+		rows := perCol(len(list), cols)
 		for r := 0; r < rows; r++ {
 			var line strings.Builder
 			for c := 0; c < cols; c++ {
-				if idx := c*rows + r; idx < len(screen) {
-					line.WriteString(cell(screen[idx], cws[c]))
+				if idx := c*rows + r; idx < len(list) {
+					line.WriteString(cell(list[idx], cws[c]))
 				}
 			}
 			b.WriteString(strings.TrimRight(line.String(), " ") + "\n")
 		}
 	}
+	var b strings.Builder
+	b.WriteString(st.PanelTitle.Render(tr("tui.help.title")) + "\n")
+	blank(&b)
+	b.WriteString(st.Bold.Render(m.top().Title()) + "\n")
+	section(&b, screen)
 	blank(&b)
 	b.WriteString(st.Bold.Render(tr("tui.help.global")) + "\n")
-	for _, k := range global {
-		b.WriteString(cell(k, 0) + "\n")
-	}
+	section(&b, global)
 	blank(&b)
 	b.WriteString(st.Faint.Render(tr("tui.help.close")))
 	return m.sh.panel("", b.String(), w, h, true)

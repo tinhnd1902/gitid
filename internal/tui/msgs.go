@@ -46,6 +46,8 @@ type (
 	}
 	// cfgChangedMsg is emitted after the configuration was saved.
 	cfgChangedMsg struct{ cfg config.Config }
+	// reloadMsg asks the root to read the configuration from disk again.
+	reloadMsg struct{}
 	// refreshPlanMsg asks the root to recompute the pending-changes badge.
 	refreshPlanMsg struct{}
 	planBuiltMsg   struct {

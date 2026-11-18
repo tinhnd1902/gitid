@@ -48,7 +48,7 @@ var enTUI = map[string]string{
 
 	"tui.help.title":  "Keyboard shortcuts",
 	"tui.help.global": "Every screen",
-	"tui.help.close":  "Press ? or esc to close.",
+	"tui.help.close":  "Press ?, q or esc to close.",
 
 	// list
 	"tui.list.title":        "Overview",
@@ -319,7 +319,7 @@ var enTUI = map[string]string{
 	"tui.confirm.next_clone_many": "Clone repos into the company folder (or move existing ones there)",
 	"tui.confirm.next_check":      "Verify: run gitid check inside the repo, or press k to check %s",
 	"tui.confirm.next_https":      "On the first HTTPS clone/push git asks you to sign in: if it asks for a password, use a Personal Access Token (not your account password). The credential helper (e.g. macOS Keychain) remembers it.",
-	"tui.confirm.next_ssh":        "SSH accounts: add the public key on the platform (select the account, press g).",
+	"tui.confirm.next_ssh":        "SSH accounts: press enter to go back to the list, select the account, then press g to add its public key on the platform.",
 	"tui.confirm.no_verify":       "gitid never signs in to or verifies anything with the platform; it only writes git config.",
 	"tui.key.to_list":             "back to list",
 
@@ -332,6 +332,18 @@ var enTUI = map[string]string{
 	"tui.check.not_repo_next_none": "Open a terminal in a repo and run gitid check, or press c to clone one.",
 	"tui.import.none_next":         "You can still add a company by hand: press esc, then A.",
 	"tui.err.config_changed":       "config.yaml was changed elsewhere (another gitid window may be open). It was reloaded; check and save again.",
+
+	// shortcut fixes
+	"tui.status.ime":       "Vietnamese input method is on — switch to EN (ABC) to use shortcuts",
+	"tui.status.reloaded":  "Configuration reloaded from disk.",
+	"tui.status.press_yes": "Press %[1]s to apply.",
+	"tui.form.discard_q":   "Discard what you typed? %[1]s/%[2]s",
+	"tui.key.reload":       "reload config",
+	"tui.key.discard":      "discard changes",
+	"tui.key.keep_editing": "keep editing",
+	"tui.key.back_global":  "go back one step",
+	"tui.key.nav_page":     "page up/down",
+	"tui.key.nav_ends":     "first/last row",
 }
 
 func init() {

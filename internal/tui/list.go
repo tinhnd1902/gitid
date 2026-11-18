@@ -330,7 +330,11 @@ func (s *listScreen) Capturing() bool { return s.mode == filterTyping }
 
 func (s *listScreen) Help() []key.Binding {
 	km := s.sh.km
-	return []key.Binding{km.Filter, km.AddAccount, km.AddCompany, km.Edit, km.Delete, km.Apply, km.Clone, km.Check, km.Doctor, km.GenKey, km.Import, km.Detail, km.Quit}
+	if _, has := s.selected(); !has {
+		// nothing to edit, delete or open (the welcome guide)
+		return []key.Binding{km.Filter, km.AddAccount, km.AddCompany, km.Apply, km.Clone, km.Check, km.Doctor, km.GenKey, km.Import, km.Reload, km.Quit}
+	}
+	return []key.Binding{km.Filter, km.AddAccount, km.AddCompany, km.Edit, km.Delete, km.Apply, km.Clone, km.Check, km.Doctor, km.GenKey, km.Import, km.Detail, km.Reload, km.Quit}
 }
 
 // ContextHelp picks the few keys that matter in the current state. The first
@@ -343,7 +347,7 @@ func (s *listScreen) ContextHelp() []helpItem {
 	case !s.sh.loaded:
 		return []helpItem{it(km.Quit)}
 	case s.welcome():
-		return []helpItem{prim(km.AddCompany), it(km.Import), it(km.Quit)}
+		return []helpItem{prim(withDesc(km.Detail, "enter", tr("tui.key.add_company"))), it(km.Import), it(km.Quit)}
 	case s.mode == filterTyping:
 		return []helpItem{
 			prim(withDesc(km.Enter, "enter", tr("tui.key.filter_keep"))),
@@ -653,7 +657,7 @@ func (s *listScreen) action(msg tea.KeyMsg, km *KeyMap) (tea.Cmd, bool) {
 		}
 		return sh.pushNow(newDeleteScreen(sh, r.company, r.account)), true
 	case key.Matches(msg, km.Clone):
-		return sh.pushNow(newCloneScreen(sh)), true
+		return sh.pushNow(newCloneScreen(sh, cloneHint(r, has))), true
 	case key.Matches(msg, km.Check):
 		return sh.pushNow(newCheckScreen(sh)), true
 	case key.Matches(msg, km.Doctor):
@@ -669,12 +673,35 @@ func (s *listScreen) action(msg tea.KeyMsg, km *KeyMap) (tea.Cmd, bool) {
 		}
 		return s.genKey(ref), true
 	case key.Matches(msg, km.Detail):
+		if s.welcome() {
+			return sh.pushNow(newCompanyForm(sh, nil)), true // the first step
+		}
 		if !has {
 			return nil, true
 		}
 		return sh.pushNow(newDetailScreen(sh, r)), true
+	case key.Matches(msg, km.Reload):
+		return reload(), true
 	}
 	return nil, false
+}
+
+// cloneHint is the account the clone flow should start on for a row: the
+// account itself, or the default (else the first) account of a company.
+func cloneHint(r rowItem, has bool) *config.AccountRef {
+	if !has {
+		return nil
+	}
+	if ref, ok := r.ref(); ok {
+		return &ref
+	}
+	if a, ok := r.company.Default(); ok {
+		return &config.AccountRef{Company: r.company, Account: a}
+	}
+	if len(r.company.Accounts) > 0 {
+		return &config.AccountRef{Company: r.company, Account: r.company.Accounts[0]}
+	}
+	return nil
 }
 
 // genKey opens the key result of an existing key, or starts the keygen flow.
@@ -1235,7 +1262,7 @@ func (d *detailScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		case key.Matches(k, km.Check):
 			return d, d.sh.pushNow(newCheckScreen(d.sh))
 		case key.Matches(k, km.Clone):
-			return d, d.sh.pushNow(newCloneScreen(d.sh))
+			return d, d.sh.pushNow(newCloneScreen(d.sh, cloneHint(r, true)))
 		case key.Matches(k, km.Doctor):
 			return d, d.sh.pushNow(newDoctorScreen(d.sh))
 		case key.Matches(k, km.Delete):

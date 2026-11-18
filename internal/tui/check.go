@@ -55,6 +55,15 @@ func (c *checkScreen) Init() tea.Cmd { return tea.Batch(c.spin.Tick, c.run()) }
 
 func (c *checkScreen) Capturing() bool { return c.phase == chFixing }
 
+// StepBack: esc/q in the fix confirmation returns to the check result.
+func (c *checkScreen) StepBack() bool {
+	if c.phase == chFixConfirm {
+		c.phase = chResult
+		return true
+	}
+	return false
+}
+
 func (c *checkScreen) run() tea.Cmd {
 	c.phase = chLoading
 	svc, cfg, cwd, id := c.sh.svc, c.sh.cfg, c.sh.cwd, c.id
@@ -164,7 +173,7 @@ func (c *checkScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 			case key.Matches(msg, km.Retry):
 				return c, tea.Batch(c.spin.Tick, c.run())
 			case key.Matches(msg, km.Clone) && c.notRepo():
-				return c, c.sh.replaceNow(newCloneScreen(c.sh))
+				return c, c.sh.replaceNow(newCloneScreen(c.sh, nil))
 			}
 		case chFixConfirm:
 			switch {
@@ -172,7 +181,7 @@ func (c *checkScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 				c.pick.toggle()
 			case key.Matches(msg, km.Yes):
 				return c, c.doFix()
-			case key.Matches(msg, km.No), msg.Type == tea.KeyEsc:
+			case key.Matches(msg, km.No):
 				c.phase = chResult
 			case key.Matches(msg, km.Enter):
 				if c.pick.idx == 1 {

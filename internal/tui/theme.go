@@ -18,7 +18,7 @@ var (
 	colTeal   = lipgloss.AdaptiveColor{Light: "#0B7F7B", Dark: "#5EEAD4"}
 	colText   = lipgloss.AdaptiveColor{Light: "#1B1F2A", Dark: "#E7E9F0"}
 	colMuted  = lipgloss.AdaptiveColor{Light: "#5F6677", Dark: "#9097AB"}
-	colFaint  = lipgloss.AdaptiveColor{Light: "#8A90A0", Dark: "#646B80"}
+	colFaint  = lipgloss.AdaptiveColor{Light: "#6E7587", Dark: "#80879C"}
 	colLine   = lipgloss.AdaptiveColor{Light: "#C9CEDA", Dark: "#3B4157"}
 	colSelBg  = lipgloss.AdaptiveColor{Light: "#E8E4FF", Dark: "#2C2F4A"}
 	colOK     = lipgloss.AdaptiveColor{Light: "#177A3C", Dark: "#4ADE80"}

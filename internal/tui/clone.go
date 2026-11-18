@@ -56,17 +56,20 @@ type cloneScreen struct {
 	res       app.CloneResult
 	err       error
 	spin      spinner.Model
+	prefer    *config.AccountRef // account the pick step starts on, when it is a candidate
 	w, h      int
 }
 
-func newCloneScreen(sh *shared) *cloneScreen {
+// newCloneScreen starts the clone flow. prefer (optional) is the account the
+// user had highlighted: the pick step starts on it when the URL fits it.
+func newCloneScreen(sh *shared, prefer *config.AccountRef) *cloneScreen {
 	in := textinput.New()
 	in.Prompt = "› "
 	in.PromptStyle = sh.st.Accent
 	in.Placeholder = tr("tui.form.eg", "https://github.com/org/repo.git")
 	in.CharLimit = 1024
 	p := progress.New(progress.WithGradient("#7C6BFF", "#2DD4BF"), progress.WithoutPercentage())
-	return &cloneScreen{sh: sh, id: sh.id(), input: in, prog: p, spin: sh.st.Spinner}
+	return &cloneScreen{sh: sh, id: sh.id(), input: in, prog: p, spin: sh.st.Spinner, prefer: prefer}
 }
 
 func (c *cloneScreen) Title() string { return tr("tui.clone.title") }
@@ -150,6 +153,9 @@ func (c *cloneScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 			return cloneDoneMsg{id: id, Res: svc.VerifyClone(ctx, p)}
 		})
 	case tea.KeyMsg:
+		if c.phase == clPick && imeLike(msg) {
+			return c, imeCmd()
+		}
 		switch c.phase {
 		case clURL:
 			switch msg.Type {
@@ -164,7 +170,7 @@ func (c *cloneScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 			return c, cmd
 		case clPick:
 			switch {
-			case msg.Type == tea.KeyEsc:
+			case msg.Type == tea.KeyEsc, key.Matches(msg, km.Back):
 				c.phase = clURL
 				return c, c.input.Focus()
 			case key.Matches(msg, km.Up):
@@ -208,10 +214,24 @@ func (c *cloneScreen) submitURL() tea.Cmd {
 		c.errMsg = tr("tui.clone.no_accounts")
 		return nil
 	}
-	c.url, c.cands, c.cur, c.phase = url, cands, 0, clPick
+	c.url, c.cands, c.cur, c.phase = url, cands, c.preferred(cands), clPick
 	c.input.Blur()
 	c.refreshPreview()
 	return nil
+}
+
+// preferred is the index of the candidate the pick step starts on: the
+// account that was highlighted when the clone was started, else the first.
+func (c *cloneScreen) preferred(cands []config.AccountRef) int {
+	if c.prefer == nil {
+		return 0
+	}
+	for i, r := range cands {
+		if r.Company.Slug == c.prefer.Company.Slug && r.Account.ID == c.prefer.Account.ID {
+			return i
+		}
+	}
+	return 0
 }
 
 func (c *cloneScreen) move(d int) {

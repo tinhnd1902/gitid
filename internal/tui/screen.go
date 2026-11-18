@@ -49,6 +49,11 @@ type contextHelper interface{ ContextHelp() []helpItem }
 // esc, to the screen.
 type capturer interface{ Capturing() bool }
 
+// stepBacker is implemented by screens with an inner step (a confirmation
+// inside the screen). The root calls StepBack when the user goes back: true
+// means the screen went one step back itself and must stay on the stack.
+type stepBacker interface{ StepBack() bool }
+
 func isCapturing(s Screen) bool {
 	c, ok := s.(capturer)
 	return ok && c.Capturing()
@@ -145,6 +150,8 @@ func hint(text string) tea.Cmd {
 func focus(key string) tea.Cmd { return func() tea.Msg { return focusMsg{key} } }
 
 func changed(cfg config.Config) tea.Cmd { return func() tea.Msg { return cfgChangedMsg{cfg} } }
+
+func reload() tea.Cmd { return func() tea.Msg { return reloadMsg{} } }
 
 func refreshPlan() tea.Cmd { return func() tea.Msg { return refreshPlanMsg{} } }
 

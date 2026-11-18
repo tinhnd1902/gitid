@@ -1343,6 +1343,7 @@ func TestKEnglishPolish(t *testing.T) {
 	h.typeText("tinhnd")
 	h.mustContainPlain(tr("tui.form.err.dup_account", "tinhnd", "github.com"))
 	h.key("esc")
+	h.key("y") // discard what was typed
 	h.applyToDone()
 	h.mustContainPlain("Next steps:", "Personal Access Token", "gitid never signs in")
 	for _, key := range []string{"tui.confirm.next", "tui.confirm.next_https", "tui.form.preview_remote", "tui.detail.acc_next_applied"} {

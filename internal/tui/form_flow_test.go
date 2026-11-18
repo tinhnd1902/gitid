@@ -281,6 +281,7 @@ func TestH10EscLeavesTheDiskAlone(t *testing.T) {
 	h.key("enter")
 	h.typeText("Zed")
 	h.key("esc")
+	h.key("y") // discard what was typed
 	if h.depth() != 1 {
 		t.Fatalf("depth %d", h.depth())
 	}

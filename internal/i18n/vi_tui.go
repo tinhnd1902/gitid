@@ -48,7 +48,7 @@ var viTUI = map[string]string{
 
 	"tui.help.title":  "Phím tắt",
 	"tui.help.global": "Mọi màn hình",
-	"tui.help.close":  "Nhấn ? hoặc esc để đóng.",
+	"tui.help.close":  "Nhấn ?, q hoặc esc để đóng.",
 
 	// list
 	"tui.list.title":        "Danh sách",
@@ -319,7 +319,7 @@ var viTUI = map[string]string{
 	"tui.confirm.next_clone_many": "Clone repo vào thư mục của công ty (hoặc chuyển repo có sẵn vào đó)",
 	"tui.confirm.next_check":      "Kiểm tra: chạy gitid check trong repo, hoặc bấm k để kiểm tra %s",
 	"tui.confirm.next_https":      "Lần đầu clone/push qua HTTPS, git hỏi đăng nhập: nếu hỏi mật khẩu, hãy dùng Personal Access Token (không phải mật khẩu tài khoản). Credential helper (vd macOS Keychain) lưu lại cho lần sau.",
-	"tui.confirm.next_ssh":        "Tài khoản SSH: thêm public key lên nền tảng (chọn tài khoản, bấm g).",
+	"tui.confirm.next_ssh":        "Tài khoản SSH: bấm enter để về danh sách, chọn tài khoản rồi bấm g để thêm public key lên nền tảng.",
 	"tui.confirm.no_verify":       "gitid không đăng nhập hay xác minh gì với nền tảng; nó chỉ ghi cấu hình git.",
 	"tui.key.to_list":             "về danh sách",
 
@@ -332,6 +332,18 @@ var viTUI = map[string]string{
 	"tui.check.not_repo_next_none": "Mở terminal trong một repo rồi chạy gitid check, hoặc bấm c để clone một repo.",
 	"tui.import.none_next":         "Bạn vẫn có thể thêm công ty thủ công: bấm esc rồi A.",
 	"tui.err.config_changed":       "config.yaml vừa bị thay đổi ở nơi khác (có thể một cửa sổ gitid khác đang mở). Đã tải lại; hãy kiểm tra rồi lưu lại.",
+
+	// shortcut fixes
+	"tui.status.ime":       "Bộ gõ tiếng Việt đang bật — chuyển sang EN để dùng phím tắt",
+	"tui.status.reloaded":  "Đã tải lại cấu hình từ đĩa.",
+	"tui.status.press_yes": "Bấm %[1]s để áp dụng.",
+	"tui.form.discard_q":   "Bỏ những gì đã nhập? %[1]s/%[2]s",
+	"tui.key.reload":       "tải lại cấu hình",
+	"tui.key.discard":      "bỏ thay đổi",
+	"tui.key.keep_editing": "tiếp tục sửa",
+	"tui.key.back_global":  "quay lại một bước",
+	"tui.key.nav_page":     "trang trước/sau",
+	"tui.key.nav_ends":     "đầu/cuối danh sách",
 }
 
 func init() {

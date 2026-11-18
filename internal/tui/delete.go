@@ -25,14 +25,16 @@ type choice struct {
 func (c *choice) toggle() { c.idx = 1 - c.idx }
 
 func (c choice) view(st *Styles) string {
+	// The selected button carries a marker, so it does not rely on color
+	// alone; both buttons keep the same width.
 	btn := func(i int) string {
 		switch {
 		case c.idx != i:
-			return st.Button.Render(c.labels[i])
+			return st.Button.Render("  " + c.labels[i])
 		case i == 1 && c.danger:
-			return st.ButtonDanger.Render(c.labels[i])
+			return st.ButtonDanger.Render("▸ " + c.labels[i])
 		}
-		return st.ButtonOn.Render(c.labels[i])
+		return st.ButtonOn.Render("▸ " + c.labels[i])
 	}
 	return lipgloss.JoinHorizontal(lipgloss.Top, btn(0), " ", btn(1))
 }

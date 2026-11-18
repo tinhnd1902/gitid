@@ -35,6 +35,7 @@ type importScreen struct {
 	err    error
 	cur    int
 	form   *form
+	guard  discardGuard
 	plat   string
 	auth   string
 	user   string
@@ -58,7 +59,11 @@ func (s *importScreen) Resize(w, h int) {
 
 // sizeForm gives the form the panel's inner area (the title takes one row).
 func (s *importScreen) sizeForm() {
-	s.form.SetSize(maxInt(s.w-4, 1), maxInt(s.h-3, 1))
+	rows := s.h - 3
+	if s.guard.asking {
+		rows-- // the discard question
+	}
+	s.form.SetSize(maxInt(s.w-4, 1), maxInt(rows, 1))
 	s.form.compact = s.h < previewMinBody
 }
 
@@ -81,6 +86,9 @@ func (s *importScreen) Help() []key.Binding {
 		}
 		return []key.Binding{km.Up, km.Down, withDesc(km.Enter, "enter", tr("tui.import.pick")), km.Back}
 	case imForm:
+		if s.guard.asking {
+			return s.guard.helpBindings(km)
+		}
 		return []key.Binding{km.Save, km.Next, km.Cancel}
 	}
 	return nil
@@ -102,6 +110,7 @@ func (s *importScreen) buildForm() {
 			sh.fieldValidator("host", tr("tui.f.host"), false)),
 	)
 	s.sizeForm()
+	s.guard.start(s.form)
 }
 
 func (s *importScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
@@ -154,9 +163,9 @@ func (s *importScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 			}
 			return s, nil
 		case imForm:
-			if msg.Type == tea.KeyEsc {
-				s.phase = imList
-				return s, nil
+			back := func() tea.Cmd { s.phase = imList; return nil }
+			if cmd, handled := s.guard.key(s.sh, s.form, msg, back); handled {
+				return s, cmd
 			}
 		}
 	}
@@ -221,7 +230,11 @@ func (s *importScreen) View() string {
 			n, m := s.form.Position()
 			title += st.Faint.Render(fmt.Sprintf("  %d/%d", n, m))
 		}
-		return s.sh.panel(title, s.form.View(), s.w, s.h, true)
+		body := s.form.View()
+		if s.guard.asking {
+			body = st.Warn.Render(trunc("! "+s.guard.prompt(s.sh.km), inner)) + "\n" + body
+		}
+		return s.sh.panel(title, body, s.w, s.h, true)
 	default:
 		if s.err != nil {
 			b.WriteString(st.Err.Render("✗ " + wrap(errText(s.err), inner)))

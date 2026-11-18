@@ -39,6 +39,85 @@ func (sh *shared) fieldValidator(field, label string, required bool) func(string
 // while there is no such error.
 const formErrMaxRows = 3
 
+// discardGuard asks before a form with changed values is left. initial is the
+// fingerprint of the bound values when the form opened; asking is true while
+// the question is on screen.
+type discardGuard struct {
+	initial string
+	asking  bool
+}
+
+// fingerprint joins every bound value of the form (hidden fields too), so any
+// change, including a select or a yes/no field, makes the form dirty.
+func fingerprint(f *form) string {
+	var b strings.Builder
+	for _, ff := range f.fields {
+		switch {
+		case ff.str != nil:
+			b.WriteString(*ff.str)
+		case ff.flag != nil:
+			if *ff.flag {
+				b.WriteString("1")
+			} else {
+				b.WriteString("0")
+			}
+		}
+		b.WriteByte(0)
+	}
+	return b.String()
+}
+
+// start remembers the values the form has right now.
+func (g *discardGuard) start(f *form) { g.initial, g.asking = fingerprint(f), false }
+
+func (g *discardGuard) dirty(f *form) bool { return fingerprint(f) != g.initial }
+
+// prompt is the question, with the keys that answer it.
+func (g *discardGuard) prompt(km *KeyMap) string {
+	return tr("tui.form.discard_q", km.Yes.Help().Key, km.No.Help().Key)
+}
+
+// helpBindings are the keys offered while the question is shown.
+func (g *discardGuard) helpBindings(km *KeyMap) []key.Binding {
+	return []key.Binding{
+		withDesc(km.Yes, km.Yes.Help().Key, tr("tui.key.discard")),
+		withDesc(km.No, km.No.Help().Key, tr("tui.key.keep_editing")),
+	}
+}
+
+// key handles the keys that decide whether the form is left. leave performs
+// the exit. handled=false means the key is for the form itself. The question
+// is shown when esc (or the back key on a field that is not a text input) is
+// pressed on a form whose values changed; a Vietnamese input method sending
+// composed input to a field that is not a text input gets the hint instead of
+// being dropped silently.
+func (g *discardGuard) key(sh *shared, fm *form, msg tea.KeyMsg, leave func() tea.Cmd) (tea.Cmd, bool) {
+	km := sh.km
+	if g.asking {
+		switch {
+		case key.Matches(msg, km.Yes):
+			g.asking = false
+			return leave(), true
+		case msg.Type == tea.KeyEsc, msg.Type == tea.KeyEnter, key.Matches(msg, km.No), key.Matches(msg, km.Back):
+			g.asking = false
+		}
+		return nil, true // any other key is ignored while the question is shown
+	}
+	cur := fm.current()
+	nonInput := cur != nil && cur.kind != fieldInput
+	if nonInput && imeLike(msg) {
+		return imeCmd(), true
+	}
+	if msg.Type == tea.KeyEsc || (nonInput && key.Matches(msg, km.Back)) {
+		if g.dirty(fm) {
+			g.asking = true
+			return nil, true
+		}
+		return leave(), true
+	}
+	return nil, false
+}
+
 // formHost wraps a form inside a panel with a title, an error area and a
 // saving spinner. companyForm and accountForm embed it.
 type formHost struct {
@@ -48,6 +127,7 @@ type formHost struct {
 	w, h   int
 	errMsg string
 	saving bool
+	guard  discardGuard
 	spin   spinner.Model
 	id     int
 	fixed  [][2]string // read-only (label, value) pairs shown above the form
@@ -119,8 +199,13 @@ func (f *formHost) previewWidth() int { return maxInt(f.w-6, 10) }
 // errLines is the form-level error, wrapped: at most formErrMaxRows rows, the
 // last one cut at a word when the message is longer.
 func (f *formHost) errLines() []string {
+	var ask []string
+	if f.guard.asking {
+		// one row above the error: the question being answered right now
+		ask = []string{trunc("! "+f.guard.prompt(f.sh.km), maxInt(f.w-6, 10))}
+	}
 	if f.errMsg == "" {
-		return nil
+		return ask
 	}
 	w := maxInt(f.w-6, 10)
 	lines := wrapUnits(f.errMsg, w-2)
@@ -135,7 +220,7 @@ func (f *formHost) errLines() []string {
 		lines = lines[:formErrMaxRows]
 		lines[formErrMaxRows-1] = ellipsize(lines[formErrMaxRows-1], w)
 	}
-	return lines
+	return append(ask, lines...)
 }
 
 // formRows is the height left for the form fields inside the panel.
@@ -182,10 +267,14 @@ func (f *formHost) Help() []key.Binding {
 	if f.saving {
 		return nil
 	}
+	if f.guard.asking {
+		return f.guard.helpBindings(km)
+	}
 	return []key.Binding{km.Save, km.Next, km.Cancel}
 }
 
-// ContextHelp makes "enter" the next step of every form.
+// ContextHelp makes "enter" the next step of every form (the answer to the
+// discard question while it is shown).
 func (f *formHost) ContextHelp() []helpItem {
 	var out []helpItem
 	for i, b := range f.Help() {
@@ -212,7 +301,11 @@ func (f *formHost) view() string {
 		body = "\n  " + f.spin.View() + " " + st.Muted.Render(tr("tui.form.saving"))
 	default:
 		var lines []string
-		for _, l := range f.errLines() {
+		for i, l := range f.errLines() {
+			if i == 0 && f.guard.asking {
+				lines = append(lines, st.Warn.Render(l))
+				continue
+			}
 			lines = append(lines, st.Err.Render(l))
 		}
 		if pv := f.previewView(); len(pv) > 0 {
@@ -309,6 +402,7 @@ func newCompanyForm(sh *shared, edit *config.Company) *companyForm {
 		f.fixed = [][2]string{{tr("tui.f.slug"), edit.Slug}}
 	}
 	f.form = f.build()
+	f.guard.start(f.form)
 	return f
 }
 
@@ -387,8 +481,8 @@ func (f *companyForm) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		if f.saving {
 			return f, nil
 		}
-		if msg.Type == tea.KeyEsc {
-			return f, f.sh.popNow()
+		if cmd, handled := f.guard.key(f.sh, f.form, msg, f.sh.popNow); handled {
+			return f, cmd
 		}
 	}
 	if f.saving {
@@ -471,6 +565,7 @@ func newAccountForm(sh *shared, slug string, edit *config.Account) *accountForm 
 		f.fixed = [][2]string{{tr("tui.f.id"), edit.ID}}
 	}
 	f.form = f.build()
+	f.guard.start(f.form)
 	return f
 }
 
@@ -705,8 +800,8 @@ func (f *accountForm) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		if f.saving {
 			return f, nil
 		}
-		if msg.Type == tea.KeyEsc {
-			return f, f.sh.popNow()
+		if cmd, handled := f.guard.key(f.sh, f.form, msg, f.sh.popNow); handled {
+			return f, cmd
 		}
 	}
 	if f.saving {

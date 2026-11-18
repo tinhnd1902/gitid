@@ -7,8 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Terminal UI: `q` goes back one step on every screen except the list, where it
+  still quits. In a text field `q` is typed as a letter, and the "?" overlay
+  closes with `q` too. It is ignored while gitid is busy (applying, cloning,
+  generating a key, saving).
+- Terminal UI: `r` on the list reloads `config.yaml` from disk (for example
+  after editing it by hand) and says so in the status bar. A file that cannot
+  be read keeps the list you already see and shows the error.
+- Terminal UI: leaving a company, account or import form with `esc` (or `q` on
+  a choice field) after changing a value asks "Discard what you typed? y/n"
+  first. A form you did not change closes at once, as before.
+- Terminal UI: a Vietnamese input method that is switched on sends composed
+  letters (`â`, `đ`, `ơ`) or several letters at once; on screens without a text
+  field gitid now says "switch to EN to use shortcuts" instead of ignoring them.
+- Terminal UI: `enter` on the welcome screen adds the first company, and the
+  clone screen starts on the account that was highlighted in the list (the
+  default account of a company row).
+- Test: a guard that opens every screen state and presses each key its help
+  bar, its "?" overlay and its next-step text advertise, so a shortcut can
+  never be shown without being handled.
+
+### Fixed
+
+- Terminal UI: `esc` in the fix-remote confirmation returned to the list and
+  dropped the check result; it now goes back to the check result. The same
+  for `esc` in the "create the key without a passphrase" confirmation, which
+  now returns to the choice of mode.
+- Terminal UI: the help bar offered `? all keys` on screens where `?` is typed
+  into a text field; it is hidden there.
+
 ### Changed
 
+- Terminal UI: the selected Yes/No button also shows a `▸` marker, so it does
+  not depend on color alone. The faint text color is darker on light
+  terminals and lighter on dark ones (contrast of at least 4.5:1).
+- Terminal UI: the "?" overlay lists the keys of every screen (`esc`/`q`
+  back, `↑`/`↓`, `pgup`/`pgdn`, `home`/`end`, `?`, `ctrl+c`) and the `r`
+  reload key on the list; `enter` on the apply review says "press y to apply";
+  the SSH step on the done screen says how to reach the account (enter to the
+  list, select it, then `g`).
 - Terminal UI: the forms (company, account, import) use a built-in form
   component instead of the `huh` library. Hints and errors never split a URL
   or an email address, validation errors appear right under the field, the
