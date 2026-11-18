@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-11-18
+
 ### Added
 
 - Custom key bindings: an optional file `keys.yaml` next to `config.yaml`
@@ -234,7 +236,8 @@ First public version.
 - Every value written to git or ssh configuration is validated and escaped;
   clone arguments are always passed after `--`.
 
-[Unreleased]: https://github.com/tinhnd1902/gitid/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/tinhnd1902/gitid/compare/v0.1.6...HEAD
+[0.1.6]: https://github.com/tinhnd1902/gitid/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/tinhnd1902/gitid/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/tinhnd1902/gitid/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/tinhnd1902/gitid/compare/v0.1.2...v0.1.3
