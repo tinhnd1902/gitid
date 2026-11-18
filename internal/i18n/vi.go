@@ -77,7 +77,7 @@ var vi = map[string]string{
 	"cli.fix.dryrun":    "(dry-run) Chưa đổi gì.",
 	"cli.fix.done":      "Đã cập nhật remote.",
 
-	"cli.key.short":          "Quản lý SSH key",
+	"cli.key.short":          "Quản lý SSH key (phím tắt: gitid keys)",
 	"cli.key.gen_short":      "Tạo SSH key ed25519 cho một tài khoản",
 	"cli.key.confirm_nopass": "Tạo key KHÔNG có passphrase? Ai lấy được tệp key sẽ dùng được ngay. [y/N]",
 	"cli.key.generated":      "Đã tạo key: %s",
@@ -94,6 +94,33 @@ var vi = map[string]string{
 	"cli.import.hint_select":  "Để nhập: gitid import --select <slug> --platform <nền-tảng> --username <tên>",
 	"cli.import.unknown_slug": "Không có đề xuất nào tên: %s",
 	"cli.import.imported":     "Đã thêm %d công ty vào cấu hình. Chạy `gitid apply` để áp dụng.",
+
+	"cli.keys.short":        "Xem phím tắt, kể cả phím tùy chỉnh trong keys.yaml (SSH key: gitid key)",
+	"cli.keys.flag_example": "in keys.yaml mẫu ra màn hình (không ghi tệp nào)",
+	"cli.keys.file_present": "Tệp phím tắt: %s",
+	"cli.keys.file_absent":  "Tệp phím tắt: %s (chưa có, dùng phím mặc định)",
+	"cli.keys.col_action":   "HÀNH ĐỘNG",
+	"cli.keys.col_keys":     "PHÍM",
+	"cli.keys.col_default":  "MẶC ĐỊNH",
+	"cli.keys.col_scopes":   "MÀN HÌNH",
+	"cli.keys.custom_note":  "* = phím đã đổi trong keys.yaml",
+	"cli.keys.warnings":     "Cảnh báo:",
+
+	// --- keys.yaml ---
+	"keys.err.unknown_action": "keys.yaml: không có hành động %[1]s; bỏ qua.",
+	"keys.err.read":           "Không đọc được keys.yaml (%[1]s); dùng toàn bộ phím mặc định.",
+	"keys.err.parse":          "keys.yaml sai cú pháp YAML (%[1]s); dùng toàn bộ phím mặc định.",
+	"keys.err.section":        "keys.yaml phải là một bảng «hành động: phím» ở cấp ngoài cùng; dùng toàn bộ phím mặc định.",
+	"keys.err.bad_value":      "keys.yaml: %[1]s cần một phím hoặc một danh sách phím; dùng phím mặc định (%[2]s).",
+	"keys.err.empty":          "keys.yaml: %[1]s để trống; dùng phím mặc định (%[2]s).",
+	"keys.err.invalid_key":    "keys.yaml: %[1]s: phím %[2]s không hợp lệ; dùng phím mặc định (%[3]s).",
+	"keys.err.reserved":       "keys.yaml: %[1]s: phím %[2]s đã dành riêng ở màn hình «%[3]s»; dùng phím mặc định (%[4]s).",
+	"keys.err.conflict":       "keys.yaml: %[1]s: phím %[2]s trùng với %[3]s ở màn hình «%[4]s»; dùng phím mặc định (%[5]s).",
+	"keys.err.too_large":      "tệp %[1]d byte, tối đa %[2]d byte",
+	"keys.err.not_regular":    "không phải tệp thường",
+	"keys.err.dup_key":        "dòng %[1]d: khóa %[2]s xuất hiện hai lần",
+	"keys.err.syntax":         "cú pháp không hợp lệ",
+	"keys.err.syntax_line":    "dòng %d: cú pháp không hợp lệ",
 
 	// --- errors ---
 	"err.invalid_config":       "Cấu hình không hợp lệ:",
@@ -122,6 +149,7 @@ var vi = map[string]string{
 	"err.nopass_refused":       "--no-passphrase cần xác nhận rõ ràng (thêm --yes khi không có terminal).",
 	"err.keygen_needs_tty":     "Đang chạy trên terminal: ssh-keygen cần hỏi passphrase nhưng đầu vào không phải terminal, nên không tạo key. Hãy chạy lệnh trong terminal, hoặc dùng --no-passphrase --yes nếu bạn thật sự muốn key không có passphrase.",
 	"err.import_flags":         "--select cần đi kèm --platform và --username.",
+	"err.keys_flags":           "--example và --json không dùng cùng nhau được.",
 	"err.locked":               "Một tiến trình gitid khác đang chạy.",
 
 	// config validation codes
@@ -177,6 +205,9 @@ var vi = map[string]string{
 	"doctor.git.unknown":         "Không chạy được git.",
 	"doctor.config.ok":           "Cấu hình gitid hợp lệ.",
 	"doctor.config.invalid":      "Cấu hình có %s lỗi.",
+	"doctor.keybindings.ok":      "Phím tắt: dùng bản mặc định.",
+	"doctor.keybindings.custom":  "Phím tắt: keys.yaml đổi %s hành động.",
+	"doctor.keybindings.warn":    "Phím tắt: keys.yaml có vấn đề.",
 	"doctor.cred.skip":           "Không có tài khoản https: bỏ qua credential helper.",
 	"doctor.cred.gcm":            "Git Credential Manager đã cài.",
 	"doctor.cred.keychain_only":  "Chỉ có osxkeychain; chưa có Git Credential Manager.",

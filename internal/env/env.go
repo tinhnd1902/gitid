@@ -40,17 +40,18 @@ func (e Env) withDefaults() Env {
 
 // Paths holds every path gitid reads or writes. All are absolute.
 type Paths struct {
-	ConfigDir    string // $XDG_CONFIG_HOME/gitid
-	ConfigFile   string // ConfigDir/config.yaml
-	GitDir       string // ConfigDir/git (generated gitconfig files)
-	BackupsDir   string // ConfigDir/backups
-	LockFile     string // ConfigDir/.lock
-	GitConfig    string // ~/.gitconfig
-	SSHDir       string // ~/.ssh
-	SSHConfig    string // ~/.ssh/config
-	SSHConfigD   string // ~/.ssh/config.d
-	SSHGitidConf string // ~/.ssh/config.d/gitid.conf
-	KeysDir      string // ~/.ssh/gitid
+	ConfigDir       string // $XDG_CONFIG_HOME/gitid
+	ConfigFile      string // ConfigDir/config.yaml
+	KeyBindingsFile string // ConfigDir/keys.yaml (optional; gitid only reads it)
+	GitDir          string // ConfigDir/git (generated gitconfig files)
+	BackupsDir      string // ConfigDir/backups
+	LockFile        string // ConfigDir/.lock
+	GitConfig       string // ~/.gitconfig
+	SSHDir          string // ~/.ssh
+	SSHConfig       string // ~/.ssh/config
+	SSHConfigD      string // ~/.ssh/config.d
+	SSHGitidConf    string // ~/.ssh/config.d/gitid.conf
+	KeysDir         string // ~/.ssh/gitid
 }
 
 // xdgBase returns the XDG config base: XDGConfigHome when absolute, else
@@ -67,17 +68,18 @@ func (e Env) Paths() Paths {
 	cfg := filepath.Join(e.xdgBase(), "gitid")
 	ssh := filepath.Join(e.Home, ".ssh")
 	return Paths{
-		ConfigDir:    cfg,
-		ConfigFile:   filepath.Join(cfg, "config.yaml"),
-		GitDir:       filepath.Join(cfg, "git"),
-		BackupsDir:   filepath.Join(cfg, "backups"),
-		LockFile:     filepath.Join(cfg, ".lock"),
-		GitConfig:    filepath.Join(e.Home, ".gitconfig"),
-		SSHDir:       ssh,
-		SSHConfig:    filepath.Join(ssh, "config"),
-		SSHConfigD:   filepath.Join(ssh, "config.d"),
-		SSHGitidConf: filepath.Join(ssh, "config.d", "gitid.conf"),
-		KeysDir:      filepath.Join(ssh, "gitid"),
+		ConfigDir:       cfg,
+		ConfigFile:      filepath.Join(cfg, "config.yaml"),
+		KeyBindingsFile: filepath.Join(cfg, "keys.yaml"),
+		GitDir:          filepath.Join(cfg, "git"),
+		BackupsDir:      filepath.Join(cfg, "backups"),
+		LockFile:        filepath.Join(cfg, ".lock"),
+		GitConfig:       filepath.Join(e.Home, ".gitconfig"),
+		SSHDir:          ssh,
+		SSHConfig:       filepath.Join(ssh, "config"),
+		SSHConfigD:      filepath.Join(ssh, "config.d"),
+		SSHGitidConf:    filepath.Join(ssh, "config.d", "gitid.conf"),
+		KeysDir:         filepath.Join(ssh, "gitid"),
 	}
 }
 

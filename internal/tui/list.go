@@ -310,8 +310,10 @@ func newListScreen(sh *shared) *listScreen {
 	l.KeyMap.CursorDown = key.NewBinding(key.WithKeys("down", "ctrl+n"))
 	l.KeyMap.GoToStart = key.NewBinding(key.WithKeys("home"))
 	l.KeyMap.GoToEnd = key.NewBinding(key.WithKeys("end"))
-	l.KeyMap.NextPage = key.NewBinding(key.WithKeys("pgdown", "ctrl+f"))
-	l.KeyMap.PrevPage = key.NewBinding(key.WithKeys("pgup", "ctrl+b"))
+	// Paging uses the shared bindings, so the "?" overlay row and the list
+	// can not drift apart.
+	l.KeyMap.NextPage = key.NewBinding(key.WithKeys(sh.km.PageDown.Keys()...))
+	l.KeyMap.PrevPage = key.NewBinding(key.WithKeys(sh.km.PageUp.Keys()...))
 	l.KeyMap.ShowFullHelp.SetEnabled(false)
 	l.KeyMap.CloseFullHelp.SetEnabled(false)
 	l.Styles.NoItems = sh.st.Muted

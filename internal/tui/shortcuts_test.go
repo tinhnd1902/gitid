@@ -1206,3 +1206,49 @@ func TestOverlayClosesWithHelpBackAndQuit(t *testing.T) {
 		}
 	}
 }
+
+// DEF-2: the overlay row names both directions, and the keys it carries are
+// the ones the list pages with (the row used to list only the PageUp keys).
+func TestDEF2PageKeys(t *testing.T) {
+	km := NewKeyMap()
+	row := (&Model{sh: &shared{km: km}}).globalHelp()[2]
+	if h := row.Help(); h.Key != "pgup/pgdn" {
+		t.Fatalf("overlay row key %q, want pgup/pgdn", h.Key)
+	}
+	for _, k := range []string{"pgup", "ctrl+b", "pgdown", "ctrl+f"} {
+		if !strings.Contains(strings.Join(row.Keys(), " "), k) {
+			t.Errorf("overlay row lacks %s: %v", k, row.Keys())
+		}
+	}
+
+	cfg := basicCfg()
+	for i := 0; i < 20; i++ {
+		c := cfg.Companies[2]
+		c.Slug = fmt.Sprintf("extra%02d", i)
+		c.Name = c.Slug
+		c.BaseDir = "~/Code/" + c.Slug + "/"
+		cfg.Companies = append(cfg.Companies, c)
+	}
+	h := newHarness(t, cfg)
+	h.resize(100, 12)
+	ls := h.top().(*listScreen)
+	if ls.l.Index() != 0 {
+		t.Fatalf("start at %d", ls.l.Index())
+	}
+	for _, pair := range [][2]string{{"pgdown", "pgup"}, {"ctrl+f", "ctrl+b"}} {
+		h.key(pair[0])
+		moved := ls.l.Index()
+		if moved == 0 {
+			t.Fatalf("%s did not page the list", pair[0])
+		}
+		h.key(pair[1])
+		if got := ls.l.Index(); got >= moved {
+			t.Fatalf("%s did not page back: %d -> %d", pair[1], moved, got)
+		}
+		h.key("home")
+	}
+
+	h.resize(100, 30)
+	h.key("?")
+	h.mustContain("pgup/pgdn")
+}

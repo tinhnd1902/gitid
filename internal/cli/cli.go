@@ -156,6 +156,6 @@ func (c *cli) root() *cobra.Command {
 			return c.d.StartTUI(c.svc)
 		},
 	}
-	root.AddCommand(c.listCmd(), c.checkCmd(), c.cloneCmd(), c.applyCmd(), c.doctorCmd(), c.fixRemoteCmd(), c.keyCmd(), c.importCmd(), c.versionCmd())
+	root.AddCommand(c.listCmd(), c.checkCmd(), c.cloneCmd(), c.applyCmd(), c.doctorCmd(), c.fixRemoteCmd(), c.keyCmd(), c.keysCmd(), c.importCmd(), c.versionCmd())
 	return root
 }

@@ -41,6 +41,8 @@ func (c *cli) errorMessage(err error) string {
 		return i18n.T("err.nopass_refused")
 	case errors.Is(err, errImportFlags):
 		return i18n.T("err.import_flags")
+	case errors.Is(err, errKeysFlags):
+		return i18n.T("err.keys_flags")
 	}
 	table := []struct {
 		target error

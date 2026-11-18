@@ -249,6 +249,9 @@ func keyMsg(s string) tea.KeyMsg {
 	case "shift+tab":
 		return tea.KeyMsg{Type: tea.KeyShiftTab}
 	}
+	if r := []rune(s); len(r) == 6 && strings.HasPrefix(s, "ctrl+") && r[5] >= 'a' && r[5] <= 'z' {
+		return tea.KeyMsg{Type: tea.KeyType(r[5]-'a') + tea.KeyCtrlA}
+	}
 	if r := []rune(s); len(r) == 5 && strings.HasPrefix(s, "alt+") {
 		return tea.KeyMsg{Type: tea.KeyRunes, Runes: r[4:], Alt: true}
 	}

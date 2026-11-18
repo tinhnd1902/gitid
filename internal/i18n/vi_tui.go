@@ -226,6 +226,7 @@ var viTUI = map[string]string{
 	"tui.doctor.ssh_header":              "Kết nối SSH (cần mạng)",
 	"tui.doctor.check.git_version":       "Phiên bản git",
 	"tui.doctor.check.config":            "Cấu hình gitid",
+	"tui.doctor.check.keybindings":       "Phím tắt",
 	"tui.doctor.check.credential_helper": "Credential helper",
 	"tui.doctor.check.ssh_include":       "Include trong ~/.ssh/config",
 	"tui.doctor.check.ssh_conf":          "gitid.conf",

@@ -397,7 +397,10 @@ func (m *Model) globalHelp() []key.Binding {
 	return []key.Binding{
 		withDesc(km.Back, "esc/q", tr("tui.key.back_global")),
 		withDesc(km.Up, "↑/↓", tr("tui.key.move")),
-		withDesc(km.PageUp, "pgup/dn", tr("tui.key.nav_page")),
+		// one row for both directions: the keys of PageUp and PageDown
+		key.NewBinding(
+			key.WithKeys(append(append([]string{}, km.PageUp.Keys()...), km.PageDown.Keys()...)...),
+			key.WithHelp("pgup/pgdn", tr("tui.key.nav_page"))),
 		key.NewBinding(key.WithKeys("home", "end"), key.WithHelp("home/end", tr("tui.key.nav_ends"))),
 		km.Help,
 		km.ForceQuit,

@@ -226,6 +226,7 @@ var enTUI = map[string]string{
 	"tui.doctor.ssh_header":              "SSH connectivity (needs network)",
 	"tui.doctor.check.git_version":       "git version",
 	"tui.doctor.check.config":            "gitid configuration",
+	"tui.doctor.check.keybindings":       "Key bindings",
 	"tui.doctor.check.credential_helper": "Credential helper",
 	"tui.doctor.check.ssh_include":       "Include in ~/.ssh/config",
 	"tui.doctor.check.ssh_conf":          "gitid.conf",

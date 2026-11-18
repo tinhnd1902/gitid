@@ -19,6 +19,7 @@ import (
 	"github.com/tinhnd1902/gitid/internal/fsx"
 	"github.com/tinhnd1902/gitid/internal/gitcfg"
 	"github.com/tinhnd1902/gitid/internal/gitops"
+	"github.com/tinhnd1902/gitid/internal/keymap"
 	"github.com/tinhnd1902/gitid/internal/keys"
 	"github.com/tinhnd1902/gitid/internal/plan"
 	"github.com/tinhnd1902/gitid/internal/sshcfg"
@@ -43,6 +44,9 @@ const (
 	MsgGitUnknown       = "doctor.git.unknown"
 	MsgConfigOK         = "doctor.config.ok"
 	MsgConfigInvalid    = "doctor.config.invalid"
+	MsgKBOK             = "doctor.keybindings.ok"
+	MsgKBCustom         = "doctor.keybindings.custom"
+	MsgKBWarn           = "doctor.keybindings.warn"
 	MsgCredSkip         = "doctor.cred.skip"
 	MsgCredGCM          = "doctor.cred.gcm"
 	MsgCredKeychain     = "doctor.cred.keychain_only"
@@ -85,7 +89,7 @@ const (
 // AllKeys lists every message and hint key (used by the i18n test).
 func AllKeys() []string {
 	return []string{
-		MsgGitOK, MsgGitOld, MsgGitUnknown, MsgConfigOK, MsgConfigInvalid, MsgCredSkip, MsgCredGCM, MsgCredKeychain, MsgCredNone,
+		MsgGitOK, MsgGitOld, MsgGitUnknown, MsgConfigOK, MsgConfigInvalid, MsgKBOK, MsgKBCustom, MsgKBWarn, MsgCredSkip, MsgCredGCM, MsgCredKeychain, MsgCredNone,
 		MsgSSHIncludeSkip, MsgSSHIncludeOK, MsgSSHIncludeBad, MsgSSHIncludeScoped, MsgSSHConfSkip, MsgSSHConfOK, MsgSSHConfStale,
 		MsgKeyOK, MsgKeyMissing, MsgKeyMode, MsgKeyNoPub, MsgPlanOK, MsgPlanPending, MsgBaseDirOK, MsgBaseDirMissing, MsgAliasOK, MsgAliasClash,
 		MsgAmbiguousOK, MsgAmbiguousFound, MsgBlockLastOK, MsgBlockLastInfo, MsgSSHTestOK, MsgSSHTestFail,
@@ -127,6 +131,7 @@ func Checks(opts Options) []Check {
 	cs := []Check{
 		{"git_version", checkGit},
 		{"config", checkConfig},
+		{"keybindings", checkKeyBindings},
 		{"credential_helper", checkCred},
 		{"ssh_include", checkSSHInclude},
 		{"ssh_conf", checkSSHConf},
@@ -224,6 +229,23 @@ func checkConfig(ctx context.Context, d Deps) []Result {
 		parts = append(parts, e.Error())
 	}
 	return []Result{res("config", Fail, MsgConfigInvalid, fmt.Sprint(len(errs))).detail(strings.Join(parts, "; ")).hint(HintFixConfig)}
+}
+
+// checkKeyBindings reports the problems of the optional keys.yaml. It only
+// reads the file, and never fails: a bad entry just keeps its default key.
+func checkKeyBindings(ctx context.Context, d Deps) []Result {
+	m, issues := keymap.Load(d.E)
+	if len(issues) == 0 {
+		if n := m.CustomCount(); n > 0 {
+			return []Result{res("keybindings", OK, MsgKBCustom, fmt.Sprint(n))}
+		}
+		return []Result{res("keybindings", OK, MsgKBOK)}
+	}
+	out := make([]Result, 0, len(issues))
+	for _, is := range issues {
+		out = append(out, res("keybindings", Warn, MsgKBWarn).detail(is.Message()))
+	}
+	return out
 }
 
 func hasHTTPS(cfg config.Config) bool {

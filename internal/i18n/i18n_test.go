@@ -12,6 +12,7 @@ import (
 	"github.com/tinhnd1902/gitid/internal/doctor"
 	"github.com/tinhnd1902/gitid/internal/i18n"
 	"github.com/tinhnd1902/gitid/internal/importer"
+	"github.com/tinhnd1902/gitid/internal/keymap"
 	"github.com/tinhnd1902/gitid/internal/plan"
 	"github.com/tinhnd1902/gitid/internal/sshcfg"
 )
@@ -87,6 +88,9 @@ func TestExternalKeysAreTranslated(t *testing.T) {
 	for _, k := range importer.AllWarnings() {
 		keys[k] = true
 	}
+	for _, k := range keymap.AllIssueCodes() {
+		keys[k] = true
+	}
 	keys[sshcfg.WarnIncludeScoped] = true
 	keys[plan.WarnGitidConfForeign] = true
 	for _, r := range []string{"alias", "username", "default"} {
@@ -153,5 +157,18 @@ func TestL4NoHardcodedProse(t *testing.T) {
 			}
 			return nil
 		})
+	}
+}
+
+// Every doctor check ID has a label for the TUI doctor screen in both languages.
+func TestDoctorCheckLabels(t *testing.T) {
+	for _, lang := range []string{"vi", "en"} {
+		msgs := i18n.Messages(lang)
+		for _, c := range doctor.Checks(doctor.Options{SSHTest: true}) {
+			k := "tui.doctor.check." + c.ID
+			if v, ok := msgs[k]; !ok || v == "" {
+				t.Errorf("%s: no label %q", lang, k)
+			}
+		}
 	}
 }

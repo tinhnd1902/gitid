@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -360,5 +361,85 @@ func TestPlanBuildErrorReported(t *testing.T) {
 	testutil.WriteFile(t, e.Paths().GitConfig, "# >>> gitid managed block (do not edit; run `gitid apply`) >>>\n", 0o644)
 	if r := find(doctor.Run(bg, d, doctor.Options{}), "plan"); r.Status != doctor.Fail || r.Detail == "" {
 		t.Fatalf("%+v", r)
+	}
+}
+
+func keyBindingResults(rs []doctor.Result) []doctor.Result {
+	var out []doctor.Result
+	for _, r := range rs {
+		if r.ID == "keybindings" {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+func TestDOC1KeyBindingsDefault(t *testing.T) {
+	d, e := deps(t, fixtures.Basic(), goodFake())
+	rs := keyBindingResults(doctor.Run(bg, d, doctor.Options{}))
+	if len(rs) != 1 || rs[0].Status != doctor.OK || rs[0].Msg != doctor.MsgKBOK {
+		t.Fatalf("%+v", rs)
+	}
+	if _, err := os.Stat(e.Paths().KeyBindingsFile); !os.IsNotExist(err) {
+		t.Fatalf("doctor created keys.yaml: %v", err)
+	}
+	// the row follows the config check
+	var ids []string
+	for _, c := range doctor.Checks(doctor.Options{}) {
+		ids = append(ids, c.ID)
+	}
+	if ids[1] != "config" || ids[2] != "keybindings" {
+		t.Fatalf("order %v", ids)
+	}
+}
+
+func TestDOC2KeyBindingsCustom(t *testing.T) {
+	d, e := deps(t, fixtures.Basic(), goodFake())
+	testutil.WriteFile(t, e.Paths().KeyBindingsFile, "check: v\nclone: [c, n]\n", 0o644)
+	rs := keyBindingResults(doctor.Run(bg, d, doctor.Options{}))
+	if len(rs) != 1 || rs[0].Status != doctor.OK || rs[0].Msg != doctor.MsgKBCustom || len(rs[0].Args) != 1 || rs[0].Args[0] != "2" {
+		t.Fatalf("%+v", rs)
+	}
+}
+
+func TestDOC3KeyBindingsWarnings(t *testing.T) {
+	d, e := deps(t, fixtures.Basic(), goodFake())
+	p := e.Paths().KeyBindingsFile
+	testutil.WriteFile(t, p, "check: c\nchekc: v\n", 0o644)
+	rs := keyBindingResults(doctor.Run(bg, d, doctor.Options{}))
+	if len(rs) != 2 {
+		t.Fatalf("%+v", rs)
+	}
+	for _, r := range rs {
+		if r.Status != doctor.Warn || r.Msg != doctor.MsgKBWarn || r.Detail == "" {
+			t.Errorf("%+v", r)
+		}
+	}
+	if !strings.Contains(rs[0].Detail, "check") || !strings.Contains(rs[0].Detail, "clone") {
+		t.Errorf("conflict detail: %q", rs[0].Detail)
+	}
+	if !strings.Contains(rs[1].Detail, "chekc") {
+		t.Errorf("unknown-action detail: %q", rs[1].Detail)
+	}
+	if w := doctor.Worst(rs); w != doctor.Warn {
+		t.Fatalf("worst = %s", w)
+	}
+	if got, _ := os.ReadFile(p); string(got) != "check: c\nchekc: v\n" {
+		t.Fatal("doctor changed keys.yaml")
+	}
+	// an unparsable file is a warning too, never a failure
+	testutil.WriteFile(t, p, "check: [v\n", 0o644)
+	rs = keyBindingResults(doctor.Run(bg, d, doctor.Options{}))
+	if len(rs) != 1 || rs[0].Status != doctor.Warn {
+		t.Fatalf("%+v", rs)
+	}
+}
+
+func TestDOC5KeyBindingsMessageKeys(t *testing.T) {
+	keys := doctor.AllKeys()
+	for _, k := range []string{doctor.MsgKBOK, doctor.MsgKBCustom, doctor.MsgKBWarn} {
+		if !slices.Contains(keys, k) {
+			t.Errorf("AllKeys lacks %s", k)
+		}
 	}
 }

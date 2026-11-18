@@ -78,7 +78,7 @@ var en = map[string]string{
 	"cli.fix.dryrun":    "(dry-run) Nothing changed.",
 	"cli.fix.done":      "Remote updated.",
 
-	"cli.key.short":          "Manage SSH keys",
+	"cli.key.short":          "Manage SSH keys (keyboard shortcuts: gitid keys)",
 	"cli.key.gen_short":      "Generate an ed25519 SSH key for an account",
 	"cli.key.confirm_nopass": "Create the key WITHOUT a passphrase? Anyone who gets the key file can use it. [y/N]",
 	"cli.key.generated":      "Key created: %s",
@@ -95,6 +95,33 @@ var en = map[string]string{
 	"cli.import.hint_select":  "To import: gitid import --select <slug> --platform <platform> --username <name>",
 	"cli.import.unknown_slug": "No proposal named: %s",
 	"cli.import.imported":     "Added %d company(ies) to the configuration. Run `gitid apply` to apply it.",
+
+	"cli.keys.short":        "Show the keyboard shortcuts, including custom ones from keys.yaml (SSH keys: gitid key)",
+	"cli.keys.flag_example": "print an example keys.yaml to the screen (writes no file)",
+	"cli.keys.file_present": "Key bindings file: %s",
+	"cli.keys.file_absent":  "Key bindings file: %s (not present, defaults are used)",
+	"cli.keys.col_action":   "ACTION",
+	"cli.keys.col_keys":     "KEYS",
+	"cli.keys.col_default":  "DEFAULT",
+	"cli.keys.col_scopes":   "SCREENS",
+	"cli.keys.custom_note":  "* = changed in keys.yaml",
+	"cli.keys.warnings":     "Warnings:",
+
+	// --- keys.yaml ---
+	"keys.err.unknown_action": "keys.yaml: there is no action %[1]s; ignored.",
+	"keys.err.read":           "Cannot read keys.yaml (%[1]s); all default keys are used.",
+	"keys.err.parse":          "keys.yaml is not valid YAML (%[1]s); all default keys are used.",
+	"keys.err.section":        "keys.yaml must be a top-level mapping of \"action: key\"; all default keys are used.",
+	"keys.err.bad_value":      "keys.yaml: %[1]s needs a key or a list of keys; the default (%[2]s) is used.",
+	"keys.err.empty":          "keys.yaml: %[1]s is empty; the default (%[2]s) is used.",
+	"keys.err.invalid_key":    "keys.yaml: %[1]s: key %[2]s is not valid; the default (%[3]s) is used.",
+	"keys.err.reserved":       "keys.yaml: %[1]s: key %[2]s is reserved on the %[3]s screen; the default (%[4]s) is used.",
+	"keys.err.conflict":       "keys.yaml: %[1]s: key %[2]s clashes with %[3]s on the %[4]s screen; the default (%[5]s) is used.",
+	"keys.err.too_large":      "file is %[1]d bytes, the limit is %[2]d bytes",
+	"keys.err.not_regular":    "not a regular file",
+	"keys.err.dup_key":        "line %[1]d: key %[2]s appears twice",
+	"keys.err.syntax":         "invalid syntax",
+	"keys.err.syntax_line":    "line %d: invalid syntax",
 
 	// --- errors ---
 	"err.invalid_config":       "Invalid configuration:",
@@ -123,6 +150,7 @@ var en = map[string]string{
 	"err.nopass_refused":       "--no-passphrase needs explicit confirmation (add --yes without a terminal).",
 	"err.keygen_needs_tty":     "ssh-keygen must ask for a passphrase but the input is not a terminal, so no key was created. Run the command in a terminal, or pass --no-passphrase --yes if you really want a key without a passphrase.",
 	"err.import_flags":         "--select needs --platform and --username.",
+	"err.keys_flags":           "--example and --json can not be used together.",
 	"err.locked":               "Another gitid process is running.",
 
 	// config validation codes
@@ -178,6 +206,9 @@ var en = map[string]string{
 	"doctor.git.unknown":         "Could not run git.",
 	"doctor.config.ok":           "The gitid configuration is valid.",
 	"doctor.config.invalid":      "The configuration has %s error(s).",
+	"doctor.keybindings.ok":      "Key bindings: the defaults are used.",
+	"doctor.keybindings.custom":  "Key bindings: keys.yaml changes %s action(s).",
+	"doctor.keybindings.warn":    "Key bindings: keys.yaml has a problem.",
 	"doctor.cred.skip":           "No https accounts: credential helper check skipped.",
 	"doctor.cred.gcm":            "Git Credential Manager is installed.",
 	"doctor.cred.keychain_only":  "Only osxkeychain is configured; Git Credential Manager is not installed.",

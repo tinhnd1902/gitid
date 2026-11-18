@@ -57,7 +57,9 @@ func (c *cli) doctorCmd() *cobra.Command {
 				for _, r := range rendered {
 					c.printf("%-8s %s\n", "["+i18n.T("cli.status."+string(r.Status))+"]", r.Message)
 					if r.Detail != "" && r.Status != doctor.OK {
-						c.printf("%-8s   %s\n", "", r.Detail)
+						for _, part := range wrapText(r.Detail, keysWidth-11) {
+							c.printf("%-8s   %s\n", "", part)
+						}
 					}
 					if r.Hint != "" && r.Status != doctor.OK {
 						c.printf("%-8s   -> %s\n", "", r.Hint)

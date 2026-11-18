@@ -1,6 +1,7 @@
 package env
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -86,4 +87,20 @@ func TestFromOS(t *testing.T) {
 		_ = err // UserHomeDir may fail without HOME; both outcomes are valid
 	}
 	_ = RealHome()
+}
+
+func TestKeyBindingsFilePath(t *testing.T) {
+	for _, c := range []struct{ home, xdg, want string }{
+		{"/h", "", "/h/.config/gitid/keys.yaml"},
+		{"/h", "/x/cfg", "/x/cfg/gitid/keys.yaml"},
+		{"/h", "rel", "/h/.config/gitid/keys.yaml"}, // relative XDG is ignored, like ConfigFile
+	} {
+		p := New(c.home, c.xdg).Paths()
+		if p.KeyBindingsFile != c.want {
+			t.Errorf("xdg %q: KeyBindingsFile = %q, want %q", c.xdg, p.KeyBindingsFile, c.want)
+		}
+		if filepath.Dir(p.KeyBindingsFile) != p.ConfigDir || filepath.Dir(p.KeyBindingsFile) != filepath.Dir(p.ConfigFile) {
+			t.Errorf("keys.yaml is not next to config.yaml: %q vs %q", p.KeyBindingsFile, p.ConfigFile)
+		}
+	}
 }
