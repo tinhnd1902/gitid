@@ -19,6 +19,7 @@ import (
 	"github.com/tinhnd1902/gitid/internal/env"
 	"github.com/tinhnd1902/gitid/internal/execx"
 	"github.com/tinhnd1902/gitid/internal/i18n"
+	"github.com/tinhnd1902/gitid/internal/keymap"
 	"github.com/tinhnd1902/gitid/internal/testutil"
 	"github.com/tinhnd1902/gitid/internal/testutil/fixtures"
 )
@@ -55,6 +56,22 @@ type harness struct {
 // newHarness builds a model over a temp HOME. cfg (optional) is saved first.
 func newHarness(t *testing.T, cfg *config.Config) *harness {
 	t.Helper()
+	return buildHarness(t, cfg, nil)
+}
+
+// newHarnessKeys is newHarness with a keys.yaml (the content is written
+// verbatim) in the temp config dir before the model starts.
+func newHarnessKeys(t *testing.T, cfg *config.Config, keysYAML string) *harness {
+	t.Helper()
+	return buildHarness(t, cfg, func(e env.Env) {
+		testutil.WriteFile(t, e.Paths().KeyBindingsFile, keysYAML, 0o644)
+	})
+}
+
+// buildHarness is the common builder; before (optional) runs after cfg was
+// saved and before the model starts.
+func buildHarness(t *testing.T, cfg *config.Config, before func(e env.Env)) *harness {
+	t.Helper()
 	e := testutil.TempEnv(t)
 	fake := execx.NewFake()
 	svc := app.New(e, fake)
@@ -62,6 +79,9 @@ func newHarness(t *testing.T, cfg *config.Config) *harness {
 		if _, _, err := svc.Commit(*cfg); err != nil {
 			t.Fatalf("seed config: %v", err)
 		}
+	}
+	if before != nil {
+		before(e)
 	}
 	h := &harness{t: t, e: e, fake: fake, svc: svc, msgs: make(chan tea.Msg, 256), inflight: map[int]time.Time{}, idle: defaultIdle}
 	h.m = New(svc, Options{Cwd: e.Home, Version: "test"})
@@ -303,3 +323,24 @@ func (h *harness) waitFor(what string, pred func() bool) {
 func (h *harness) top() Screen { return h.m.top() }
 
 func (h *harness) depth() int { return len(h.m.stack) }
+
+// defKM is the key map with the default keys. Messages that name keys take
+// them as arguments, so a test that asserts their text builds it with
+// defKM.T instead of tr.
+var defKM = NewKeyMap(keymap.Defaults())
+
+// harnessFor is newHarness, or newHarnessKeys when a keys.yaml is given.
+func harnessFor(t *testing.T, cfg *config.Config, keysYAML []string) *harness {
+	t.Helper()
+	if len(keysYAML) > 0 && keysYAML[0] != "" {
+		return newHarnessKeys(t, cfg, keysYAML[0])
+	}
+	return newHarness(t, cfg)
+}
+
+// act presses the key bound to an action in the keymap in effect, so a
+// helper works with the default keys and with a keys.yaml alike.
+func (h *harness) act(a keymap.Action) {
+	h.t.Helper()
+	h.key(h.m.sh.km.keys.Label(a))
+}

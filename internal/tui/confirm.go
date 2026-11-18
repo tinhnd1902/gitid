@@ -11,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/tinhnd1902/gitid/internal/config"
+	"github.com/tinhnd1902/gitid/internal/keymap"
 	"github.com/tinhnd1902/gitid/internal/plan"
 )
 
@@ -64,7 +65,7 @@ func (c *confirmScreen) Help() []key.Binding {
 	km := c.sh.km
 	switch c.state {
 	case confReady:
-		return []key.Binding{withDesc(km.Yes, "y", tr("tui.confirm.apply")), withDesc(km.No, "n/esc", tr("tui.key.cancel")), withDesc(km.Up, "↑/↓", tr("tui.key.scroll"))}
+		return []key.Binding{relabel(km.Yes, tr("tui.confirm.apply")), withDesc(km.No, km.No.Help().Key+"/esc", tr("tui.key.cancel")), withDesc(km.Up, "↑/↓", tr("tui.key.scroll"))}
 	case confDone:
 		return []key.Binding{km.Clone, km.Check, withDesc(km.Enter, "enter", tr("tui.key.to_list")), km.Back}
 	case confEmpty:
@@ -248,7 +249,7 @@ func (c *confirmScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		}
 		c.state = confDone
 		return c, tea.Batch(refreshPlan(), func() tea.Msg {
-			return statusMsg{level: levelOK, text: tr("tui.status.applied"), ttl: hintTTL}
+			return statusMsg{level: levelOK, text: c.sh.km.T("tui.status.applied"), ttl: hintTTL}
 		})
 	case tea.KeyMsg:
 		switch c.state {
@@ -257,10 +258,10 @@ func (c *confirmScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 			case key.Matches(msg, km.Yes):
 				return c, c.apply()
 			case key.Matches(msg, km.No):
-				return c, tea.Batch(c.sh.popNow(), hint(tr("tui.status.apply_later")))
+				return c, tea.Batch(c.sh.popNow(), hint(c.sh.km.T("tui.status.apply_later")))
 			case key.Matches(msg, km.Enter):
 				// enter does not apply: say which key does
-				return c, say(levelInfo, tr("tui.status.press_yes", km.Yes.Help().Key))
+				return c, say(levelInfo, km.T("tui.status.press_yes"))
 			}
 			var cmd tea.Cmd
 			c.vp, cmd = c.vp.Update(msg)
@@ -304,7 +305,7 @@ func (c *confirmScreen) View() string {
 		body = c.spin.View() + " " + st.Muted.Render(tr("tui.confirm.building"))
 	case confEmpty:
 		if empty := emptyCompanies(c.sh.cfg); len(empty) > 0 {
-			body = st.Warn.Render(wrap("! "+tr("tui.confirm.empty_no_accounts", empty[0]), maxInt(c.w-6, 10)))
+			body = st.Warn.Render(wrap("! "+c.sh.km.T("tui.confirm.empty_no_accounts", empty[0]), maxInt(c.w-6, 10)))
 		} else {
 			body = st.OK.Render("✓ " + tr("tui.confirm.empty"))
 		}
@@ -312,13 +313,13 @@ func (c *confirmScreen) View() string {
 	case confReady:
 		body = strings.Join(c.headerLines(), "\n") + "\n" +
 			st.Faint.Render(strings.Repeat("─", maxInt(c.w-4, 4))) + "\n" + c.vp.View() + "\n" +
-			st.Faint.Render(fmt.Sprintf("%3.0f%%", c.vp.ScrollPercent()*100)+"  "+tr("tui.confirm.question"))
+			st.Faint.Render(fmt.Sprintf("%3.0f%%", c.vp.ScrollPercent()*100)+"  "+c.sh.km.T("tui.confirm.question"))
 	case confApplying:
 		body = c.spin.View() + " " + st.Muted.Render(tr("tui.confirm.applying"))
 	case confDone:
 		body = c.doneView()
 	case confFailed:
-		body = st.Err.Render("✗ "+wrap(errText(c.err), maxInt(c.w-6, 10))) + "\n\n" + st.Faint.Render(tr("tui.confirm.retry_hint"))
+		body = st.Err.Render("✗ "+wrap(errText(c.err), maxInt(c.w-6, 10))) + "\n\n" + st.Faint.Render(c.sh.km.T("tui.confirm.retry_hint"))
 	}
 	return c.sh.panel(c.title, body, c.w, c.h, true)
 }
@@ -416,13 +417,13 @@ func (c *confirmScreen) doneView() string {
 			head = append(head, step(n, k, text, o.oneLine)...)
 			n++
 		}
-		add("c", cloneText)
-		add("k", tr("tui.confirm.next_check", cwd))
+		add(c.sh.km.keys.Label(keymap.Clone), cloneText)
+		add(c.sh.km.keys.Label(keymap.Check), c.sh.km.T("tui.confirm.next_check", cwd))
 		if https {
 			add("", tr("tui.confirm.next_https"))
 		}
 		if ssh {
-			add("", tr("tui.confirm.next_ssh"))
+			add("", c.sh.km.T("tui.confirm.next_ssh"))
 		}
 		if o.noVerify {
 			head = append(head, styledWrap(st.Faint, tr("tui.confirm.no_verify"), inner)...)

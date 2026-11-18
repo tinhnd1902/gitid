@@ -9,6 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Custom key bindings: an optional file `keys.yaml` next to `config.yaml`
+  (`$XDG_CONFIG_HOME/gitid/keys.yaml`, default `~/.config/gitid/keys.yaml`)
+  lets you rebind the TUI shortcuts, for example `check: "v"` or
+  `clone: ["c", "n"]`. gitid only reads the file: it never creates, rewrites,
+  backs up or deletes it, and editing it never makes a save of `config.yaml`
+  stale. A key that is invalid, reserved or used twice on one screen, an
+  unknown action name or a broken file never stops gitid: the affected
+  action keeps its default key and the problem is shown in the status bar, at
+  the bottom of the `?` overlay, by `gitid keys` and by `gitid doctor`. The
+  help bar, the `?` overlay, the next-step hints, the status badge, the
+  welcome steps, the done screen and the discard question all show the keys
+  that are bound now. `r` on the list reloads the file; the keys also apply
+  when `config.yaml` itself cannot be loaded.
+- `gitid keys` prints every action with its keys, default and screens, marks
+  the ones changed in `keys.yaml` and lists the problems (exit code 2 when
+  there are any); `--json` prints the same as JSON, and `--example` prints a
+  template with every line commented out (`mkdir -p ~/.config/gitid &&
+  gitid keys --example > ~/.config/gitid/keys.yaml`; it writes no file
+  itself).
+- `gitid doctor`: new `keybindings` check. A problem in `keys.yaml` is a
+  warning, never a failure.
+- README.md and README_VI.md: "Custom key bindings" / "Tùy chỉnh phím tắt".
+- Test: the shortcut guard also runs with every rebindable action moved to
+  its own `alt+<letter>` and fails on any key shown in a frame that is not
+  handled there, so a hint can no longer name a hard-coded letter.
 - Terminal UI: `q` goes back one step on every screen except the list, where it
   still quits. In a text field `q` is typed as a letter, and the "?" overlay
   closes with `q` too. It is ignored while gitid is busy (applying, cloning,
@@ -40,6 +65,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Terminal UI: the key hints in messages ("press p", "bấm k", the welcome
+  steps, the status badge) are built from the key bindings in effect instead
+  of fixed letters; the text is the same with the default keys.
 - Terminal UI: the selected Yes/No button also shows a `▸` marker, so it does
   not depend on color alone. The faint text color is darker on light
   terminals and lighter on dark ones (contrast of at least 4.5:1).

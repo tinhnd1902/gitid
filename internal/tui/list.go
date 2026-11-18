@@ -14,6 +14,7 @@ import (
 	"github.com/sahilm/fuzzy"
 
 	"github.com/tinhnd1902/gitid/internal/config"
+	"github.com/tinhnd1902/gitid/internal/keymap"
 	"github.com/tinhnd1902/gitid/internal/keys"
 )
 
@@ -318,7 +319,7 @@ func newListScreen(sh *shared) *listScreen {
 	l.KeyMap.CloseFullHelp.SetEnabled(false)
 	l.Styles.NoItems = sh.st.Muted
 	fi := textinput.New()
-	fi.Prompt = "/ "
+	fi.Prompt = sh.km.keys.Label(keymap.Filter) + " "
 	fi.PromptStyle = sh.st.Accent
 	fi.Cursor.Style = sh.st.Accent
 	fi.CharLimit = 64
@@ -364,7 +365,7 @@ func (s *listScreen) ContextHelp() []helpItem {
 	case !has:
 		out = []helpItem{it(km.Quit)}
 	case r.isCompany() && len(r.company.Accounts) == 0:
-		out = []helpItem{prim(km.AddAccount), it(withDesc(km.Edit, "e", tr("tui.key.edit_company"))), it(km.Delete), it(km.AddCompany), it(km.Quit)}
+		out = []helpItem{prim(km.AddAccount), it(relabel(km.Edit, tr("tui.key.edit_company"))), it(km.Delete), it(km.AddCompany), it(km.Quit)}
 	case pending:
 		out = []helpItem{prim(km.Apply), it(km.AddAccount), it(km.Edit), it(km.Delete), it(km.Quit)}
 	case !r.isCompany() && r.account.Auth == config.AuthSSH && s.keyFor == r.key() && !s.keyInfo.Exists:
@@ -640,7 +641,7 @@ func (s *listScreen) action(msg tea.KeyMsg, km *KeyMap) (tea.Cmd, bool) {
 		return sh.pushNow(newCompanyForm(sh, nil)), true
 	case key.Matches(msg, km.AddAccount):
 		if !has {
-			return say(levelWarn, tr("tui.status.need_company")), true
+			return say(levelWarn, sh.km.T("tui.status.need_company")), true
 		}
 		return sh.pushNow(newAccountForm(sh, r.company.Slug, nil)), true
 	case key.Matches(msg, km.Edit):
@@ -739,13 +740,16 @@ func (s *listScreen) View() string {
 
 func (s *listScreen) filterLine() string {
 	st := s.sh.st
+	// the filter key can change when keys.yaml is reloaded
+	prompt := s.sh.km.keys.Label(keymap.Filter) + " "
+	s.filter.Prompt = prompt
 	switch s.mode {
 	case filterTyping:
 		return s.filter.View()
 	case filterApplied:
-		return st.Accent.Render("/ ") + st.Text.Render(s.filter.Value()) + st.Faint.Render("  "+tr("tui.list.clear_filter"))
+		return st.Accent.Render(prompt) + st.Text.Render(s.filter.Value()) + st.Faint.Render("  "+tr("tui.list.clear_filter"))
 	}
-	return st.Faint.Render("/ " + tr("tui.list.filter_hint"))
+	return st.Faint.Render(prompt + tr("tui.list.filter_hint"))
 }
 
 func (s *listScreen) listPanel(w, h int) string {
@@ -804,7 +808,7 @@ func (sh *shared) noAccountsLines(c config.Company, w int, withWhy bool) []strin
 		out = append(out, "")
 	}
 	// centered when it fits on one line; a wrapped hint reads better flush left
-	lines := wrapLines(tr("tui.list.no_accounts_hint", c.Slug), w)
+	lines := wrapLines(sh.km.T("tui.list.no_accounts_hint", c.Slug), w)
 	for _, l := range lines {
 		l = st.Accent.Bold(true).Render(l)
 		if len(lines) == 1 {
@@ -837,7 +841,8 @@ func (s *listScreen) welcomeBody(w, h int) string {
 	st := s.sh.st
 	steps := func(wrapText bool) []string {
 		var out []string
-		for i, k := range []string{"A", "a", "p"} {
+		km := s.sh.km
+		for i, k := range []string{km.keys.Label(keymap.AddCompany), km.keys.Label(keymap.AddAccount), km.keys.Label(keymap.Apply)} {
 			prefix := st.Faint.Render(fmt.Sprintf("  %d  ", i+1)) + st.Accent.Bold(true).Render(k) + "  "
 			text := tr(fmt.Sprintf("tui.empty.step%d", i+1))
 			if !wrapText {
@@ -856,7 +861,7 @@ func (s *listScreen) welcomeBody(w, h int) string {
 	}
 	para := func(style lipgloss.Style, key string) []string {
 		var out []string
-		for _, l := range wrapLines(tr(key), w) {
+		for _, l := range wrapLines(s.sh.km.T(key), w) {
 			out = append(out, style.Render(l))
 		}
 		return out
@@ -1007,9 +1012,9 @@ func companyVariants(sh *shared, c config.Company, w int) [][]string {
 	switch {
 	case sh.planErr:
 	case sh.planned && sh.pending > 0:
-		nextStep = styledWrap(st.Warn, tr("tui.detail.how_pending"), w)
+		nextStep = styledWrap(st.Warn, sh.km.T("tui.detail.how_pending"), w)
 	case sh.planned:
-		nextStep = styledWrap(st.OK, tr("tui.detail.how_applied"), w)
+		nextStep = styledWrap(st.OK, sh.km.T("tui.detail.how_applied"), w)
 	}
 	howDefault := styledWrap(st.Muted, tr("tui.detail.how_default", c.BaseDir, def.Name, def.Email), w)
 	how := func(others bool) []string {
@@ -1104,13 +1109,13 @@ func accountVariants(sh *shared, r rowItem, w int, ki keys.Info, haveKey bool) [
 	switch {
 	case sh.planErr:
 	case sh.planned && sh.pending > 0:
-		next = styledWrap(st.Warn, tr("tui.detail.how_pending"), w)
+		next = styledWrap(st.Warn, sh.km.T("tui.detail.how_pending"), w)
 	case sh.planned:
-		next = styledWrap(st.OK, tr("tui.detail.acc_next_applied", r.company.BaseDir), w)
+		next = styledWrap(st.OK, sh.km.T("tui.detail.acc_next_applied", r.company.BaseDir), w)
 	}
 	var dup []string
 	if other, ok := duplicateOf(r.company, a); ok {
-		dup = styledWrap(st.Warn, tr("tui.detail.dup", r.company.Slug+"/"+other.ID), w)
+		dup = styledWrap(st.Warn, sh.km.T("tui.detail.dup", r.company.Slug+"/"+other.ID), w)
 	}
 	opt := func(s string) []string {
 		if s == "" {

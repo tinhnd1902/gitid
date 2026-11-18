@@ -21,6 +21,7 @@ import (
 	"github.com/tinhnd1902/gitid/internal/config"
 	"github.com/tinhnd1902/gitid/internal/execx"
 	"github.com/tinhnd1902/gitid/internal/i18n"
+	"github.com/tinhnd1902/gitid/internal/keymap"
 	"github.com/tinhnd1902/gitid/internal/platform"
 	"github.com/tinhnd1902/gitid/internal/remote"
 	"github.com/tinhnd1902/gitid/internal/testutil"
@@ -131,9 +132,9 @@ func (h *harness) waitReady() {
 // applyToDone opens the confirm screen with p and applies with y.
 func (h *harness) applyToDone() {
 	h.t.Helper()
-	h.key("p")
+	h.act(keymap.Apply)
 	h.waitReady()
-	h.key("y")
+	h.act(keymap.Yes)
 	h.waitFor("done", func() bool { c, ok := h.top().(*confirmScreen); return ok && c.state == confDone })
 }
 
@@ -426,9 +427,9 @@ func TestB1DuplicateIsRefusedInTheField(t *testing.T) {
 	h.key("a")
 	h.key("enter")
 	h.typeText("tinhnd")
-	h.mustContainPlain(tr("tui.form.err.dup_account", "tinhnd", "github.com")) // live, in the note
+	h.mustContainPlain(defKM.T("tui.form.err.dup_account", "tinhnd", "github.com")) // live, in the note
 	h.key("enter")
-	h.mustContainPlain(tr("tui.form.err.dup_account", "tinhnd", "github.com"))
+	h.mustContainPlain(defKM.T("tui.form.err.dup_account", "tinhnd", "github.com"))
 	if _, ok := h.top().(*accountForm); !ok {
 		t.Fatalf("top is %T", h.top())
 	}
@@ -443,7 +444,7 @@ func TestB2DuplicateIgnoresCase(t *testing.T) {
 	h.key("enter")
 	h.typeText("TinhND")
 	h.key("enter")
-	h.mustContainPlain(tr("tui.form.err.dup_account", "tinhnd", "github.com"))
+	h.mustContainPlain(defKM.T("tui.form.err.dup_account", "tinhnd", "github.com"))
 }
 
 // The host is only known after the username: the check runs again on save.
@@ -466,7 +467,7 @@ func TestB3DuplicateIsRefusedOnSave(t *testing.T) {
 	h.key("enter") // ssh host
 	h.key("enter") // ssh port
 	h.key("enter") // make default (the company has another account)
-	h.mustContainPlain(tr("tui.form.err.dup_account", "tinhnd", "ghe.acme.com"))
+	h.mustContainPlain(defKM.T("tui.form.err.dup_account", "tinhnd", "ghe.acme.com"))
 	if _, ok := h.top().(*accountForm); !ok {
 		t.Fatalf("top is %T", h.top())
 	}
@@ -509,7 +510,7 @@ func TestB5OtherHostIsNotADuplicate(t *testing.T) {
 		}
 	}
 	h.selectKey("personal/tinhnd-github")
-	if d := h.detail(); strings.Contains(d, plain(tr("tui.detail.dup", "personal/tinhnd"))) {
+	if d := h.detail(); strings.Contains(d, plain(defKM.T("tui.detail.dup", "personal/tinhnd"))) {
 		t.Fatalf("detail: %s", d)
 	}
 	h.key("e")                // editing it is not blocked by the account on github.com
@@ -569,7 +570,7 @@ func TestB9EditingIsNotADuplicateOfItself(t *testing.T) {
 	h.key("e")
 	for i := 0; i < 6; i++ { // platform, username, name, email, auth, advanced
 		h.key("enter")
-		h.mustNotContain(tr("tui.form.err.dup_account", "tinhnd", "github.com"))
+		h.mustNotContain(defKM.T("tui.form.err.dup_account", "tinhnd", "github.com"))
 	}
 	h.waitConfirm()
 }
@@ -590,16 +591,16 @@ func TestB10ExistingDuplicateIsFlagged(t *testing.T) {
 		t.Fatalf("%d account rows:\n%s", rows, h.view())
 	}
 	h.selectKey("personal/tinhnd-github")
-	if d := h.detail(); !strings.Contains(d, plain(tr("tui.detail.dup", "personal/tinhnd"))) {
+	if d := h.detail(); !strings.Contains(d, plain(defKM.T("tui.detail.dup", "personal/tinhnd"))) {
 		t.Fatalf("detail: %s", d)
 	}
 	h.selectKey("personal/tinhnd")
-	if d := h.detail(); !strings.Contains(d, plain(tr("tui.detail.dup", "personal/tinhnd-github"))) {
+	if d := h.detail(); !strings.Contains(d, plain(defKM.T("tui.detail.dup", "personal/tinhnd-github"))) {
 		t.Fatalf("detail: %s", d)
 	}
 	// stacked: the warning is in the pane too
 	h.resize(80, 24)
-	h.mustContainPlain(tr("tui.detail.dup", "personal/tinhnd-github"))
+	h.mustContainPlain(defKM.T("tui.detail.dup", "personal/tinhnd-github"))
 }
 
 func TestB11NoFalseDuplicateMark(t *testing.T) {
@@ -632,16 +633,16 @@ func TestB11NoFalseDuplicateMark(t *testing.T) {
 func TestC1DoneListsTheNextSteps(t *testing.T) {
 	h := newHarness(t, oneAccCfg())
 	h.applyToDone()
-	h.mustContainPlain(tr("tui.confirm.next"), tr("tui.confirm.next_clone", "~/Code/personal/"), tr("tui.confirm.next_check", "~"),
+	h.mustContainPlain(tr("tui.confirm.next"), tr("tui.confirm.next_clone", "~/Code/personal/"), defKM.T("tui.confirm.next_check", "~"),
 		tr("tui.confirm.next_https"), tr("tui.confirm.no_verify"), tr("tui.confirm.back_hint"), tr("tui.confirm.effect"),
 		tr("tui.confirm.effect_line", "~/Code/personal/", "Tinh Nguyen", "tinhnd@example.com"))
-	h.mustNotContain(tr("tui.confirm.next_ssh"))
+	h.mustNotContain(defKM.T("tui.confirm.next_ssh"))
 }
 
 func TestC2SSHAccountGetsTheKeyStep(t *testing.T) {
 	h := newHarness(t, sshCfg())
 	h.applyToDone()
-	h.mustContainPlain(tr("tui.confirm.next_ssh"))
+	h.mustContainPlain(defKM.T("tui.confirm.next_ssh"))
 	h.mustNotContain(tr("tui.confirm.next_https"))
 }
 
@@ -729,7 +730,7 @@ func TestD1AccountDetailExplainsHowToUseIt(t *testing.T) {
 	h.selectKey("personal/tinhnd")
 	d := h.detail()
 	for _, want := range []string{tr("tui.f.username") + " tinhnd", tr("tui.f.remote"), tr("tui.f.dir") + " ~/Code/personal/",
-		plain(tr("tui.detail.auth_https")), plain(tr("tui.detail.acc_default", "~/Code/personal/")), plain(tr("tui.detail.how_pending"))} {
+		plain(tr("tui.detail.auth_https")), plain(tr("tui.detail.acc_default", "~/Code/personal/")), plain(defKM.T("tui.detail.how_pending"))} {
 		if !strings.Contains(d, want) {
 			t.Errorf("detail lacks %q:\n%s", want, d)
 		}
@@ -744,7 +745,7 @@ func TestD2AppliedDetailSaysWhatToDoNext(t *testing.T) {
 	h.selectKey("personal/tinhnd")
 	h.apply()
 	d := h.detail()
-	if !strings.Contains(d, plain(tr("tui.detail.acc_next_applied", "~/Code/personal/"))) || strings.Contains(d, plain(tr("tui.detail.how_pending"))) {
+	if !strings.Contains(d, plain(defKM.T("tui.detail.acc_next_applied", "~/Code/personal/"))) || strings.Contains(d, plain(defKM.T("tui.detail.how_pending"))) {
 		t.Fatalf("detail: %s", d)
 	}
 }
@@ -762,7 +763,7 @@ func TestD3StackedPaneShowsTheFullAccount(t *testing.T) {
 		t.Fatalf("the detail pane has %d rows, want at least 12", dh)
 	}
 	h.mustContainPlain(tr("tui.f.username")+" tinhnd", tr("tui.f.remote"), "https://tinhnd@github.com/<owner>/<repo>.git",
-		tr("tui.f.dir")+" ~/Code/personal/", tr("tui.detail.how_pending"))
+		tr("tui.f.dir")+" ~/Code/personal/", defKM.T("tui.detail.how_pending"))
 	assertFits(t, h.view(), 80, 24, "stacked")
 	// a second account, as in the report
 	cfg := dupCfg()
@@ -770,7 +771,7 @@ func TestD3StackedPaneShowsTheFullAccount(t *testing.T) {
 	h2 := newHarness(t, cfg)
 	h2.resize(80, 24)
 	h2.selectKey("personal/tinhnd")
-	h2.mustContainPlain(tr("tui.f.remote"), tr("tui.f.dir"), tr("tui.detail.how_pending"))
+	h2.mustContainPlain(tr("tui.f.remote"), tr("tui.f.dir"), defKM.T("tui.detail.how_pending"))
 }
 
 func TestD4ManyRowsKeepTheOldSplit(t *testing.T) {
@@ -839,7 +840,7 @@ func TestD8SmallPanesKeepTheRemoteAndTheNextStep(t *testing.T) {
 	h := newHarness(t, oneAccCfg())
 	h.selectKey("personal/tinhnd")
 	r, _ := h.listScreen().selected()
-	next := plain(tr("tui.detail.how_pending"))[:20]
+	next := plain(defKM.T("tui.detail.how_pending"))[:20]
 	for n := 2; n <= 6; n++ {
 		d := plain(detailText(h.m.sh, r, 56, n, h.listScreen().keyInfo, false))
 		if !strings.Contains(d, next) {
@@ -1102,7 +1103,7 @@ func TestF1ChangingTheUsernameIsGuided(t *testing.T) {
 		h.update(tea.KeyMsg{Type: tea.KeyBackspace})
 	}
 	h.typeText("tinhnd1902")
-	h.mustContainPlain(tr("tui.form.warn.username_changed", "tinhnd"), tr("tui.form.preview_remote", "https://tinhnd1902@github.com/<owner>/<repo>.git"))
+	h.mustContainPlain(defKM.T("tui.form.warn.username_changed", "tinhnd"), tr("tui.form.preview_remote", "https://tinhnd1902@github.com/<owner>/<repo>.git"))
 	for i := 0; i < 5; i++ { // username, name, email, auth, advanced
 		h.key("enter")
 	}
@@ -1119,12 +1120,12 @@ func TestF2KeepingTheUsernameIsQuiet(t *testing.T) {
 	h := newHarness(t, oneAccCfg())
 	h.selectKey("personal/tinhnd")
 	h.key("e")
-	h.mustNotContain(tr("tui.form.warn.username_changed", "tinhnd"))
+	h.mustNotContain(defKM.T("tui.form.warn.username_changed", "tinhnd"))
 	for i := 0; i < 6; i++ {
 		h.key("enter")
 	}
 	h.waitConfirm()
-	if !strings.Contains(h.m.status.text, tr("tui.status.account_saved", "personal/tinhnd")) {
+	if !strings.Contains(h.m.status.text, defKM.T("tui.status.account_saved", "personal/tinhnd")) {
 		t.Fatalf("status %q", h.m.status.text)
 	}
 }
@@ -1136,7 +1137,7 @@ func TestG1CheckOnANonRepoExplainsItself(t *testing.T) {
 	h.fake.On("git -C "+h.e.Home+" rev-parse --show-toplevel", execx.Response{ExitCode: 128})
 	h.key("k")
 	h.waitFor("error", func() bool { c, ok := h.top().(*checkScreen); return ok && c.phase == chError })
-	h.mustContainPlain(tr("err.not_repo"), tr("tui.check.where", "~"), tr("tui.check.not_repo_next", "~/Code/personal/"))
+	h.mustContainPlain(tr("err.not_repo"), tr("tui.check.where", "~"), defKM.T("tui.check.not_repo_next", "~/Code/personal/"))
 	if hb := h.helpLine(); !strings.HasPrefix(hb, "▸ c") || !strings.Contains(hb, "r "+tr("tui.key.retry")) {
 		t.Fatalf("help bar %q", hb)
 	}
@@ -1154,7 +1155,7 @@ func TestG3CheckOnANonRepoWithoutCompanies(t *testing.T) {
 	h.fake.On("git -C "+h.e.Home+" rev-parse --show-toplevel", execx.Response{ExitCode: 128})
 	h.key("k")
 	h.waitFor("error", func() bool { c, ok := h.top().(*checkScreen); return ok && c.phase == chError })
-	h.mustContainPlain(tr("tui.check.not_repo_next_none"))
+	h.mustContainPlain(defKM.T("tui.check.not_repo_next_none"))
 }
 
 func TestG4OtherCheckErrorsAreUnchanged(t *testing.T) {
@@ -1164,7 +1165,7 @@ func TestG4OtherCheckErrorsAreUnchanged(t *testing.T) {
 	h.waitFor("error", func() bool { c, ok := h.top().(*checkScreen); return ok && c.phase == chError })
 	c := h.top().(*checkScreen)
 	c.err = app.ErrNoRemote // any other error keeps the retry hint and no clone shortcut
-	h.mustContainPlain(tr("err.no_remote"), tr("tui.check.retry_hint"))
+	h.mustContainPlain(tr("err.no_remote"), defKM.T("tui.check.retry_hint"))
 	h.mustNotContain(tr("tui.check.where", "~"))
 	if hb := h.helpLine(); strings.HasPrefix(hb, "▸ c") {
 		t.Fatalf("help bar %q", hb)
@@ -1299,7 +1300,7 @@ func TestJ5ImportWithNothingFoundSaysWhatToDo(t *testing.T) {
 	h := newHarness(t, basicCfg())
 	h.key("i")
 	h.waitFor("loaded", func() bool { return h.top().(*importScreen).phase == imList })
-	h.mustContainPlain(tr("tui.import.none_next"))
+	h.mustContainPlain(defKM.T("tui.import.none_next"))
 	hb := h.helpLine()
 	if !strings.Contains(hb, "esc") || strings.Contains(hb, "enter") || strings.Contains(hb, "↑") {
 		t.Fatalf("help bar %q", hb)
@@ -1311,7 +1312,7 @@ func TestJ6HelpOverlayAlwaysShowsTheGlobalKeys(t *testing.T) {
 		h := newHarness(t, basicCfg())
 		h.resize(s[0], s[1])
 		h.key("?")
-		h.mustContainPlain(tr("tui.help.global"), "ctrl+c", tr("tui.help.close"))
+		h.mustContainPlain(tr("tui.help.global"), "ctrl+c", defKM.T("tui.help.close"))
 		for _, b := range h.top().Help() {
 			if !strings.Contains(h.view(), b.Help().Key) {
 				t.Errorf("%v: key %q missing from the help overlay:\n%s", s, b.Help().Key, h.view())
@@ -1341,7 +1342,7 @@ func TestKEnglishPolish(t *testing.T) {
 	h.key("a")
 	h.key("enter")
 	h.typeText("tinhnd")
-	h.mustContainPlain(tr("tui.form.err.dup_account", "tinhnd", "github.com"))
+	h.mustContainPlain(defKM.T("tui.form.err.dup_account", "tinhnd", "github.com"))
 	h.key("esc")
 	h.key("y") // discard what was typed
 	h.applyToDone()

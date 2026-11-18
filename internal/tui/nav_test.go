@@ -392,7 +392,7 @@ func TestNEG1PopAtRootIsHarmless(t *testing.T) {
 func TestNEG2AddAccountWithoutRows(t *testing.T) {
 	h := newHarness(t, nil)
 	h.key("a")
-	if h.depth() != 1 || !strings.Contains(h.m.status.text, tr("tui.status.need_company")) {
+	if h.depth() != 1 || !strings.Contains(h.m.status.text, defKM.T("tui.status.need_company")) {
 		t.Fatalf("depth %d status %q", h.depth(), h.m.status.text)
 	}
 }

@@ -155,7 +155,7 @@ func TestH4DuplicateLoginShowsUnderTheInputOnce(t *testing.T) {
 	if in < 0 || er <= in {
 		t.Fatalf("the error must be under the input (input row %d, error row %d):\n%s", in, er, h.view())
 	}
-	msg := plain(tr("tui.form.err.dup_account", "tinhnd", "github.com"))
+	msg := plain(defKM.T("tui.form.err.dup_account", "tinhnd", "github.com"))
 	if n := strings.Count(plain(h.view()), msg); n != 1 {
 		t.Fatalf("the message is shown %d times:\n%s", n, h.view())
 	}

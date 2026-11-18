@@ -1,13 +1,10 @@
 package tui
 
 import (
-	"errors"
 	"fmt"
 	"math"
-	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -16,6 +13,7 @@ import (
 	"github.com/tinhnd1902/gitid/internal/config"
 	"github.com/tinhnd1902/gitid/internal/execx"
 	"github.com/tinhnd1902/gitid/internal/i18n"
+	"github.com/tinhnd1902/gitid/internal/keymap"
 	"github.com/tinhnd1902/gitid/internal/keys"
 	"github.com/tinhnd1902/gitid/internal/testutil"
 )
@@ -44,9 +42,9 @@ func (h *harness) snapshot() string {
 
 // repoHarness is a basic configuration with a git repository under acme whose
 // remote user is wrong; the fake git answers for it.
-func repoHarness(t *testing.T, remoteUser string) (*harness, string) {
+func repoHarness(t *testing.T, remoteUser string, keysYAML ...string) (*harness, string) {
 	t.Helper()
-	h := newHarness(t, basicCfg())
+	h := harnessFor(t, basicCfg(), keysYAML)
 	top := h.e.Home + "/Code/acme/proj"
 	h.m.sh.cwd = top
 	h.fake.On("git -C "+top+" rev-parse --show-toplevel", execx.Response{Stdout: top + "\n"})
@@ -57,33 +55,33 @@ func repoHarness(t *testing.T, remoteUser string) (*harness, string) {
 }
 
 // fixConfirmHarness leaves the check screen in its fix confirmation.
-func fixConfirmHarness(t *testing.T) *harness {
+func fixConfirmHarness(t *testing.T, keysYAML ...string) *harness {
 	t.Helper()
-	h, _ := repoHarness(t, "olduser")
-	h.key("k")
+	h, _ := repoHarness(t, "olduser", keysYAML...)
+	h.act(keymap.Check)
 	h.waitFor("result", func() bool { c, ok := h.top().(*checkScreen); return ok && c.phase == chResult })
 	h.top().(*checkScreen).res.Account = "acme/alice"
-	h.key("f")
+	h.act(keymap.Fix)
 	h.waitFor("fix confirm", func() bool { return h.top().(*checkScreen).phase == chFixConfirm })
 	return h
 }
 
 // keygenHarness opens the key generation of acme/carol (ssh, no key yet).
-func keygenHarness(t *testing.T) *harness {
+func keygenHarness(t *testing.T, keysYAML ...string) *harness {
 	t.Helper()
-	h := newHarness(t, basicCfg())
+	h := harnessFor(t, basicCfg(), keysYAML)
 	h.selectKey("acme/carol")
-	h.key("g")
+	h.act(keymap.SSHKey)
 	if _, ok := h.top().(*keygenScreen); !ok {
 		t.Fatalf("top is %T", h.top())
 	}
 	return h
 }
 
-func readyHarness(t *testing.T) *harness {
+func readyHarness(t *testing.T, keysYAML ...string) *harness {
 	t.Helper()
-	h := newHarness(t, basicCfg())
-	h.key("p")
+	h := harnessFor(t, basicCfg(), keysYAML)
+	h.act(keymap.Apply)
 	h.waitReady()
 	return h
 }
@@ -246,8 +244,8 @@ func TestQB2To11QGoesBackOnSubScreens(t *testing.T) {
 			h.waitFor("result", func() bool { c, ok := h.top().(*checkScreen); return ok && c.phase == chResult })
 			return h
 		}},
-		{"keygen mode", keygenHarness},
-		{"confirm ready", readyHarness},
+		{"keygen mode", func(t *testing.T) *harness { return keygenHarness(t) }},
+		{"confirm ready", func(t *testing.T) *harness { return readyHarness(t) }},
 		{"confirm done", func(t *testing.T) *harness {
 			h := newHarness(t, basicCfg())
 			h.applyToDone()
@@ -686,7 +684,7 @@ func TestUX5OverlayGlobalKeys(t *testing.T) {
 		if s == [2]int{40, 10} {
 			continue // too small to show every row; only the fit is required
 		}
-		for _, want := range []string{tr("tui.help.global"), "esc/q", "↑/↓", "pgup", "home", "ctrl+c", tr("tui.help.close")} {
+		for _, want := range []string{tr("tui.help.global"), "esc/q", "↑/↓", "pgup", "home", "ctrl+c", defKM.T("tui.help.close")} {
 			if !strings.Contains(v, want) {
 				t.Errorf("%v: overlay lacks %q:\n%s", s, want, v)
 			}
@@ -695,7 +693,7 @@ func TestUX5OverlayGlobalKeys(t *testing.T) {
 			t.Errorf("%v: no ? row:\n%s", s, v)
 		}
 	}
-	if !strings.Contains(tr("tui.help.close"), "q") {
+	if !strings.Contains(defKM.T("tui.help.close"), "q") {
 		t.Fatal("the close hint must mention q")
 	}
 }
@@ -814,7 +812,7 @@ func TestUX11FaintContrast(t *testing.T) {
 func TestUX12EnterOnTheApplyReviewSaysWhichKeyApplies(t *testing.T) {
 	h := readyHarness(t)
 	h.key("enter")
-	if h.status() != tr("tui.status.press_yes", "y") || h.top().(*confirmScreen).state != confReady {
+	if h.status() != defKM.T("tui.status.press_yes") || h.top().(*confirmScreen).state != confReady {
 		t.Fatalf("status %q", h.status())
 	}
 }
@@ -823,8 +821,8 @@ func TestUX13DoneSSHHintIsAMultiStepInstruction(t *testing.T) {
 	h := newHarness(t, basicCfg())
 	h.applyToDone()
 	h.resize(120, 50)
-	h.mustContainPlain(tr("tui.confirm.next_ssh"))
-	if !strings.Contains(tr("tui.confirm.next_ssh"), "enter") {
+	h.mustContainPlain(defKM.T("tui.confirm.next_ssh"))
+	if !strings.Contains(defKM.T("tui.confirm.next_ssh"), "enter") {
 		t.Fatal("the hint must say how to get back to the list")
 	}
 }
@@ -858,341 +856,6 @@ func TestUX14AllKeysItemIsNotOfferedWhereKeysAreCaptured(t *testing.T) {
 
 // ---- guard: every advertised key is handled ----
 
-type grdState struct {
-	name  string
-	setup func(t *testing.T) *harness
-}
-
-// importTwo is the importer with two proposals.
-func importTwo(t *testing.T) *harness {
-	t.Helper()
-	e := testutil.TempEnv(t)
-	testutil.WriteFile(t, e.Paths().GitConfig, "[user]\n\tname = x\n"+
-		"[includeIf \"gitdir:~/Code/work/initech-solutions/\"]\n\tpath = ~/.gitconfig-initech\n"+
-		"[includeIf \"gitdir:~/Code/work/hooli/\"]\n\tpath = ~/.gitconfig-hooli\n", 0o644)
-	testutil.WriteFile(t, filepath.Join(e.Home, ".gitconfig-initech"), "[user]\n\tname = Dana Initech\n\temail = dana@initech.example\n", 0o644)
-	testutil.WriteFile(t, filepath.Join(e.Home, ".gitconfig-hooli"), "[user]\n\tname = Gavin\n\temail = gavin@hooli.example\n", 0o644)
-	h := newHarness(t, nil)
-	h.m.sh.svc.Env = e
-	h.key("i")
-	h.waitFor("proposals", func() bool { return h.top().(*importScreen).phase == imList })
-	return h
-}
-
-// grdOverlay are the states whose "?" overlay list is checked too; one state
-// per screen is enough, the help bar of every state is always checked.
-var grdOverlay = map[string]bool{
-	"list welcome": true, "list account applied": true, "list pending": true, "detail ssh account": true,
-	"confirm ready": true, "confirm done": true, "check result": true, "clone pick": true,
-	"key result": true, "doctor": true, "import proposals": true, "delete step 0": true, "keygen mode": true,
-}
-
-func grdStates() []grdState {
-	wide := func(h *harness) *harness { h.resize(100, 30); return h }
-	return []grdState{
-		{"list welcome", func(t *testing.T) *harness { return newHarness(t, nil) }},
-		{"list company without accounts", func(t *testing.T) *harness { return newHarness(t, emptyCompanyCfg("personal")) }},
-		{"list account applied", func(t *testing.T) *harness {
-			h := newHarness(t, oneAccCfg())
-			h.apply()
-			h.selectKey("personal/tinhnd")
-			return h
-		}},
-		{"list pending", func(t *testing.T) *harness {
-			h := newHarness(t, basicCfg())
-			h.selectKey("acme/alice")
-			return h
-		}},
-		{"list ssh account without key", func(t *testing.T) *harness {
-			h := newHarness(t, sshCfg())
-			h.apply()
-			h.selectKey("personal/alice")
-			return h
-		}},
-		{"list narrow", func(t *testing.T) *harness {
-			h := newHarness(t, basicCfg())
-			h.resize(50, 24)
-			h.selectKey("acme/bob")
-			return h
-		}},
-		{"list filter typing", func(t *testing.T) *harness { h := newHarness(t, basicCfg()); h.key("/"); return h }},
-		{"list filter applied", func(t *testing.T) *harness {
-			h := newHarness(t, basicCfg())
-			h.key("/")
-			h.typeText("a")
-			h.key("enter")
-			return h
-		}},
-		{"detail company", func(t *testing.T) *harness {
-			h := newHarness(t, emptyCompanyCfg("personal"))
-			h.resize(50, 24)
-			h.key("enter")
-			return h
-		}},
-		{"detail ssh account", func(t *testing.T) *harness {
-			h := newHarness(t, basicCfg())
-			h.resize(50, 24)
-			openDetail(h, "acme/carol")
-			return h
-		}},
-		{"confirm ready", readyHarness},
-		{"confirm done", func(t *testing.T) *harness {
-			h := newHarness(t, basicCfg())
-			h.applyToDone()
-			return h
-		}},
-		{"confirm empty", func(t *testing.T) *harness {
-			h := newHarness(t, oneAccCfg())
-			h.apply()
-			h.key("p")
-			h.waitFor("empty", func() bool { c, ok := h.top().(*confirmScreen); return ok && c.state == confEmpty })
-			return h
-		}},
-		{"confirm failed", func(t *testing.T) *harness {
-			h := newHarness(t, basicCfg())
-			c := newConfirmScreen(h.m.sh, "x")
-			h.send(pushMsg{c})
-			h.waitFor("loaded", func() bool { return c.state != confLoading })
-			c.state, c.err = confFailed, errors.New("boom")
-			return h
-		}},
-		{"check result", func(t *testing.T) *harness {
-			h, _ := repoHarness(t, "bob")
-			h.key("k")
-			h.waitFor("result", func() bool { c, ok := h.top().(*checkScreen); return ok && c.phase == chResult })
-			return h
-		}},
-		{"check not a repo", func(t *testing.T) *harness {
-			h := newHarness(t, basicCfg())
-			h.fake.On("git -C "+h.e.Home+" rev-parse --show-toplevel", execx.Response{ExitCode: 128})
-			h.key("k")
-			h.waitFor("error", func() bool { c, ok := h.top().(*checkScreen); return ok && c.phase == chError })
-			return h
-		}},
-		{"check fix confirm", fixConfirmHarness},
-		{"clone url", func(t *testing.T) *harness {
-			h := newHarness(t, basicCfg())
-			h.key("c")
-			h.typeText("https://github.com/org/repo.git")
-			return h
-		}},
-		{"clone pick", func(t *testing.T) *harness {
-			h := newHarness(t, basicCfg())
-			h.key("c")
-			h.typeText("https://github.com/org/repo.git")
-			h.key("enter")
-			return h
-		}},
-		{"clone failed", func(t *testing.T) *harness {
-			h := newHarness(t, basicCfg())
-			h.key("c")
-			h.typeText("https://github.com/org/repo.git")
-			h.key("enter")
-			cs := h.top().(*cloneScreen)
-			cs.phase, cs.err = clFailed, app.ErrAuth
-			return h
-		}},
-		{"clone done", func(t *testing.T) *harness {
-			h := newHarness(t, basicCfg())
-			h.key("c")
-			h.typeText("https://github.com/org/repo.git")
-			h.key("enter")
-			cs := h.top().(*cloneScreen)
-			cs.phase = clDone
-			cs.res = app.CloneResult{Plan: cs.preview, EmailOK: true}
-			return h
-		}},
-		{"delete step 0", func(t *testing.T) *harness {
-			h := newHarness(t, basicCfg())
-			h.selectKey("acme/bob")
-			h.key("d")
-			return h
-		}},
-		{"delete step 1", func(t *testing.T) *harness {
-			h := newHarness(t, basicCfg())
-			ref, _ := h.m.sh.cfg.ParseRef("acme/carol")
-			ref.Account.SSHKey = ref.Company.DefaultKeyPath(ref.Account)
-			d := newDeleteScreen(h.m.sh, ref.Company, &ref.Account)
-			d.keys = []string{ref.Account.SSHKey}
-			h.send(pushMsg{d})
-			h.key("y")
-			return h
-		}},
-		{"keygen mode", keygenHarness},
-		{"keygen no-pass confirm", func(t *testing.T) *harness {
-			h := keygenHarness(t)
-			h.key("tab")
-			h.key("enter")
-			return h
-		}},
-		{"keygen error", func(t *testing.T) *harness {
-			h := keygenHarness(t)
-			k := h.top().(*keygenScreen)
-			k.phase, k.errMsg = kgError, "boom"
-			return h
-		}},
-		{"key result", func(t *testing.T) *harness {
-			h := newHarness(t, basicCfg())
-			ref, _ := h.m.sh.cfg.ParseRef("acme/carol")
-			h.send(pushMsg{newKeyResultScreen(h.m.sh, ref, &keys.Pub{Content: "ssh-ed25519 AAAA carol"})})
-			return h
-		}},
-		{"doctor", func(t *testing.T) *harness {
-			h := newHarness(t, basicCfg())
-			h.resize(100, 12) // short, so that scrolling has an effect
-			h.key("D")
-			h.waitFor("checks", func() bool { return !h.top().(*doctorScreen).pending() })
-			return h
-		}},
-		{"import proposals", importTwo},
-		{"import none", func(t *testing.T) *harness {
-			h := newHarness(t, nil)
-			h.key("i")
-			h.waitFor("loaded", func() bool { return h.top().(*importScreen).phase == imList })
-			return h
-		}},
-		{"import form", func(t *testing.T) *harness {
-			h := importTwo(t)
-			h.key("enter")
-			return h
-		}},
-		{"company form", func(t *testing.T) *harness { return wide(newHarness(t, basicCfg())).withKey("A") }},
-		{"account form", func(t *testing.T) *harness { return wide(newHarness(t, basicCfg())).withKey("a") }},
-		{"form discard prompt", func(t *testing.T) *harness {
-			h := newHarness(t, basicCfg())
-			h.key("A")
-			h.typeText("acme")
-			h.key("esc")
-			return h
-		}},
-	}
-}
-
-func (h *harness) withKey(k string) *harness { h.key(k); return h }
-
-// grdKey is the message for the first key of a binding.
-func grdKey(k string) tea.KeyMsg { return keyMsg(k) }
-
-// grdAllowed lists hints that name a key which is deliberately not a single
-// press on that screen: each needs a step first, which the text says.
-var grdAllowed = map[string]string{
-	"confirm empty/a":                 "tui.confirm.empty_no_accounts says: press esc, then a",
-	"import none/A":                   "tui.import.none_next says: press esc, then A",
-	"confirm done/g":                  "tui.confirm.next_ssh says: enter to the list, select the account, then g",
-	"account form/k":                  "tui.form.warn.username_changed names a key to press after saving",
-	"account form/f":                  "tui.form.warn.username_changed names a key to press after saving",
-	"company form/a":                  "the company form hint names a key for after saving",
-	"list welcome/a":                  "the welcome steps list the keys of steps 2 and 3, which need a company first",
-	"list welcome/p":                  "the welcome steps list the keys of steps 2 and 3, which need a company first",
-	"list welcome/A":                  "the welcome step 1 names A, which works; enter is the primary item",
-	"list company without accounts/p": "the no-accounts text names the next steps",
-}
-
-// TestGRD1EveryAdvertisedKeyIsHandled opens every screen state, takes each key
-// of its help bar, of the "?" overlay and of the next-step hints in the frame,
-// and checks that pressing it has an effect there.
-func TestGRD1EveryAdvertisedKeyIsHandled(t *testing.T) {
-	defaultIdle = 15 * time.Millisecond // many harnesses: commands are tracked, so a short idle wait is safe
-	defer func() { defaultIdle = 0 }()
-	for _, st := range grdStates() {
-		t.Run(st.name, func(t *testing.T) {
-			probe := st.setup(t)
-			top := probe.top()
-			capturing := isCapturing(top)
-			type probeKey struct{ key, why string }
-			var todo []probeKey
-			seen := map[string]bool{}
-			add := func(k, why string) {
-				if k == "" || seen[k] {
-					return
-				}
-				seen[k] = true
-				todo = append(todo, probeKey{k, why})
-			}
-			for _, it := range probe.m.helpItems() {
-				add(it.b.Keys()[0], "help bar "+it.b.Help().Key)
-			}
-			if !capturing && grdOverlay[st.name] {
-				for _, b := range top.Help() {
-					if b.Enabled() {
-						add(b.Keys()[0], "overlay "+b.Help().Key)
-					}
-				}
-			}
-			if !capturing {
-				add("?", "all keys")
-			}
-			for _, k := range hintKeys(plain(probe.view())) {
-				if _, ok := grdAllowed[st.name+"/"+k]; ok {
-					continue
-				}
-				add(k, "hint in the frame")
-			}
-			for _, pk := range todo {
-				h := st.setup(t)
-				switch pk.key {
-				case "up":
-					h.key("down")
-					before := h.snapshot()
-					h.key("up")
-					if h.snapshot() == before {
-						t.Errorf("%s (%s): up has no effect", st.name, pk.why)
-					}
-					continue
-				case "down", "ctrl+n":
-					before := h.snapshot()
-					h.send(grdKey(pk.key))
-					if h.snapshot() == before {
-						t.Errorf("%s (%s): %s has no effect", st.name, pk.why, pk.key)
-					}
-					continue
-				}
-				before := h.snapshot()
-				h.send(grdKey(pk.key))
-				if pk.key == "?" {
-					if !h.m.showHelp {
-						t.Errorf("%s (%s): ? did not open the overlay", st.name, pk.why)
-					}
-					continue
-				}
-				if h.snapshot() == before {
-					t.Errorf("%s (%s): key %q has no effect:\n%s", st.name, pk.why, pk.key, h.view())
-				}
-			}
-		})
-	}
-}
-
-// hintKeys finds the single-character keys the frame names in prose: "press
-// p", "bấm k", "phím A".
-func hintKeys(frame string) []string {
-	words := strings.Fields(frame)
-	var out []string
-	for i := 0; i+1 < len(words); i++ {
-		switch strings.ToLower(words[i]) {
-		case "press", "bấm", "nhấn", "phím", "key":
-		default:
-			continue
-		}
-		w := strings.TrimRight(words[i+1], ".,;:)")
-		if len([]rune(w)) == 1 && strings.ContainsAny(w, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ?") {
-			out = append(out, w)
-		}
-	}
-	return out
-}
-
-func TestGRD5NoBrokenFormatVerbsInFrames(t *testing.T) {
-	for _, st := range grdStates() {
-		t.Run(st.name, func(t *testing.T) {
-			h := st.setup(t)
-			if strings.Contains(h.view(), "%!") {
-				t.Fatalf("a frame shows a format error:\n%s", h.view())
-			}
-		})
-	}
-}
-
 func TestOverlayClosesWithHelpBackAndQuit(t *testing.T) {
 	for _, k := range []string{"?", "esc", "q"} {
 		h := newHarness(t, basicCfg())
@@ -1210,7 +873,7 @@ func TestOverlayClosesWithHelpBackAndQuit(t *testing.T) {
 // DEF-2: the overlay row names both directions, and the keys it carries are
 // the ones the list pages with (the row used to list only the PageUp keys).
 func TestDEF2PageKeys(t *testing.T) {
-	km := NewKeyMap()
+	km := NewKeyMap(keymap.Defaults())
 	row := (&Model{sh: &shared{km: km}}).globalHelp()[2]
 	if h := row.Help(); h.Key != "pgup/pgdn" {
 		t.Fatalf("overlay row key %q, want pgup/pgdn", h.Key)

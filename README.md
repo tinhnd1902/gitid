@@ -142,6 +142,9 @@ gitid apply [--dry-run] [--yes]          # write ~/.gitconfig and ~/.ssh changes
 gitid import [--dry-run]                 # propose companies from your existing includeIf entries
       [--select initech --platform github --username alice --auth https --host <host>]
 
+gitid keys [--json]                      # keyboard shortcuts, custom ones from keys.yaml, and problems found in it
+gitid keys --example                     # print a commented keys.yaml template (writes no file)
+
 gitid version                            # print the version
 gitid completion <bash|zsh|fish|powershell>   # shell completion
 ```
@@ -214,7 +217,7 @@ How the two authentication modes look in practice:
 
 gitid edits files in your home directory, so it is strict about it:
 
-- **What it touches:** the managed block in `~/.gitconfig`; the managed block (a single `Include config.d/*` line) at the top of `~/.ssh/config`; `~/.ssh/config.d/gitid.conf`; keys you ask it to create under `~/.ssh/gitid/`; and its own folder `$XDG_CONFIG_HOME/gitid/` (default `~/.config/gitid/`) holding `config.yaml`, the generated `git/*.gitconfig` files and `backups/`. Nothing else.
+- **What it touches:** the managed block in `~/.gitconfig`; the managed block (a single `Include config.d/*` line) at the top of `~/.ssh/config`; `~/.ssh/config.d/gitid.conf`; keys you ask it to create under `~/.ssh/gitid/`; and its own folder `$XDG_CONFIG_HOME/gitid/` (default `~/.config/gitid/`) holding `config.yaml`, the generated `git/*.gitconfig` files and `backups/`. Nothing else. It also reads an optional `keys.yaml` there (your key bindings) but never writes it.
 - **Managed blocks:** everything gitid writes into your files sits between `# >>> gitid managed block … >>>` and `# <<< gitid managed block <<<`. Bytes outside the markers are never changed. Running `apply` twice changes nothing the second time, and writes no new backup.
 - **Preview and confirm:** the TUI always shows the diff and asks before writing. `gitid apply --dry-run` prints the same diff and creates nothing, not even directories.
 - **Backups:** before any write, the old bytes of every affected file are copied to `~/.config/gitid/backups/<timestamp>/` (directory `0700`, files `0600`) together with a `manifest.json` that lists each original path, mode and SHA-256. The newest 30 backups are kept.
@@ -249,12 +252,13 @@ Entries with `"existed": false` were created by that run: delete them to go back
 
 ## Configuration
 
-gitid reads and writes one file:
+gitid reads and writes one configuration file, and reads one optional file of key bindings:
 
 | Item                  | Location                                                                     |
 | --------------------- | ---------------------------------------------------------------------------- |
 | Configuration file    | `$XDG_CONFIG_HOME/gitid/config.yaml` (mode `0600`)                           |
 | Default when XDG is unset, empty or not an absolute path | `~/.config/gitid/config.yaml`                  |
+| Key bindings (optional, read only) | `<config dir>/keys.yaml`, see [Custom key bindings](#custom-key-bindings) |
 | Generated git files   | `<config dir>/git/`                                                          |
 | Backups               | `<config dir>/backups/`                                                      |
 
@@ -301,6 +305,61 @@ companies:
 
 gitid rewrites `config.yaml` from its internal model whenever you save, so **comments you add by hand are not preserved**. The previous file is backed up first. A company slug and an account id cannot be changed after creation (they name the SSH alias, the key file and the generated files); delete and recreate instead.
 
+### Custom key bindings
+
+The terminal UI works without any setup. To change a shortcut, create the optional file `keys.yaml` in the same folder as `config.yaml`: `$XDG_CONFIG_HOME/gitid/keys.yaml`, which is `~/.config/gitid/keys.yaml` when `XDG_CONFIG_HOME` is unset, empty or not an absolute path (the same rule as `config.yaml`).
+
+**gitid only reads this file.** It never creates, rewrites, backs up or deletes `keys.yaml`, so your comments stay, and editing it never makes a save of `config.yaml` "stale". There is no `keys:` section in `config.yaml` (gitid rejects one).
+
+```sh
+gitid keys                                          # every action with its keys, and any problem found in keys.yaml
+mkdir -p ~/.config/gitid && gitid keys --example > ~/.config/gitid/keys.yaml    # a template with every line commented out
+```
+
+The folder does not exist before gitid first saves `config.yaml`, hence the `mkdir -p`. If you set `XDG_CONFIG_HOME` to an absolute path, use `$XDG_CONFIG_HOME/gitid/` instead of `~/.config/gitid/`.
+
+`gitid keys --example` only prints to the screen; the redirection above creates the file, and it **overwrites an existing `keys.yaml`**. Remove the leading `#` of the lines you want to change.
+
+The file is one mapping, `action: "key"` or `action: ["key", "key"]` (the help bar and hints show the first key; the `?` overlay shows all of them, for example `c/n`):
+
+```yaml
+check: "v"          # v instead of k
+clone: ["c", "n"]   # two keys for one action
+```
+
+| Action | Default | Where it works |
+| ------ | ------- | -------------- |
+| `quit` | `q` | list |
+| `help` | `?` | every screen except forms |
+| `back` | `q` (`esc` always goes back too) | every screen except the list |
+| `filter` | `/` | list |
+| `add_account` | `a` | list, detail |
+| `add_company` | `A` | list |
+| `edit` | `e` | list, detail |
+| `delete` | `d` | list, detail |
+| `clone` | `c` | list, detail, apply (done), check |
+| `check` | `k` | list, detail, apply (done) |
+| `doctor` | `D` | list, detail |
+| `apply` | `p` | list, detail, SSH key result |
+| `ssh_key` | `g` | list, detail |
+| `import` | `i` | list |
+| `reload` | `r` | list |
+| `yes` / `no` | `y` / `n` | apply review, confirmation dialogs (also the "discard what you typed?" question) |
+| `fix` | `f` | check |
+| `retry` | `r` | apply, check, doctor |
+| `copy` | `c` | SSH key result |
+| `open` | `o` | SSH key result |
+| `ssh_test` | `s` | doctor |
+| `terminal` | `t` | clone |
+
+A key is one printable ASCII character (`v`, `V`, `/`, `5`), `ctrl+<letter>`, `alt+<character>` or `f1` to `f12`. These are not valid: letters with accents (`â`, `đ`), words (`ab`), and named keys such as `enter`, `esc`, `tab`, the arrows or `space`. Quote the key when YAML would read it differently: `"?"`, `"#"`, `"&"`, `"*"`, `"!"`, `"|"`, `">"`, `"%"`, `"@"`, `` "`" ``.
+
+These keys cannot be changed: `ctrl+c`, `esc` (always goes back one step), `enter`, `tab` and `shift+tab`, the arrows, `pgup`/`pgdn`, `home`/`end`, `ctrl+p`/`ctrl+n`/`ctrl+b`/`ctrl+f`, `space`, `h` and `l` in two-button dialogs, the keys of choice fields in forms (`y n h l j k`) and any text you type into a field. Among the `ctrl+<letter>` keys, `ctrl+h`, `ctrl+i` and `ctrl+m` (backspace, tab and enter on many terminals) are refused too.
+
+Two actions that are live on the same screen cannot share a key (the list for `check` and `clone`, for example), but a key may mean different things on screens that never show together. Swapping two keys is fine: `clone: "k"` with `check: "c"`. A problem never stops gitid: the affected action keeps its default key and gitid says so, in the status bar when the TUI starts, at the bottom of the `?` overlay, in `gitid keys` (which exits with 2) and in `gitid doctor` (a warning). A file that cannot be read or parsed leaves every default in place. An unknown action name (for example one from a newer gitid) is reported and ignored.
+
+Press `r` on the list to reload `config.yaml` and `keys.yaml` without leaving the TUI. Shortcuts need a keyboard layout that sends plain letters: with a Vietnamese input method switched on (Telex, VNI) gitid cannot read `a`, `k` and the others, and says so in the status bar; switch to EN (ABC) first. For the same reason keys with non-ASCII characters are not accepted in `keys.yaml`.
+
 ## Features in Detail
 
 ### List
@@ -319,6 +378,8 @@ The home screen is a tree of companies and accounts with a platform tag (`GH`, `
 ```
 
 The right side of the status bar always says what is left to do: unapplied changes (highlighted), a company that has no account yet, or `✓ Applied, nothing pending`. The help bar shows only the keys that matter now; the next step comes first, marked `▸`, and `?` lists every key.
+
+`q` quits on the list and goes back one step on every other screen, like `esc` (inside a text field `q` is typed as a letter). `r` reloads `config.yaml` and `keys.yaml` from disk, for example after editing them by hand. On the welcome screen `enter` adds the first company. Every key above can be changed, see [Custom key bindings](#custom-key-bindings).
 
 ### Add and edit accounts
 

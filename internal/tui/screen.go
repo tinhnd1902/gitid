@@ -12,6 +12,7 @@ import (
 	"github.com/tinhnd1902/gitid/internal/app"
 	"github.com/tinhnd1902/gitid/internal/config"
 	"github.com/tinhnd1902/gitid/internal/i18n"
+	"github.com/tinhnd1902/gitid/internal/keymap"
 )
 
 // Screen is one page of the TUI. The root model keeps a stack of them; only
@@ -70,10 +71,12 @@ type shared struct {
 	planErr bool // the last plan could not be computed
 	st      *Styles
 	km      *KeyMap
-	cwd     string
-	version string
-	nextID  int
-	nav     []navOp // navigation requested by the current Update, see applyNav
+	// keyIssues are the problems of keys.yaml found by the last load.
+	keyIssues []keymap.Issue
+	cwd       string
+	version   string
+	nextID    int
+	nav       []navOp // navigation requested by the current Update, see applyNav
 }
 
 type navKind int

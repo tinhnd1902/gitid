@@ -13,6 +13,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
+
+	"github.com/tinhnd1902/gitid/internal/keymap"
 )
 
 // ---- helpers ----
@@ -68,7 +70,7 @@ func typeInto(f *form, s string) {
 }
 
 func testForm(fields ...*formField) *form {
-	f := newForm(NewStyles(), NewKeyMap(), fields...)
+	f := newForm(NewStyles(), NewKeyMap(keymap.Defaults()), fields...)
 	f.SetSize(60, 40)
 	return f
 }

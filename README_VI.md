@@ -142,6 +142,9 @@ gitid apply [--dry-run] [--yes]          # ghi thay đổi vào ~/.gitconfig và
 gitid import [--dry-run]                 # đề xuất công ty từ các includeIf sẵn có
       [--select initech --platform github --username alice --auth https --host <host>]
 
+gitid keys [--json]                      # phím tắt, gồm phím tùy chỉnh trong keys.yaml và các vấn đề tìm thấy
+gitid keys --example                     # in mẫu keys.yaml đã comment sẵn (không ghi tệp nào)
+
 gitid version                            # in phiên bản
 gitid completion <bash|zsh|fish|powershell>   # tự hoàn thành lệnh
 ```
@@ -214,7 +217,7 @@ Hai chế độ xác thực trong thực tế:
 
 gitid sửa tệp trong thư mục home của bạn, nên nó rất chặt chẽ:
 
-- **Chạm vào những gì:** khối do gitid quản lý trong `~/.gitconfig`; khối do gitid quản lý (một dòng `Include config.d/*`) ở đầu `~/.ssh/config`; `~/.ssh/config.d/gitid.conf`; các key bạn yêu cầu tạo trong `~/.ssh/gitid/`; và thư mục riêng `$XDG_CONFIG_HOME/gitid/` (mặc định `~/.config/gitid/`) chứa `config.yaml`, các tệp `git/*.gitconfig` được sinh ra và `backups/`. Không có gì khác.
+- **Chạm vào những gì:** khối do gitid quản lý trong `~/.gitconfig`; khối do gitid quản lý (một dòng `Include config.d/*`) ở đầu `~/.ssh/config`; `~/.ssh/config.d/gitid.conf`; các key bạn yêu cầu tạo trong `~/.ssh/gitid/`; và thư mục riêng `$XDG_CONFIG_HOME/gitid/` (mặc định `~/.config/gitid/`) chứa `config.yaml`, các tệp `git/*.gitconfig` được sinh ra và `backups/`. Không có gì khác. gitid cũng đọc tệp `keys.yaml` tùy chọn ở đó (phím tắt của bạn) nhưng không bao giờ ghi vào nó.
 - **Khối được quản lý:** mọi thứ gitid ghi vào tệp của bạn nằm giữa `# >>> gitid managed block … >>>` và `# <<< gitid managed block <<<`. Phần nằm ngoài hai dấu đó không bao giờ bị đổi. Chạy `apply` lần thứ hai không đổi gì và không tạo bản sao lưu mới.
 - **Xem trước và xác nhận:** TUI luôn hiện diff và hỏi trước khi ghi. `gitid apply --dry-run` in cùng diff đó và không tạo gì, kể cả thư mục.
 - **Sao lưu:** trước mọi lần ghi, nội dung cũ của từng tệp bị ảnh hưởng được chép vào `~/.config/gitid/backups/<mốc-thời-gian>/` (thư mục `0700`, tệp `0600`) cùng `manifest.json` ghi đường dẫn gốc, quyền và SHA-256. 30 bản sao lưu mới nhất được giữ lại.
@@ -249,12 +252,13 @@ Mục có `"existed": false` là tệp do lần chạy đó tạo ra: xóa chún
 
 ## Cấu hình
 
-gitid đọc và ghi một tệp cấu hình:
+gitid đọc và ghi một tệp cấu hình, và đọc thêm một tệp phím tắt tùy chọn:
 
 | Mục                   | Vị trí                                                                       |
 | --------------------- | ---------------------------------------------------------------------------- |
 | Tệp cấu hình          | `$XDG_CONFIG_HOME/gitid/config.yaml` (quyền `0600`)                          |
 | Mặc định khi XDG chưa đặt, rỗng hoặc không phải đường dẫn tuyệt đối | `~/.config/gitid/config.yaml` |
+| Phím tắt (tùy chọn, chỉ đọc) | `<thư mục cấu hình>/keys.yaml`, xem [Tùy chỉnh phím tắt](#tùy-chỉnh-phím-tắt) |
 | Tệp git được sinh ra  | `<thư mục cấu hình>/git/`                                                    |
 | Sao lưu               | `<thư mục cấu hình>/backups/`                                                |
 
@@ -301,6 +305,61 @@ companies:
 
 Mỗi lần lưu, gitid ghi lại `config.yaml` từ mô hình nội bộ, nên **chú thích bạn tự thêm bằng tay sẽ không được giữ**. Tệp cũ được sao lưu trước. Slug của công ty và id của tài khoản không đổi được sau khi tạo (chúng đặt tên cho alias SSH, tệp key và các tệp sinh ra); hãy xóa rồi tạo lại.
 
+### Tùy chỉnh phím tắt
+
+Giao diện terminal dùng được ngay, không cần thiết lập. Muốn đổi phím tắt, tạo tệp tùy chọn `keys.yaml` cùng thư mục với `config.yaml`: `$XDG_CONFIG_HOME/gitid/keys.yaml`, tức `~/.config/gitid/keys.yaml` khi `XDG_CONFIG_HOME` chưa đặt, rỗng hoặc không phải đường dẫn tuyệt đối (cùng quy tắc với `config.yaml`).
+
+**gitid chỉ đọc tệp này.** gitid không bao giờ tạo, ghi lại, sao lưu hay xóa `keys.yaml`, nên chú thích của bạn được giữ nguyên, và sửa tệp này không bao giờ làm một lần lưu `config.yaml` bị coi là «cũ». `config.yaml` không có mục `keys:` (gitid từ chối mục đó).
+
+```sh
+gitid keys                                          # mọi hành động cùng phím của nó, và các vấn đề trong keys.yaml
+mkdir -p ~/.config/gitid && gitid keys --example > ~/.config/gitid/keys.yaml    # mẫu với mọi dòng đã comment sẵn
+```
+
+Thư mục này chưa tồn tại trước khi gitid lưu `config.yaml` lần đầu, nên cần `mkdir -p`. Nếu bạn đặt `XDG_CONFIG_HOME` là đường dẫn tuyệt đối, dùng `$XDG_CONFIG_HOME/gitid/` thay cho `~/.config/gitid/`.
+
+`gitid keys --example` chỉ in ra màn hình; phép chuyển hướng ở trên mới tạo tệp, và nó **ghi đè `keys.yaml` đang có**. Bỏ dấu `#` ở đầu những dòng bạn muốn đổi.
+
+Tệp là một bảng `hành_động: "phím"` hoặc `hành_động: ["phím", "phím"]` (thanh phím và các gợi ý hiển thị phím đầu tiên; bảng `?` hiển thị tất cả, ví dụ `c/n`):
+
+```yaml
+check: "v"          # v thay cho k
+clone: ["c", "n"]   # hai phím cho một hành động
+```
+
+| Hành động | Mặc định | Dùng ở |
+| --------- | -------- | ------ |
+| `quit` | `q` | danh sách |
+| `help` | `?` | mọi màn hình trừ biểu mẫu |
+| `back` | `q` (`esc` luôn quay lại) | mọi màn hình trừ danh sách |
+| `filter` | `/` | danh sách |
+| `add_account` | `a` | danh sách, chi tiết |
+| `add_company` | `A` | danh sách |
+| `edit` | `e` | danh sách, chi tiết |
+| `delete` | `d` | danh sách, chi tiết |
+| `clone` | `c` | danh sách, chi tiết, áp dụng (xong), kiểm tra |
+| `check` | `k` | danh sách, chi tiết, áp dụng (xong) |
+| `doctor` | `D` | danh sách, chi tiết |
+| `apply` | `p` | danh sách, chi tiết, kết quả SSH key |
+| `ssh_key` | `g` | danh sách, chi tiết |
+| `import` | `i` | danh sách |
+| `reload` | `r` | danh sách |
+| `yes` / `no` | `y` / `n` | màn hình xem trước, hộp xác nhận (cả câu hỏi «bỏ những gì đã nhập?») |
+| `fix` | `f` | kiểm tra |
+| `retry` | `r` | áp dụng, kiểm tra, chẩn đoán |
+| `copy` | `c` | kết quả SSH key |
+| `open` | `o` | kết quả SSH key |
+| `ssh_test` | `s` | chẩn đoán |
+| `terminal` | `t` | clone |
+
+Một phím là một ký tự ASCII in được (`v`, `V`, `/`, `5`), `ctrl+<chữ>`, `alt+<ký tự>` hoặc `f1` đến `f12`. Không hợp lệ: chữ có dấu (`â`, `đ`), từ (`ab`) và phím có tên như `enter`, `esc`, `tab`, mũi tên hay `space`. Đặt phím trong dấu nháy khi YAML sẽ hiểu khác đi: `"?"`, `"#"`, `"&"`, `"*"`, `"!"`, `"|"`, `">"`, `"%"`, `"@"`, `` "`" ``.
+
+Các phím sau không đổi được: `ctrl+c`, `esc` (luôn quay lại một bước), `enter`, `tab` và `shift+tab`, mũi tên, `pgup`/`pgdn`, `home`/`end`, `ctrl+p`/`ctrl+n`/`ctrl+b`/`ctrl+f`, `space`, `h` và `l` trong hộp hai nút, phím của ô chọn trong biểu mẫu (`y n h l j k`) và mọi chữ bạn gõ vào ô nhập. Trong các phím `ctrl+<chữ>`, `ctrl+h`, `ctrl+i` và `ctrl+m` (backspace, tab, enter ở nhiều terminal) cũng bị từ chối.
+
+Hai hành động cùng hoạt động trên một màn hình không được dùng chung phím (ví dụ `check` và `clone` ở danh sách), nhưng một phím có thể có nghĩa khác ở những màn hình không bao giờ hiện cùng lúc. Hoán đổi hai phím thì được: `clone: "k"` cùng `check: "c"`. Một vấn đề không bao giờ làm gitid dừng: hành động bị ảnh hưởng giữ phím mặc định và gitid báo cho bạn, trên thanh trạng thái khi mở TUI, ở cuối bảng `?`, trong `gitid keys` (thoát với mã 2) và trong `gitid doctor` (cảnh báo). Tệp không đọc được hoặc sai cú pháp thì mọi phím về mặc định. Tên hành động không có (ví dụ từ gitid bản mới hơn) được báo và bỏ qua.
+
+Bấm `r` ở danh sách để tải lại `config.yaml` và `keys.yaml` mà không thoát TUI. Phím tắt cần bàn phím gửi chữ thường thuần: khi bộ gõ tiếng Việt (Telex, VNI) đang bật, gitid không đọc được `a`, `k`… và báo trên thanh trạng thái; hãy chuyển sang EN (ABC) trước. Vì lý do đó `keys.yaml` cũng không nhận phím có ký tự ngoài ASCII.
+
 ## Tính năng chi tiết
 
 ### Danh sách
@@ -319,6 +378,8 @@ Màn hình chính là cây công ty và tài khoản với thẻ nền tảng (`
 ```
 
 Bên phải thanh trạng thái luôn cho biết còn việc gì: thay đổi chưa áp dụng (được tô nổi), công ty chưa có tài khoản, hoặc `✓ Đã áp dụng, không còn thay đổi`. Thanh phím chỉ hiện các phím đang cần; bước tiếp theo đứng đầu và có dấu `▸`, còn `?` liệt kê mọi phím.
+
+`q` thoát ở danh sách và quay lại một bước ở mọi màn hình khác, giống `esc` (trong ô nhập chữ, `q` được gõ như một chữ cái). `r` tải lại `config.yaml` và `keys.yaml` từ đĩa, ví dụ sau khi bạn sửa tay. Ở màn hình chào, `enter` thêm công ty đầu tiên. Mọi phím ở trên đều đổi được, xem [Tùy chỉnh phím tắt](#tùy-chỉnh-phím-tắt).
 
 ### Thêm và sửa tài khoản
 

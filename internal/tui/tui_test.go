@@ -30,7 +30,7 @@ func TestListEmptyState(t *testing.T) {
 	h := newHarness(t, nil)
 	h.mustContain(tr("tui.empty.title"))
 	h.key("a") // no company yet
-	h.mustContain(tr("tui.status.need_company"))
+	h.mustContain(defKM.T("tui.status.need_company"))
 	if h.depth() != 1 {
 		t.Fatal("must not open a form without companies")
 	}
@@ -116,7 +116,7 @@ func TestT3CompanyForm(t *testing.T) {
 	if !ok || c.Name != "Zeta Inc" || c.BaseDir != "~/Code/zeta/" {
 		t.Fatalf("saved company %+v ok=%v", c, ok)
 	}
-	if !strings.Contains(h.m.status.text, tr("tui.status.company_created", "zeta")) {
+	if !strings.Contains(h.m.status.text, defKM.T("tui.status.company_created", "zeta")) {
 		t.Fatalf("status %q", h.m.status.text)
 	}
 	// the new company changes nothing on disk, so the plan stays the same
@@ -175,7 +175,7 @@ func TestConfirmEmptyAndRetry(t *testing.T) {
 	c := newConfirmScreen(h.m.sh, "x")
 	c.Resize(80, 20)
 	c.Update(confirmPlanMsg{id: c.id, err: os.ErrPermission})
-	if c.state != confFailed || !strings.Contains(c.View(), tr("tui.confirm.retry_hint")) {
+	if c.state != confFailed || !strings.Contains(c.View(), defKM.T("tui.confirm.retry_hint")) {
 		t.Fatal("failed state")
 	}
 	// results of another run are ignored
@@ -413,7 +413,7 @@ func TestT7CloneFlow(t *testing.T) {
 	close(release)
 	h.waitFor("failed", func() bool { return cs.phase == clFailed })
 	h.mustContain(tr("tui.clone.terminal_mode"), tr("err.auth"))
-	h.mustContainPlain(tr("tui.clone.auth_hint")) // mentions Personal Access Tokens for HTTPS
+	h.mustContainPlain(defKM.T("tui.clone.auth_hint")) // mentions Personal Access Tokens for HTTPS
 	if !strings.Contains(i18n.In("vi", "tui.clone.auth_hint"), "Personal Access Token") || !strings.Contains(i18n.In("en", "tui.clone.auth_hint"), "Personal Access Token") {
 		t.Fatal("the clone hint must mention Personal Access Tokens")
 	}
@@ -563,7 +563,7 @@ func TestT9CheckAndFix(t *testing.T) {
 	h.key("k")
 	h.waitFor("result", func() bool { c, ok := h.top().(*checkScreen); return ok && c.phase == chResult })
 	h.mustContain(tr("warn.check.email_mismatch"), "acme/bob", "wrong@example.com", "bob@acme.com")
-	h.mustContain(tr("tui.check.fix_hint"))
+	h.mustContain(defKM.T("tui.check.fix_hint"))
 	// fix targets the account matching the remote: nothing to change here
 	h.key("f")
 	h.waitFor("fix planned", func() bool { c := h.top().(*checkScreen); return c.phase != chFixPlanning })
@@ -658,7 +658,7 @@ func TestT10KeygenAndResult(t *testing.T) {
 	h.waitFor("copied status", func() bool { return strings.Contains(h.view(), tr("tui.keyresult.copied")) })
 	h.key("o")
 	h.waitFor("opened", func() bool { return h.fake.Count("open ") == 1 })
-	h.mustContain(tr("tui.keyresult.apply_hint"))
+	h.mustContain(defKM.T("tui.keyresult.apply_hint"))
 	// with a key on disk, g shows the existing key instead of generating
 	h.key("esc")
 	h.key("g")
@@ -770,7 +770,7 @@ func TestT12CtrlCQuitsEverywhere(t *testing.T) {
 func TestQuitKeyAndHelpOverlay(t *testing.T) {
 	h := newHarness(t, basicCfg())
 	h.key("?")
-	h.mustContain(tr("tui.help.title"), tr("tui.help.global"), tr("tui.help.close"))
+	h.mustContain(tr("tui.help.title"), tr("tui.help.global"), defKM.T("tui.help.close"))
 	h.key("a") // swallowed while help is open
 	if h.depth() != 1 {
 		t.Fatal("keys must not reach the screen while help is shown")

@@ -14,6 +14,7 @@ import (
 
 	"github.com/tinhnd1902/gitid/internal/app"
 	"github.com/tinhnd1902/gitid/internal/config"
+	"github.com/tinhnd1902/gitid/internal/keymap"
 )
 
 type clonePhase int
@@ -359,8 +360,8 @@ func (c *cloneScreen) View() string {
 	case clFailed:
 		b.WriteString(st.Err.Render("✗ "+wrap(errText(c.err), inner)) + "\n")
 		if errors.Is(c.err, app.ErrAuth) {
-			b.WriteString("\n" + st.Warn.Render(wrap(tr("tui.clone.auth_hint"), inner)) + "\n")
-			b.WriteString("\n" + st.ButtonOn.Render("t  "+tr("tui.clone.terminal_mode")))
+			b.WriteString("\n" + st.Warn.Render(wrap(c.sh.km.T("tui.clone.auth_hint"), inner)) + "\n")
+			b.WriteString("\n" + st.ButtonOn.Render(c.sh.km.keys.Label(keymap.Terminal)+"  "+tr("tui.clone.terminal_mode")))
 		}
 	}
 	return c.sh.panel(tr("tui.clone.title"), b.String(), c.w, c.h, true)

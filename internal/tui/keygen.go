@@ -310,7 +310,7 @@ func (k *keyResultScreen) View() string {
 			b.WriteString(st.Label.Render(tr("tui.keyresult.add_at")) + "\n" + st.Info.Render(trunc(url, inner)) + "\n\n")
 		}
 		if k.sh.pending > 0 {
-			b.WriteString(st.Warn.Render("! " + wrap(tr("tui.keyresult.apply_hint"), inner)))
+			b.WriteString(st.Warn.Render("! " + wrap(k.sh.km.T("tui.keyresult.apply_hint"), inner)))
 		}
 	}
 	return k.sh.panel(tr("tui.keyresult.title"), b.String(), k.w, k.h, true)

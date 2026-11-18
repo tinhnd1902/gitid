@@ -3,6 +3,7 @@
 package tui
 
 import (
+	"slices"
 	"strings"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/tinhnd1902/gitid/internal/app"
+	"github.com/tinhnd1902/gitid/internal/keymap"
 )
 
 // Options configure the TUI.
@@ -38,11 +40,14 @@ type Model struct {
 	showHelp bool
 	// reloading is set by the reload key: the next cfgLoadedMsg then says so.
 	reloading bool
+	// keyShown are the keys.yaml problems the status bar already announced,
+	// so the same set is not announced again after every reload.
+	keyShown []keymap.Issue
 }
 
 // New creates the root model. The configuration is loaded by Init.
 func New(svc *app.Service, opts Options) *Model {
-	sh := &shared{svc: svc, st: NewStyles(), km: NewKeyMap(), cwd: opts.Cwd, version: opts.Version}
+	sh := &shared{svc: svc, st: NewStyles(), km: NewKeyMap(keymap.Defaults()), cwd: opts.Cwd, version: opts.Version}
 	m := &Model{sh: sh}
 	m.stack = []Screen{newListScreen(sh)}
 	return m
@@ -73,7 +78,10 @@ func (m *Model) loadCmd() tea.Cmd {
 	svc := m.sh.svc
 	return func() tea.Msg {
 		cfg, err := svc.Load()
-		return cfgLoadedMsg{cfg: cfg, err: err}
+		// keys.yaml is read apart from config.yaml (never written, never part
+		// of a save) and applies even when config.yaml failed to load
+		keys, issues := keymap.Load(svc.Env)
+		return cfgLoadedMsg{cfg: cfg, err: err, keys: keys, keyIssues: issues}
 	}
 }
 
@@ -231,15 +239,27 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmds []tea.Cmd
 		reloading := m.reloading
 		m.reloading = false
-		if msg.err != nil {
+		// replaced in place: screens and forms hold the pointer
+		*m.sh.km = *NewKeyMap(msg.keys)
+		m.sh.keyIssues = msg.keyIssues
+		keysWarn := len(msg.keyIssues) > 0 && !slices.Equal(msg.keyIssues, m.keyShown)
+		switch {
+		case msg.err != nil:
 			// the rows already shown stay: they are the last good state
 			cmds = append(cmds, m.setStatus(statusMsg{level: levelErr, text: errText(msg.err)}))
-		} else {
+		default:
 			m.sh.cfg, m.sh.loaded = msg.cfg, true
 			cmds = append(cmds, m.planCmd())
-			if reloading {
+			if reloading && !keysWarn {
 				cmds = append(cmds, m.setStatus(statusMsg{level: levelOK, text: tr("tui.status.reloaded")}))
 			}
+			if keysWarn {
+				m.keyShown = msg.keyIssues
+				cmds = append(cmds, m.setStatus(statusMsg{level: levelWarn, text: tr("tui.status.keys_invalid", len(msg.keyIssues)), ttl: hintTTL}))
+			}
+		}
+		if len(msg.keyIssues) == 0 {
+			m.keyShown = nil
 		}
 		cmds = append(cmds, m.broadcast(msg))
 		return m, tea.Batch(cmds...)
@@ -340,7 +360,7 @@ func (m *Model) syncBadge() string {
 		if !actionable {
 			k += "_plain"
 		}
-		return tr(k, args...)
+		return sh.km.T(k, args...)
 	}
 	switch {
 	case !sh.loaded:
@@ -395,7 +415,7 @@ func (m *Model) statusView() string {
 func (m *Model) globalHelp() []key.Binding {
 	km := m.sh.km
 	return []key.Binding{
-		withDesc(km.Back, "esc/q", tr("tui.key.back_global")),
+		withDesc(km.Back, "esc/"+strings.Join(km.keys.Keys(keymap.Back), "/"), tr("tui.key.back_global")),
 		withDesc(km.Up, "↑/↓", tr("tui.key.move")),
 		// one row for both directions: the keys of PageUp and PageDown
 		key.NewBinding(
@@ -452,7 +472,7 @@ func (m *Model) helpItems() []helpItem {
 func (m *Model) helpBar() string {
 	st := m.sh.st
 	km := m.sh.km
-	more := helpItem{b: withDesc(km.Help, "?", tr("tui.key.all_keys"))}
+	more := helpItem{b: relabel(km.Help, tr("tui.key.all_keys"))}
 	// A screen that captures the keyboard never opens the overlay (the "?"
 	// would be typed), so the item is not offered there.
 	showMore := !isCapturing(m.top())
@@ -517,14 +537,26 @@ func (m *Model) helpView(w, h int) string {
 		return out
 	}
 	screen, global := enabled(m.top().Help()), enabled(m.globalHelp())
+	// the overlay shows every key of an action ("c/n"), the help bar the first
+	keyText := func(b key.Binding) string { return m.overlayKey(b) }
+	kw := 10 // key column: the widest key text plus one space, so it never touches its description
+	for _, l := range [][]key.Binding{screen, global} {
+		for _, b := range l {
+			kw = maxInt(kw, minInt(lipgloss.Width(keyText(b))+1, 18))
+		}
+	}
 	inner := maxInt(w-4, 10)
 	avail := maxInt(h-2, 1) // panel border
 
 	perCol := func(n, cols int) int { return (n + cols - 1) / cols }
 	// fixed lines around the bindings: title, screen name, global title, the
 	// close hint, the rows of the global section, plus four blank separators
+	warn := len(m.sh.keyIssues) > 0
 	fixed := func(compact bool, cols int) int {
 		n := 4 + perCol(len(global), cols) + 1
+		if warn {
+			n++ // the keys.yaml problem line
+		}
 		if !compact {
 			n += 4
 		}
@@ -538,10 +570,10 @@ func (m *Model) helpView(w, h int) string {
 		ws = make([]int, n)
 		total := 0
 		for c := range ws {
-			ws[c] = 12
+			ws[c] = kw + 3
 			for r := 0; r < rows; r++ {
 				if idx := c*rows + r; idx < len(list) {
-					ws[c] = maxInt(ws[c], 11+lipgloss.Width(list[idx].Help().Desc))
+					ws[c] = maxInt(ws[c], kw+2+lipgloss.Width(list[idx].Help().Desc))
 				}
 			}
 			if c < n-1 {
@@ -552,7 +584,7 @@ func (m *Model) helpView(w, h int) string {
 		fits = total <= inner
 		// shrink from the last column: the first ones keep their text
 		for c := n - 1; c >= 0 && total > inner; c-- {
-			cut := minInt(total-inner, ws[c]-12)
+			cut := minInt(total-inner, ws[c]-(kw+3))
 			if cut > 0 {
 				ws[c] -= cut
 				total -= cut
@@ -590,9 +622,9 @@ func (m *Model) helpView(w, h int) string {
 		hp := k.Help()
 		desc := hp.Desc
 		if cw > 0 {
-			desc = truncWords(desc, maxInt(cw-11, 1))
+			desc = truncWords(desc, maxInt(cw-(kw+2), 1))
 		}
-		out := "  " + st.Accent.Render(pad(hp.Key, 9)) + st.Muted.Render(desc)
+		out := "  " + st.Accent.Render(pad(keyText(k), kw)) + st.Muted.Render(desc)
 		if cw > 0 {
 			out += spaces(cw - lipgloss.Width(out))
 		}
@@ -632,8 +664,25 @@ func (m *Model) helpView(w, h int) string {
 	b.WriteString(st.Bold.Render(tr("tui.help.global")) + "\n")
 	section(&b, global)
 	blank(&b)
-	b.WriteString(st.Faint.Render(tr("tui.help.close")))
+	b.WriteString(st.Faint.Render(m.sh.km.T("tui.help.close")))
+	if warn {
+		b.WriteString("\n" + st.Warn.Render("! "+tr("tui.help.keys_warn", len(m.sh.keyIssues))))
+	}
 	return m.sh.panel("", b.String(), w, h, true)
+}
+
+// overlayKey is the key text of a binding in the "?" overlay: all the keys of
+// a rebindable action joined with "/" (clone: [c, n] shows "c/n"), otherwise
+// the binding's own label.
+func (m *Model) overlayKey(b key.Binding) string {
+	h := b.Help()
+	for _, d := range keymap.Defs() {
+		ks := m.sh.km.keys.Keys(d.Action)
+		if len(ks) > 1 && h.Key == ks[0] && slices.Equal(b.Keys(), ks) {
+			return strings.Join(ks, "/")
+		}
+	}
+	return h.Key
 }
 
 // detectBackground asks the terminal for its background color (a no-op when

@@ -243,7 +243,7 @@ func (c *checkScreen) View() string {
 			b.WriteString(st.Text.Render(wrap(c.notRepoNext(), inner)))
 			break
 		}
-		b.WriteString(st.Faint.Render(tr("tui.check.retry_hint")))
+		b.WriteString(st.Faint.Render(c.sh.km.T("tui.check.retry_hint")))
 	case chFixConfirm:
 		b.WriteString(st.Bold.Render(tr("tui.fix.title", c.fix.Remote, c.fix.Account)) + "\n\n")
 		b.WriteString(st.Err.Render("- "+trunc(c.fix.Old, inner-2)) + "\n")
@@ -259,9 +259,9 @@ func (c *checkScreen) View() string {
 // the first company folder when there is one) or clone one.
 func (c *checkScreen) notRepoNext() string {
 	if len(c.sh.cfg.Companies) > 0 {
-		return tr("tui.check.not_repo_next", c.sh.cfg.Companies[0].BaseDir)
+		return c.sh.km.T("tui.check.not_repo_next", c.sh.cfg.Companies[0].BaseDir)
 	}
-	return tr("tui.check.not_repo_next_none")
+	return c.sh.km.T("tui.check.not_repo_next_none")
 }
 
 func (c *checkScreen) resultView(w int) string {
@@ -295,7 +295,7 @@ func (c *checkScreen) resultView(w int) string {
 		b.WriteString(st.Warn.Render("! "+wrap(tr(wk), w-2)) + "\n")
 	}
 	if c.canFix() && !r.OK() {
-		b.WriteString("\n" + st.Faint.Render(tr("tui.check.fix_hint")))
+		b.WriteString("\n" + st.Faint.Render(c.sh.km.T("tui.check.fix_hint")))
 	}
 	if c.note != "" {
 		b.WriteString("\n\n" + st.Info.Render(wrap(c.note, w)))

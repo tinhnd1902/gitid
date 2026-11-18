@@ -253,7 +253,7 @@ func (s *importScreen) listView(w int) string {
 	}
 	if len(s.res.Proposals) == 0 {
 		b.WriteString(st.Muted.Render(wrap(tr("cli.import.none"), w)) + "\n")
-		b.WriteString("\n" + st.Text.Render(wrap(tr("tui.import.none_next"), w)) + "\n")
+		b.WriteString("\n" + st.Text.Render(wrap(s.sh.km.T("tui.import.none_next"), w)) + "\n")
 	} else {
 		b.WriteString(st.Bold.Render(tr("tui.import.proposals")) + "\n")
 		for i, p := range s.res.Proposals {

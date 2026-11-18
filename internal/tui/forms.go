@@ -74,14 +74,14 @@ func (g *discardGuard) dirty(f *form) bool { return fingerprint(f) != g.initial 
 
 // prompt is the question, with the keys that answer it.
 func (g *discardGuard) prompt(km *KeyMap) string {
-	return tr("tui.form.discard_q", km.Yes.Help().Key, km.No.Help().Key)
+	return km.T("tui.form.discard_q")
 }
 
 // helpBindings are the keys offered while the question is shown.
 func (g *discardGuard) helpBindings(km *KeyMap) []key.Binding {
 	return []key.Binding{
-		withDesc(km.Yes, km.Yes.Help().Key, tr("tui.key.discard")),
-		withDesc(km.No, km.No.Help().Key, tr("tui.key.keep_editing")),
+		relabel(km.Yes, tr("tui.key.discard")),
+		relabel(km.No, tr("tui.key.keep_editing")),
 	}
 }
 
@@ -459,7 +459,7 @@ func (f *companyForm) Update(msg tea.Msg) (Screen, tea.Cmd) {
 				// A new company has no account yet, so there is nothing to
 				// apply: go back to the list, select it and say what is next.
 				if c, _, found := cfg.FindCompany(name); found && len(c.Accounts) == 0 {
-					return tea.Sequence(changed(cfg), pop(), focus(name), hint(tr("tui.status.company_created", name)))
+					return tea.Sequence(changed(cfg), pop(), focus(name), hint(f.sh.km.T("tui.status.company_created", name)))
 				}
 			}
 			return f.reviewNext(msg, statusMsg{level: levelOK, text: tr("tui.status.company_saved", name)}, "")
@@ -618,7 +618,7 @@ func (f *accountForm) candidate() config.Account {
 func (f *accountForm) loginError() string {
 	c := f.candidate()
 	if dup, ok := dupInCompany(f.company(), c, f.editID()); ok {
-		return tr("tui.form.err.dup_account", dup.ID, c.EffectiveHost())
+		return f.sh.km.T("tui.form.err.dup_account", dup.ID, c.EffectiveHost())
 	}
 	if looksLikeEmail(c.Platform, c.Username) {
 		return tr("tui.form.err.username_email")
@@ -654,7 +654,7 @@ func (f *accountForm) previewLines(w, rows int) []string {
 	case len(elsewhere) > 0:
 		note, style = tr("tui.form.warn.dup_other", strings.Join(elsewhere, ", ")), st.Warn
 	case f.edit != nil && acc.Username != "" && acc.Username != f.edit.Username:
-		note, style = tr("tui.form.warn.username_changed", f.edit.Username), st.Warn
+		note, style = f.sh.km.T("tui.form.warn.username_changed", f.edit.Username), st.Warn
 	case acc.Username != "" && f.edit != nil:
 		note = tr("tui.form.preview_id_fixed", acc.ID)
 	case acc.Username != "":
@@ -776,7 +776,7 @@ func (f *accountForm) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	case savedMsg:
 		next := func(config.Config) tea.Cmd {
 			ref := f.companySlug + "/" + f.accountID()
-			text := tr("tui.status.account_saved", ref)
+			text := f.sh.km.T("tui.status.account_saved", ref)
 			if f.edit != nil && strings.TrimSpace(f.username) != f.edit.Username {
 				// repos cloned with the old username keep pointing at it
 				text = tr("tui.status.account_saved_relogin", ref, f.edit.Username)

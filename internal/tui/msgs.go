@@ -7,6 +7,7 @@ import (
 	"github.com/tinhnd1902/gitid/internal/config"
 	"github.com/tinhnd1902/gitid/internal/doctor"
 	"github.com/tinhnd1902/gitid/internal/importer"
+	"github.com/tinhnd1902/gitid/internal/keymap"
 	"github.com/tinhnd1902/gitid/internal/keys"
 	"github.com/tinhnd1902/gitid/internal/plan"
 )
@@ -43,6 +44,10 @@ type (
 	cfgLoadedMsg    struct {
 		cfg config.Config
 		err error
+		// keys is the effective key map read from keys.yaml and its problems;
+		// it applies whether or not config.yaml loaded
+		keys      keymap.Map
+		keyIssues []keymap.Issue
 	}
 	// cfgChangedMsg is emitted after the configuration was saved.
 	cfgChangedMsg struct{ cfg config.Config }

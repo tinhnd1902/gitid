@@ -27,7 +27,7 @@ var actionField = map[keymap.Action]string{
 }
 
 func TestKM2RegistryMatchesKeyMap(t *testing.T) {
-	km := NewKeyMap()
+	km := NewKeyMap(keymap.Defaults())
 	rv := reflect.ValueOf(km).Elem()
 	seen := map[string]bool{}
 	for _, d := range keymap.Defs() {
