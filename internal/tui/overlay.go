@@ -47,7 +47,7 @@ type helpOverlay struct {
 
 func newOverlayFilter(st *Styles) textinput.Model {
 	fi := textinput.New()
-	fi.Prompt = "› "
+	fi.Prompt = "> "
 	fi.PromptStyle = st.Accent
 	fi.PlaceholderStyle = st.Faint
 	fi.Cursor.Style = st.Accent
@@ -583,11 +583,11 @@ func (m *Model) helpView(w, h int) string {
 		}
 		switch {
 		case hasSel && r.runnable && r.id() == selID:
-			return st.HelpSelected.Render(tail("▸ " + pad(r.keyText, kw) + desc))
-		case !r.runnable:
-			return st.Faint.Render(tail("  " + pad(r.keyText, kw) + desc))
+			return st.HelpSelected.Render(tail("▌ " + pad(r.keyText, kw) + desc))
 		}
-		return tail("  " + st.Accent.Render(pad(r.keyText, kw)) + st.Muted.Render(desc))
+		// the global rows read like the others: they work, only the cursor
+		// does not stop on them
+		return tail("  " + st.Text.Render(pad(r.keyText, kw)) + st.Muted.Render(desc))
 	}
 	blank := func(b *strings.Builder) {
 		if !compact {
@@ -661,11 +661,15 @@ func (m *Model) helpView(w, h int) string {
 	}
 	if hint {
 		blank(&b)
-		if m.ov.filter.Value() == "" {
-			b.WriteString(st.Faint.Render(m.sh.km.T("tui.help.close")))
-		} else {
-			b.WriteString(st.Faint.Render(m.sh.km.T("tui.help.close_filter")))
+		closeText := m.sh.km.T("tui.help.close")
+		if m.ov.filter.Value() != "" {
+			closeText = m.sh.km.T("tui.help.close_filter")
 		}
+		// the version of gitid ends the footer, when it fits
+		if v := m.sh.version; v != "" && lipgloss.Width(closeText+"  ·  gitid "+v) <= inner {
+			closeText += "  ·  gitid " + v
+		}
+		b.WriteString(st.Muted.Render(closeText))
 	}
 	if warn {
 		b.WriteString("\n" + st.Warn.Render("! "+tr("tui.help.keys_warn", len(m.sh.keyIssues))))

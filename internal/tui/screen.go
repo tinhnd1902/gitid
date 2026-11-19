@@ -253,6 +253,57 @@ func wrap(s string, w int) string {
 	return lipgloss.NewStyle().Width(w).Render(s)
 }
 
+// measure is the widest a line of prose gets: hints, done steps, explanations
+// and empty states wrap here even when the panel is wider. Lists and paths
+// keep the full width.
+const measure = 72
+
+// proseW is the wrapping width of prose in a panel w cells wide inside.
+func proseW(w int) int { return minInt(w, measure) }
+
+// kvCol is the width of the label column of one key/value block: the widest
+// label of that block in the active language plus two cells, at least 10 and
+// at most a third of the width w. Every key/value block uses it, so values
+// start at the same place from one screen to the next. A label is never cut
+// for the sake of the third: the column may grow to hold the widest label, up
+// to half of the width (a narrow pane keeps its labels, not its values).
+func kvCol(w int, labels ...string) int {
+	n := 0
+	for _, l := range labels {
+		n = maxInt(n, lipgloss.Width(l))
+	}
+	hi := maxInt(w/3, minInt(n+2, w/2))
+	return clamp(n+2, 10, maxInt(hi, 10))
+}
+
+// kvRow renders "label  value" in a label column of col cells; the value is
+// cut to the width w. An empty value draws nothing.
+func kvRow(st *Styles, col, w int, label, value string) string {
+	if value == "" {
+		return ""
+	}
+	return st.Label.Render(pad(label, col)) + st.Text.Render(trunc(value, maxInt(w-col, 4)))
+}
+
+// kvRows is kvRow with the value wrapped under the value column instead of
+// cut, for values that must stay readable (a remote, a path).
+func kvRows(st *Styles, col, w int, label, value string) []string {
+	var out []string
+	for i, l := range wrapUnits(value, maxInt(w-col, 8)) {
+		head := spaces(col)
+		if i == 0 {
+			head = pad(label, col)
+		}
+		out = append(out, st.Label.Render(head)+st.Text.Render(l))
+	}
+	return out
+}
+
+// divider is the inner rule of a panel, in the line colour like the frame.
+func (s *Styles) divider(w int) string {
+	return lipgloss.NewStyle().Foreground(colLine).Render(strings.Repeat("─", maxInt(w, 4)))
+}
+
 // levelStyle and levelIcon pick the look of a status level.
 func (s *Styles) levelStyle(l level) lipgloss.Style {
 	switch l {
@@ -280,3 +331,24 @@ func levelIcon(l level) string {
 
 // tr is shorthand for i18n.T.
 func tr(key string, args ...any) string { return i18n.T(key, args...) }
+
+// trCount translates a message that has a singular and a plural form, keys
+// "<key>_one" and "<key>_many" (as the counts of repos do). n is the first
+// argument of the message.
+func trCount(key string, n int, args ...any) string {
+	if n == 1 {
+		return tr(key+"_one", append([]any{n}, args...)...)
+	}
+	return tr(key+"_many", append([]any{n}, args...)...)
+}
+
+// trTUI translates a message the CLI also uses. The TUI has its own wording
+// for the ones that tell the reader to run a command ("tui." + key): they
+// point at the screens instead. A message without a TUI variant is the shared
+// one.
+func trTUI(key string, args ...any) string {
+	if _, ok := i18n.Messages(i18n.Lang())["tui."+key]; ok {
+		return i18n.T("tui."+key, args...)
+	}
+	return i18n.T(key, args...)
+}

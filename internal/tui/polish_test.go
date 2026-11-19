@@ -12,6 +12,7 @@ package tui
 import (
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -350,11 +351,15 @@ func TestA9HintsAreVisibleAndHonest(t *testing.T) {
 	h.key("a")
 	h.resize(100, 50)
 	h.mustContainSpaceless(tr("tui.form.username_hint"), tr("tui.form.git_name_hint"), tr("tui.form.email_hint"))
-	if v := i18n.In("vi", "tui.form.email_hint"); !strings.Contains(v, "không xác minh") || !strings.Contains(v, "users.noreply.github.com") {
-		t.Errorf("vi email hint: %s", v)
-	}
-	if v := i18n.In("en", "tui.form.email_hint"); !strings.Contains(v, "does not verify") || !strings.Contains(v, "users.noreply.github.com") {
-		t.Errorf("en email hint: %s", v)
+	// the email hint is honest: it names the noreply address and tells the
+	// user that gitid does not verify the email
+	for lang, want := range map[string][]string{"vi": {"noreply", "không xác minh"}, "en": {"noreply", "does not verify"}} {
+		v := i18n.In(lang, "tui.form.email_hint")
+		for _, w := range want {
+			if !strings.Contains(v, w) {
+				t.Errorf("%s email hint lacks %q: %s", lang, w, v)
+			}
+		}
 	}
 	defer i18n.SetLang("vi")
 	i18n.SetLang("en")
@@ -633,11 +638,27 @@ func TestB11NoFalseDuplicateMark(t *testing.T) {
 func TestC1DoneListsTheNextSteps(t *testing.T) {
 	h := newHarness(t, oneAccCfg())
 	h.applyToDone()
-	h.mustContainPlain(tr("tui.confirm.next"), tr("tui.confirm.next_clone", "~/Code/personal/"), defKM.T("tui.confirm.next_check", "~"),
-		tr("tui.confirm.next_https"), tr("tui.confirm.no_verify"), tr("tui.confirm.back_hint"), tr("tui.confirm.effect"),
-		tr("tui.confirm.effect_line", "~/Code/personal/", "Tinh Nguyen", "tinhnd@example.com"))
+	// the next steps (clone, check) and the way back are the help bar's job,
+	// not lines of the screen; the body holds what the bar cannot say
+	h.mustContainPlain(tr("tui.confirm.next"),
+		tr("tui.confirm.next_https"), tr("tui.confirm.no_verify"), tr("tui.confirm.effect"),
+		tr("tui.confirm.effect_line", "~/Code/personal/")+" personal/tinhnd · Tinh Nguyen <tinhnd@example.com>")
+	hb := h.helpLine()
+	for _, want := range []string{"▸ c " + tr("tui.key.clone"), "k " + tr("tui.key.check"), "enter " + tr("tui.key.to_accounts")} {
+		if !strings.Contains(hb, want) {
+			t.Fatalf("help bar %q lacks %q", hb, want)
+		}
+	}
 	h.mustNotContain(defKM.T("tui.confirm.next_ssh"))
+	// the body does not say clone and check a second time
+	body := h.body()
+	if m := stepKeyRe.FindString(body); m != "" {
+		t.Errorf("the body repeats a key of the help bar as a step: %q\n%s", m, body)
+	}
 }
+
+// stepKeyRe finds a numbered step that carries a key ("1  c  Clone ...").
+var stepKeyRe = regexp.MustCompile(`\d\s+[a-zA-Z]\s{2}\S`)
 
 func TestC2SSHAccountGetsTheKeyStep(t *testing.T) {
 	h := newHarness(t, sshCfg())
@@ -646,10 +667,16 @@ func TestC2SSHAccountGetsTheKeyStep(t *testing.T) {
 	h.mustNotContain(tr("tui.confirm.next_https"))
 }
 
-func TestC3ManyCompaniesAreNotNamed(t *testing.T) {
+func TestC3DoneDoesNotRepeatTheHelpBar(t *testing.T) {
 	h := newHarness(t, basicCfg())
 	h.applyToDone()
-	h.mustContainPlain(tr("tui.confirm.next_clone_many"))
+	// several companies: the steps still do not name clone or check; the bar does
+	if v := plain(h.view()); strings.Contains(v, "Clone repo") || strings.Contains(v, "Kiểm tra repo trong") {
+		t.Errorf("the body says the next step again:\n%s", v)
+	}
+	if hb := h.helpLine(); !strings.HasPrefix(hb, "▸ c") {
+		t.Errorf("help bar %q", hb)
+	}
 }
 
 func TestC4DoneOpensClone(t *testing.T) {
@@ -681,7 +708,7 @@ func TestC6DoneHelpBar(t *testing.T) {
 	h := newHarness(t, oneAccCfg())
 	h.applyToDone()
 	hb := h.helpLine()
-	if !strings.HasPrefix(hb, "▸ c") || !strings.Contains(hb, "enter "+tr("tui.key.to_list")) || strings.Contains(hb, "enter "+tr("tui.key.select")) {
+	if !strings.HasPrefix(hb, "▸ c") || !strings.Contains(hb, "enter "+tr("tui.key.to_accounts")) || strings.Contains(hb, "enter "+tr("tui.key.select")) {
 		t.Fatalf("help bar %q", hb)
 	}
 	// the empty-plan screen also leads back to the list
@@ -689,7 +716,7 @@ func TestC6DoneHelpBar(t *testing.T) {
 	h2.apply()
 	h2.key("p")
 	h2.waitFor("empty", func() bool { c, ok := h2.top().(*confirmScreen); return ok && c.state == confEmpty })
-	if hb := h2.helpLine(); !strings.Contains(hb, "enter "+tr("tui.key.to_list")) {
+	if hb := h2.helpLine(); !strings.Contains(hb, "enter "+tr("tui.key.to_accounts")) {
 		t.Fatalf("empty help bar %q", hb)
 	}
 }
@@ -701,7 +728,7 @@ func TestC7DoneFitsEverySize(t *testing.T) {
 		h.resize(s[0], s[1])
 		assertFits(t, h.view(), s[0], s[1], "done")
 		if s[0] >= 60 {
-			h.mustContainPlain(tr("tui.confirm.next"), tr("tui.confirm.next_clone", "~/Code/personal/"), tr("tui.confirm.back_hint"), tr("tui.confirm.effect"))
+			h.mustContainPlain(tr("tui.confirm.next"), tr("tui.confirm.effect"))
 		}
 	}
 }
@@ -717,8 +744,8 @@ func TestC8DoneShrinksInOrder(t *testing.T) {
 		if note && !noVerify {
 			t.Errorf("%v: the override note must go before the no-verify line", s)
 		}
-		if !strings.Contains(v, plain(tr("tui.confirm.back_hint"))) || !strings.Contains(v, tr("tui.confirm.next")) {
-			t.Errorf("%v: the next steps and the back hint always stay:\n%s", s, h.view())
+		if !strings.Contains(v, tr("tui.confirm.next")) {
+			t.Errorf("%v: the next steps always stay:\n%s", s, h.view())
 		}
 	}
 }
@@ -730,10 +757,17 @@ func TestD1AccountDetailExplainsHowToUseIt(t *testing.T) {
 	h.selectKey("personal/tinhnd")
 	d := h.detail()
 	for _, want := range []string{tr("tui.f.username") + " tinhnd", tr("tui.f.remote"), tr("tui.f.dir") + " ~/Code/personal/",
-		plain(tr("tui.detail.auth_https")), plain(tr("tui.detail.acc_default", "~/Code/personal/")), plain(defKM.T("tui.detail.how_pending"))} {
+		plain(tr("tui.detail.auth_https")), plain(tr("tui.detail.acc_default", "~/Code/personal/"))} {
 		if !strings.Contains(d, want) {
 			t.Errorf("detail lacks %q:\n%s", want, d)
 		}
+	}
+	// pending: the badge and the help bar say what to press, the pane does not
+	if strings.Contains(d, "chưa áp dụng") {
+		t.Errorf("the detail repeats the pending sentence:\n%s", d)
+	}
+	if hb := h.helpLine(); !strings.HasPrefix(hb, "▸ p") {
+		t.Errorf("help bar %q", hb)
 	}
 	if !strings.Contains(noSpace(d), noSpace("https://tinhnd@github.com/<owner>/<repo>.git")) {
 		t.Errorf("detail lacks the remote:\n%s", d)
@@ -745,7 +779,7 @@ func TestD2AppliedDetailSaysWhatToDoNext(t *testing.T) {
 	h.selectKey("personal/tinhnd")
 	h.apply()
 	d := h.detail()
-	if !strings.Contains(d, plain(defKM.T("tui.detail.acc_next_applied", "~/Code/personal/"))) || strings.Contains(d, plain(defKM.T("tui.detail.how_pending"))) {
+	if !strings.Contains(d, plain(defKM.T("tui.detail.acc_next_applied", "~/Code/personal/"))) || strings.Contains(d, "chưa áp dụng") {
 		t.Fatalf("detail: %s", d)
 	}
 }
@@ -763,7 +797,10 @@ func TestD3StackedPaneShowsTheFullAccount(t *testing.T) {
 		t.Fatalf("the detail pane has %d rows, want at least 12", dh)
 	}
 	h.mustContainPlain(tr("tui.f.username")+" tinhnd", tr("tui.f.remote"), "https://tinhnd@github.com/<owner>/<repo>.git",
-		tr("tui.f.dir")+" ~/Code/personal/", defKM.T("tui.detail.how_pending"))
+		tr("tui.f.dir")+" ~/Code/personal/")
+	if hb := h.helpLine(); !strings.HasPrefix(hb, "▸ p") {
+		t.Fatalf("help bar %q", hb)
+	}
 	assertFits(t, h.view(), 80, 24, "stacked")
 	// a second account, as in the report
 	cfg := dupCfg()
@@ -771,7 +808,7 @@ func TestD3StackedPaneShowsTheFullAccount(t *testing.T) {
 	h2 := newHarness(t, cfg)
 	h2.resize(80, 24)
 	h2.selectKey("personal/tinhnd")
-	h2.mustContainPlain(tr("tui.f.remote"), tr("tui.f.dir"), defKM.T("tui.detail.how_pending"))
+	h2.mustContainPlain(tr("tui.f.remote"), tr("tui.f.dir"))
 }
 
 func TestD4ManyRowsKeepTheOldSplit(t *testing.T) {
@@ -840,11 +877,18 @@ func TestD8SmallPanesKeepTheRemoteAndTheNextStep(t *testing.T) {
 	h := newHarness(t, oneAccCfg())
 	h.selectKey("personal/tinhnd")
 	r, _ := h.listScreen().selected()
-	next := plain(defKM.T("tui.detail.how_pending"))[:20]
+	// While changes are pending the next step is the help bar's primary item
+	// ("▸ p ..."); the pane does not repeat it. It must be on screen at every
+	// pane height: either in the pane or in the help bar of a frame whose
+	// pane has that height.
+	nextInBar := func(hb string) bool { return strings.HasPrefix(hb, "▸ p") }
+	if hb := h.helpLine(); !nextInBar(hb) {
+		t.Fatalf("help bar %q", hb)
+	}
 	for n := 2; n <= 6; n++ {
 		d := plain(detailText(h.m.sh, r, 56, n, h.listScreen().keyInfo, false))
-		if !strings.Contains(d, next) {
-			t.Errorf("height %d lost the next step: %q", n, d)
+		if strings.TrimSpace(d) == "" {
+			t.Errorf("height %d: nothing is shown", n)
 		}
 		if n >= 3 && !strings.Contains(noSpace(d), "<owner>/<repo>") {
 			t.Errorf("height %d lost the remote: %q", n, d)
@@ -852,6 +896,20 @@ func TestD8SmallPanesKeepTheRemoteAndTheNextStep(t *testing.T) {
 		if got := len(strings.Split(detailText(h.m.sh, r, 56, n, h.listScreen().keyInfo, false), "\n")); got > n {
 			t.Errorf("height %d: %d lines", n, got)
 		}
+		if !nextInBar(h.helpLine()) && !strings.Contains(d, tr("tui.key.apply")) {
+			t.Errorf("height %d lost the next step: pane %q, help bar %q", n, d, h.helpLine())
+		}
+	}
+	// and in the real frame, whatever the height of the terminal
+	for th := 10; th <= 30; th++ {
+		h.resize(56, th)
+		if hb := h.helpLine(); !nextInBar(hb) {
+			t.Errorf("terminal height %d: the help bar lost the next step: %q", th, hb)
+		}
+		if v := plain(h.view()); !strings.Contains(v, "▸ p") {
+			t.Errorf("terminal height %d: the frame does not show the next step:\n%s", th, v)
+		}
+		assertFits(t, h.view(), 56, th, "d8")
 	}
 }
 
@@ -1346,14 +1404,14 @@ func TestKEnglishPolish(t *testing.T) {
 	h.key("esc")
 	h.key("y") // discard what was typed
 	h.applyToDone()
-	h.mustContainPlain("Next steps:", "Personal Access Token", "gitid never signs in")
+	h.mustContainPlain("Good to know", "Personal Access Token", "gitid never signs in")
 	for _, key := range []string{"tui.confirm.next", "tui.confirm.next_https", "tui.form.preview_remote", "tui.detail.acc_next_applied"} {
 		if i18n.In("en", key) == i18n.In("vi", key) {
 			t.Errorf("%s is not translated", key)
 		}
 	}
 	v := h.view()
-	for _, vi := range []string{"Bước tiếp theo", "Từ giờ", "Sao lưu", "Clone repo vào"} {
+	for _, vi := range []string{"Lưu ý", "Từ giờ", "Sao lưu", "Clone repo vào"} {
 		if strings.Contains(v, vi) {
 			t.Errorf("Vietnamese text %q in the English view", vi)
 		}

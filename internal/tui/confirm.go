@@ -11,7 +11,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/tinhnd1902/gitid/internal/config"
-	"github.com/tinhnd1902/gitid/internal/keymap"
 	"github.com/tinhnd1902/gitid/internal/plan"
 )
 
@@ -67,9 +66,9 @@ func (c *confirmScreen) Help() []key.Binding {
 	case confReady:
 		return []key.Binding{relabel(km.Yes, tr("tui.confirm.apply")), withDesc(km.No, km.No.Help().Key+"/esc", tr("tui.key.cancel")), withDesc(km.Up, "↑/↓", tr("tui.key.scroll"))}
 	case confDone:
-		return []key.Binding{km.Clone, km.Check, withDesc(km.Enter, "enter", tr("tui.key.to_list")), km.Back}
+		return []key.Binding{km.Clone, km.Check, withDesc(km.Enter, "enter", tr("tui.key.to_accounts")), km.Back}
 	case confEmpty:
-		return []key.Binding{withDesc(km.Enter, "enter", tr("tui.key.to_list")), km.Back}
+		return []key.Binding{withDesc(km.Enter, "enter", tr("tui.key.to_accounts")), km.Back}
 	case confFailed:
 		return []key.Binding{km.Retry, km.Back}
 	}
@@ -155,11 +154,11 @@ func (c *confirmScreen) summaryLines() []string {
 func (c *confirmScreen) headerLines() []string {
 	st := c.sh.st
 	lines := c.summaryLines()
-	lines = append(lines, st.Bold.Render(tr("tui.confirm.files", len(c.plan.Changes))))
+	lines = append(lines, st.Bold.Render(trCount("tui.confirm.files", len(c.plan.Changes))))
 	maxFiles := clamp((c.h-len(lines))/4, 2, 8)
 	for i, ch := range c.plan.Changes {
 		if i == maxFiles {
-			lines = append(lines, st.Faint.Render(fmt.Sprintf("  … +%d", len(c.plan.Changes)-maxFiles)))
+			lines = append(lines, st.Muted.Render(fmt.Sprintf("  … +%d", len(c.plan.Changes)-maxFiles)))
 			break
 		}
 		lines = append(lines, "  "+opBadge(st, string(ch.Op))+" "+st.Text.Render(ch.Display))
@@ -177,7 +176,7 @@ func opBadge(st *Styles, op string) string {
 	case "delete":
 		return st.Err.Render("- " + pad(tr("tui.op.delete"), 6))
 	}
-	return st.Info.Render("~ " + pad(tr("tui.op.update"), 6))
+	return st.Text.Render("~ " + pad(tr("tui.op.update"), 6))
 }
 
 func (c *confirmScreen) layout() {
@@ -187,7 +186,7 @@ func (c *confirmScreen) layout() {
 		head = len(c.headerLines()) + 1
 	}
 	c.vp.Width = inner
-	c.vp.Height = maxInt(c.h-2-1-1-head, 1) // borders, title, footer line
+	c.vp.Height = maxInt(c.h-2-1-head, 1) // borders, footer line, then the header and its divider
 }
 
 func (c *confirmScreen) colorDiff() string {
@@ -247,10 +246,9 @@ func (c *confirmScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 			c.state = confFailed
 			return c, say(levelErr, errText(msg.err))
 		}
+		// the screen itself says "Đã áp dụng": no second message
 		c.state = confDone
-		return c, tea.Batch(refreshPlan(), func() tea.Msg {
-			return statusMsg{level: levelOK, text: c.sh.km.T("tui.status.applied"), ttl: hintTTL}
-		})
+		return c, refreshPlan()
 	case tea.KeyMsg:
 		switch c.state {
 		case confReady:
@@ -305,44 +303,48 @@ func (c *confirmScreen) View() string {
 		body = c.spin.View() + " " + st.Muted.Render(tr("tui.confirm.building"))
 	case confEmpty:
 		if empty := emptyCompanies(c.sh.cfg); len(empty) > 0 {
-			body = st.Warn.Render(wrap("! "+c.sh.km.T("tui.confirm.empty_no_accounts", empty[0]), maxInt(c.w-6, 10)))
+			body = st.Warn.Render(wrap("! "+c.sh.km.T("tui.confirm.empty_no_accounts", empty[0]), minInt(maxInt(c.w-6, 10), measure)))
 		} else {
 			body = st.OK.Render("✓ " + tr("tui.confirm.empty"))
 		}
-		body += "\n\n" + st.Faint.Render(tr("tui.confirm.back_hint"))
 	case confReady:
+		foot := c.sh.km.T("tui.confirm.question")
+		// the percentage matters only while there is more to scroll to
+		if c.vp.TotalLineCount() > c.vp.Height {
+			foot = fmt.Sprintf("%3.0f%%", c.vp.ScrollPercent()*100) + "  " + foot
+		}
 		body = strings.Join(c.headerLines(), "\n") + "\n" +
-			st.Faint.Render(strings.Repeat("─", maxInt(c.w-4, 4))) + "\n" + c.vp.View() + "\n" +
-			st.Faint.Render(fmt.Sprintf("%3.0f%%", c.vp.ScrollPercent()*100)+"  "+c.sh.km.T("tui.confirm.question"))
+			st.divider(c.w-4) + "\n" + c.vp.View() + "\n" + st.Text.Render(foot)
 	case confApplying:
 		body = c.spin.View() + " " + st.Muted.Render(tr("tui.confirm.applying"))
 	case confDone:
 		body = c.doneView()
 	case confFailed:
-		body = st.Err.Render("✗ "+wrap(errText(c.err), maxInt(c.w-6, 10))) + "\n\n" + st.Faint.Render(c.sh.km.T("tui.confirm.retry_hint"))
+		body = st.Err.Render("✗ "+wrap(errText(c.err), minInt(maxInt(c.w-6, 10), measure))) + "\n\n" + st.Text.Render(c.sh.km.T("tui.confirm.retry_hint"))
 	}
-	return c.sh.panel(c.title, body, c.w, c.h, true)
+	// the breadcrumb already says what this screen is: no title row
+	return c.sh.panel("", body, c.w, c.h, true)
 }
 
-// doneView tells what changed for the user ("from now on"), what to do next
-// (clone, check, the first sign-in over HTTPS) and only then lists the files
-// and the backup. When the screen is short, parts go in a fixed order: the
-// file list, the override note, the "gitid verifies nothing" line, the blank
-// lines, the backup line, then the long sign-in explanations are cut to one
-// line. The title, "from now on", the clone and check steps and the back hint
-// stay as long as there is room for anything.
+// doneView tells what changed for the user ("from now on"), what the help bar
+// cannot say (the first sign-in over HTTPS or SSH) and only then lists the
+// files and the backup. The next step (clone, check) is the help bar's: the
+// body does not repeat it. When the screen is short, parts go in a fixed
+// order: the file list, the override note, the "gitid verifies nothing" line,
+// the blank lines, the backup line, then the long sign-in explanations are cut
+// to one line. The title and "from now on" stay as long as there is room for
+// anything.
 func (c *confirmScreen) doneView() string {
 	st := c.sh.st
 	env := c.sh.svc.Env
 	inner := maxInt(c.w-4, 10)
-	rows := maxInt(c.h-3, 1) // panel borders and title
+	rows := maxInt(c.h-2, 1) // panel borders
 
 	var effect []string
-	var base string
 	for _, co := range c.sh.cfg.Companies {
 		if def, ok := co.Default(); ok {
-			effect = append(effect, tr("tui.confirm.effect_line", co.BaseDir, def.Name, def.Email))
-			base = co.BaseDir
+			ref := config.AccountRef{Company: co, Account: def}
+			effect = append(effect, st.Text.Render(tr("tui.confirm.effect_line", co.BaseDir))+" "+st.identityStamp(ref))
 		}
 	}
 	const maxEffect = 6
@@ -350,14 +352,6 @@ func (c *confirmScreen) doneView() string {
 	if len(effect) > maxEffect {
 		extra = len(effect) - maxEffect
 		effect = effect[:maxEffect]
-	}
-	cloneText := tr("tui.confirm.next_clone_many")
-	if len(effect) == 1 && extra == 0 {
-		cloneText = tr("tui.confirm.next_clone", base)
-	}
-	cwd := "."
-	if c.sh.cwd != "" {
-		cwd = env.Contract(c.sh.cwd)
 	}
 	var https, ssh bool
 	for _, ref := range c.sh.cfg.All() {
@@ -368,21 +362,16 @@ func (c *confirmScreen) doneView() string {
 		}
 	}
 
-	// step renders "  n  k  text" with the text wrapped under itself (or cut
-	// to one line when oneLine is set). key is empty for explanatory steps.
-	step := func(n int, k, text string, oneLine bool) []string {
-		prefix := st.Faint.Render(fmt.Sprintf("  %d  ", n))
-		if k == "" {
-			prefix += spaces(3)
-		} else {
-			prefix += st.Accent.Bold(true).Render(k) + "  "
-		}
-		const indent = 8
+	// step renders "  n  text" with the text wrapped under itself (or cut to
+	// one line when oneLine is set).
+	step := func(n int, text string, oneLine bool) []string {
+		prefix := st.Muted.Render(fmt.Sprintf("  %d  ", n))
+		const indent = 5
 		if oneLine {
 			return []string{prefix + st.Text.Render(trunc(text, maxInt(inner-indent, 4)))}
 		}
 		var out []string
-		for j, l := range wrapLines(text, maxInt(inner-indent, 8)) {
+		for j, l := range wrapLines(text, minInt(maxInt(inner-indent, 8), measure)) {
 			if j == 0 {
 				out = append(out, prefix+st.Text.Render(l))
 			} else {
@@ -399,47 +388,48 @@ func (c *confirmScreen) doneView() string {
 				*l = append(*l, "")
 			}
 		}
-		head = append(head, st.OK.Bold(true).Render("✓ "+tr("tui.confirm.done")))
+		head = append(head, st.OK.Render("✓ "+tr("tui.confirm.done")))
 		gap(&head)
 		if len(effect) > 0 {
 			head = append(head, st.Bold.Render(tr("tui.confirm.effect")))
 			for _, e := range effect {
-				head = append(head, st.Text.Render(trunc("  "+e, inner)))
+				head = append(head, "  "+trunc(e, inner-2))
 			}
 			if extra > 0 {
-				head = append(head, st.Faint.Render(fmt.Sprintf("  … +%d", extra)))
+				head = append(head, st.Muted.Render(fmt.Sprintf("  … +%d", extra)))
 			}
 			gap(&head)
 		}
-		head = append(head, st.Bold.Render(tr("tui.confirm.next")))
+		if https || ssh {
+			head = append(head, st.Bold.Render(tr("tui.confirm.next")))
+		}
 		n := 1
-		add := func(k, text string) {
-			head = append(head, step(n, k, text, o.oneLine)...)
+		add := func(text string) {
+			head = append(head, step(n, text, o.oneLine)...)
 			n++
 		}
-		add(c.sh.km.keys.Label(keymap.Clone), cloneText)
-		add(c.sh.km.keys.Label(keymap.Check), c.sh.km.T("tui.confirm.next_check", cwd))
+		// clone and check are the help bar's next steps: the body only holds
+		// what the bar cannot say
 		if https {
-			add("", tr("tui.confirm.next_https"))
+			add(tr("tui.confirm.next_https"))
 		}
 		if ssh {
-			add("", c.sh.km.T("tui.confirm.next_ssh"))
+			add(c.sh.km.T("tui.confirm.next_ssh"))
 		}
 		if o.noVerify {
-			head = append(head, styledWrap(st.Faint, tr("tui.confirm.no_verify"), inner)...)
+			head = append(head, styledWrap(st.Muted, tr("tui.confirm.no_verify"), proseW(inner))...)
 		}
 		if o.note {
-			head = append(head, styledWrap(st.Faint, tr("tui.confirm.override_note"), inner)...)
+			head = append(head, styledWrap(st.Muted, tr("tui.confirm.override_note"), proseW(inner))...)
 		}
 		gap(&head)
 		if o.backup && c.res.BackupDir != "" {
-			tail = append(tail, st.Label.Render(tr("tui.confirm.backup"))+" "+st.Text.Render(env.Contract(c.res.BackupDir)))
+			col := kvCol(inner, tr("tui.confirm.backup"))
+			tail = append(tail, kvRow(st, col, inner, tr("tui.confirm.backup"), env.Contract(c.res.BackupDir)))
 		}
 		for _, w := range c.res.Warnings {
 			tail = append(tail, st.Warn.Render(trunc("! "+w, inner)))
 		}
-		gap(&tail)
-		tail = append(tail, st.Faint.Render(tr("tui.confirm.back_hint")))
 		return head, tail
 	}
 	// richest first; the first that fits wins, the last one is used otherwise
@@ -469,7 +459,7 @@ func (c *confirmScreen) doneView() string {
 	if avail := rows - len(head) - len(tail); avail <= 0 {
 		files = nil
 	} else if len(files) > avail {
-		more := st.Faint.Render(fmt.Sprintf("  … +%d", len(files)-avail+1))
+		more := st.Muted.Render(fmt.Sprintf("  … +%d", len(files)-avail+1))
 		files = append(files[:avail-1:avail-1], more)
 	}
 	lines := append(append(head, files...), tail...)

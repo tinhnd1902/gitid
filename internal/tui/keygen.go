@@ -73,6 +73,15 @@ func (k *keygenScreen) Help() []key.Binding {
 	return nil
 }
 
+// ContextHelp makes the way back the next step once the key could not be made.
+func (k *keygenScreen) ContextHelp() []helpItem {
+	var out []helpItem
+	for _, b := range k.Help() {
+		out = append(out, helpItem{b: b, primary: k.phase == kgError})
+	}
+	return out
+}
+
 func (k *keygenScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	km := k.sh.km
 	switch msg := msg.(type) {
@@ -169,7 +178,7 @@ func (k *keygenScreen) finish() tea.Cmd {
 
 func (k *keygenScreen) View() string {
 	st := k.sh.st
-	inner := maxInt(k.w-6, 10)
+	inner := proseW(maxInt(k.w-6, 10))
 	var b strings.Builder
 	b.WriteString(st.Bold.Render(k.ref.String()) + "  " + st.Muted.Render(k.sh.svc.Env.Contract(keyPath(k.sh, k.ref))) + "\n\n")
 	switch k.phase {
@@ -186,7 +195,7 @@ func (k *keygenScreen) View() string {
 	case kgError:
 		b.WriteString(st.Err.Render("✗ " + wrap(k.errMsg, inner)))
 	}
-	return k.sh.panel(tr("tui.keygen.title"), b.String(), k.w, k.h, true)
+	return k.sh.panel("", b.String(), k.w, k.h, true)
 }
 
 // keyPath is the private key path used for an account (display only).
@@ -305,13 +314,13 @@ func (k *keyResultScreen) View() string {
 		b.WriteString(k.spin.View() + " " + st.Muted.Render(tr("tui.keyresult.loading")))
 	default:
 		b.WriteString(st.Label.Render(tr("tui.keyresult.pub")) + "\n")
-		b.WriteString(st.Accent.Render(ansi.Hardwrap(k.pub.Content, inner, true)) + "\n\n")
+		b.WriteString(st.Text.Render(ansi.Hardwrap(k.pub.Content, inner, true)) + "\n\n")
 		if url := keys.KeyURL(k.ref.Account); url != "" {
-			b.WriteString(st.Label.Render(tr("tui.keyresult.add_at")) + "\n" + st.Info.Render(trunc(url, inner)) + "\n\n")
+			b.WriteString(st.Label.Render(tr("tui.keyresult.add_at")) + "\n" + st.Text.Render(trunc(url, inner)) + "\n\n")
 		}
 		if k.sh.pending > 0 {
 			b.WriteString(st.Warn.Render("! " + wrap(k.sh.km.T("tui.keyresult.apply_hint"), inner)))
 		}
 	}
-	return k.sh.panel(tr("tui.keyresult.title"), b.String(), k.w, k.h, true)
+	return k.sh.panel("", b.String(), k.w, k.h, true)
 }

@@ -402,7 +402,7 @@ func TestFSel5CursorFollowsTheBoundValue(t *testing.T) {
 	if f.fields[0].cur != 1 {
 		t.Fatalf("cur %d", f.fields[0].cur)
 	}
-	if !strings.Contains(ansi.Strip(f.View()), "● GitLab") || !strings.Contains(ansi.Strip(f.View()), "○ GitHub") {
+	if !strings.Contains(ansi.Strip(f.View()), "◉ GitLab") || !strings.Contains(ansi.Strip(f.View()), "○ GitHub") {
 		t.Fatalf("marks:\n%s", f.View())
 	}
 }
@@ -441,7 +441,7 @@ func TestFSel8InlineOptionsWrapAtNarrowWidths(t *testing.T) {
 	}
 	n := 0
 	for _, l := range strings.Split(out, "\n") {
-		if strings.Contains(l, "○") || strings.Contains(l, "●") {
+		if strings.Contains(l, "○") || strings.Contains(l, "◉") {
 			n++
 		}
 	}
@@ -507,11 +507,11 @@ func TestFConf4TogglesKeepTheFocus(t *testing.T) {
 func TestFConf5RadioMarksFollowTheFlag(t *testing.T) {
 	var on bool
 	f := testForm(confirmField("Q", "", &on))
-	if out := ansi.Strip(f.View()); !strings.Contains(out, "○ Có") || !strings.Contains(out, "● Không") {
+	if out := ansi.Strip(f.View()); !strings.Contains(out, "○ Có") || !strings.Contains(out, "◉ Không") {
 		t.Fatalf("off:\n%s", out)
 	}
 	on = true
-	if out := ansi.Strip(f.View()); !strings.Contains(out, "● Có") || !strings.Contains(out, "○ Không") {
+	if out := ansi.Strip(f.View()); !strings.Contains(out, "◉ Có") || !strings.Contains(out, "○ Không") {
 		t.Fatalf("on:\n%s", out)
 	}
 }
@@ -683,7 +683,7 @@ func TestFScr6OneRowShowsTheChosenOption(t *testing.T) {
 	f := testForm(selectField("A", "hint", &v, false, formOption{"HTTPS", "https"}, formOption{"SSH", "ssh"}, formOption{"Other", "o"}))
 	f.SetSize(30, 1)
 	lines := viewLines(f)
-	if len(lines) != 1 || !strings.Contains(lines[0], "● SSH") {
+	if len(lines) != 1 || !strings.Contains(lines[0], "◉ SSH") {
 		t.Fatalf("%q", lines)
 	}
 }
@@ -881,7 +881,7 @@ func TestFSty3LightAndDarkDifferOnlyInColor(t *testing.T) {
 
 func TestFSty4FormStylesUseThePalette(t *testing.T) {
 	st := NewStyles()
-	palette := []lipgloss.TerminalColor{colAccent, colTeal, colText, colMuted, colFaint, colErr}
+	palette := []lipgloss.TerminalColor{colAccent, colText, colMuted, colFaint, colErr}
 	styles := map[string]lipgloss.Style{
 		"FormTitle": st.FormTitle, "FormTitleBlur": st.FormTitleBlur, "FormHint": st.FormHint, "FormGutter": st.FormGutter,
 		"FormPrompt": st.FormPrompt, "FormCursor": st.FormCursor, "FormValue": st.FormValue, "FormValueBlur": st.FormValueBlur,

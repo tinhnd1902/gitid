@@ -118,7 +118,7 @@ func (h *harness) detail() string {
 	if dw == 0 {
 		dw, dh = l.w, l.h
 	}
-	return plain(l.detailBody(dw-4, dh-3))
+	return plain(l.detailBody(dw-4, dh-2))
 }
 
 func (h *harness) apply() {
@@ -149,7 +149,7 @@ func TestA1WelcomeGuide(t *testing.T) {
 	h.mustContain(tr("tui.empty.title"), tr("tui.empty.steps"), tr("tui.empty.step1"), tr("tui.empty.step2"),
 		tr("tui.empty.step3"), tr("tui.empty.after"), defKM.T("tui.empty.import"))
 	h.mustNotContain(tr("tui.detail.title"))
-	if b := h.badge(); !strings.Contains(b, defKM.T("tui.status.no_company")) || strings.Contains(b, "✓") {
+	if b := h.badge(); !strings.Contains(b, tr("tui.status.no_company")) || strings.Contains(b, "✓") {
 		t.Fatalf("badge %q", b)
 	}
 	// the three steps name their keys
@@ -208,7 +208,7 @@ func TestB1RowCountLabel(t *testing.T) {
 func TestB2NoAccountDetail(t *testing.T) {
 	h := newHarness(t, emptyCompanyCfg("personal"))
 	d := h.detail()
-	for _, want := range []string{defKM.T("tui.list.no_accounts_hint", "personal"), tr("tui.list.no_accounts_why", "personal"), tr("tui.detail.how")} {
+	for _, want := range []string{tr("tui.list.no_accounts_why", "personal"), tr("tui.detail.how")} {
 		if !strings.Contains(d, plain(want)) {
 			t.Errorf("detail lacks %q:\n%s", want, d)
 		}
@@ -220,13 +220,13 @@ func TestB3NoAccountBadge(t *testing.T) {
 	h := newHarness(t, emptyCompanyCfg("personal"))
 	h.waitFor("planned", func() bool { return h.m.sh.planned })
 	b := h.badge()
-	if !strings.Contains(b, defKM.T("tui.status.empty_company", "personal")) || strings.Contains(b, "✓") || strings.Contains(b, tr("tui.status.synced")) {
+	if !strings.Contains(b, tr("tui.status.empty_company", "personal")) || strings.Contains(b, "✓") || strings.Contains(b, tr("tui.status.synced")) {
 		t.Fatalf("badge %q", b)
 	}
 	if !strings.HasPrefix(b, "!") {
 		t.Fatalf("the warning needs its own marker: %q", b)
 	}
-	if !strings.Contains(h.statusLine(), defKM.T("tui.status.empty_company", "personal")) {
+	if !strings.Contains(h.statusLine(), tr("tui.status.empty_company", "personal")) {
 		t.Fatalf("status line %q", h.statusLine())
 	}
 }
@@ -253,7 +253,7 @@ func TestB6AppliedIsSynced(t *testing.T) {
 	if !strings.Contains(b, tr("tui.status.synced")) || !strings.HasPrefix(b, "✓") {
 		t.Fatalf("badge %q", b)
 	}
-	if strings.Contains(b, defKM.T("tui.status.empty_company", "acme")) {
+	if strings.Contains(b, tr("tui.status.empty_company", "acme")) {
 		t.Fatal("no company is empty")
 	}
 }
@@ -264,10 +264,10 @@ func TestB7ListOnlyShowsHintUnderTheRow(t *testing.T) {
 	if h.listScreen().layout() != layoutList {
 		t.Fatal("expected list-only layout")
 	}
-	h.mustContain(defKM.T("tui.list.no_accounts_hint", "personal"))
+	h.mustContain(tr("tui.list.no_accounts_why", "personal"))
 	// a short terminal has no room for it: the badge and the help bar remain
 	h.resize(59, 10)
-	h.mustNotContain(defKM.T("tui.list.no_accounts_hint", "personal"))
+	h.mustNotContain(tr("tui.list.no_accounts_why", "personal"))
 	if !strings.Contains(h.statusLine(), "personal") || !strings.HasPrefix(h.helpLine(), "▸ a") {
 		t.Fatalf("status %q help %q", h.statusLine(), h.helpLine())
 	}
@@ -359,7 +359,7 @@ func TestD1FirstCompanyFlow(t *testing.T) {
 		t.Fatalf("status %q", h.m.status.text)
 	}
 	b := h.badge()
-	if !strings.Contains(b, defKM.T("tui.status.empty_company", "personal")) || strings.Contains(b, "✓") {
+	if !strings.Contains(b, tr("tui.status.empty_company", "personal")) || strings.Contains(b, "✓") {
 		t.Fatalf("badge %q", b)
 	}
 	for _, s := range h.m.stack {
@@ -371,7 +371,7 @@ func TestD1FirstCompanyFlow(t *testing.T) {
 	if !strings.HasPrefix(h.helpLine(), "▸ a") {
 		t.Fatalf("help bar %q", h.helpLine())
 	}
-	if !strings.Contains(h.detail(), plain(defKM.T("tui.list.no_accounts_hint", "personal"))) {
+	if !strings.Contains(h.detail(), plain(tr("tui.list.no_accounts_why", "personal"))) {
 		t.Fatalf("detail %q", h.detail())
 	}
 }
@@ -497,24 +497,24 @@ func TestE1E2PendingBadge(t *testing.T) {
 	if n == 0 {
 		t.Fatal("fixture must have pending changes")
 	}
-	if b := h.badge(); b != "● "+defKM.T("tui.status.pending", n) {
+	if b := h.badge(); b != "● "+trCount("tui.status.pending", n) {
 		t.Fatalf("badge %q", b)
 	}
 	h.resize(69, 30)
-	if b := h.badge(); b != "● "+defKM.T("tui.status.pending_short", n) {
+	if b := h.badge(); b != "● "+tr("tui.status.pending_short", n) {
 		t.Fatalf("badge %q", b)
 	}
-	h.mustContain(defKM.T("tui.status.pending_short", n))
+	h.mustContain(tr("tui.status.pending_short", n))
 }
 
 func TestE4PlanFailed(t *testing.T) {
 	h := newHarness(t, basicCfg())
 	h.send(planBuiltMsg{seq: h.m.planSeq, err: errors.New("x")})
 	b := h.badge()
-	if !strings.Contains(b, defKM.T("tui.status.plan_failed")) || strings.Contains(b, "✓") {
+	if !strings.Contains(b, tr("tui.status.plan_failed")) || strings.Contains(b, "✓") {
 		t.Fatalf("badge %q", b)
 	}
-	h.mustContain(defKM.T("tui.status.plan_failed"))
+	h.mustContain(tr("tui.status.plan_failed"))
 	// the next good plan clears it
 	h.send(refreshPlanMsg{})
 	h.waitFor("recovered", func() bool { return !h.m.sh.planErr })
@@ -524,11 +524,11 @@ func TestE5PendingWinsOverEmptyCompany(t *testing.T) {
 	cfg := basicCfg()
 	cfg.Companies = append(cfg.Companies, config.Company{Slug: "zeta", Name: "Zeta", BaseDir: "~/Code/zeta/"})
 	h := newHarness(t, cfg)
-	if b := h.badge(); !strings.Contains(b, defKM.T("tui.status.pending", h.m.sh.pending)) {
+	if b := h.badge(); !strings.Contains(b, trCount("tui.status.pending", h.m.sh.pending)) {
 		t.Fatalf("badge %q", b)
 	}
 	h.apply()
-	if b := h.badge(); !strings.Contains(b, defKM.T("tui.status.empty_company", "zeta")) {
+	if b := h.badge(); !strings.Contains(b, tr("tui.status.empty_company", "zeta")) {
 		t.Fatalf("after apply: %q", b)
 	}
 }
@@ -586,7 +586,8 @@ func TestF2F3HelpBarWhenApplied(t *testing.T) {
 		t.Fatalf("ssh account without key: %q", hb)
 	}
 	h.selectKey("acme/bob")
-	if hb := h.helpLine(); strings.Contains(hb, "▸") || strings.Contains(hb, "g "+tr("tui.key.genkey")) {
+	// everything is applied: cloning a repo is the next step
+	if hb := h.helpLine(); !strings.HasPrefix(hb, "▸ c "+tr("tui.key.clone")) || strings.Contains(hb, "g "+tr("tui.key.genkey")) {
 		t.Fatalf("https account: %q", hb)
 	}
 }
@@ -687,7 +688,7 @@ func TestF7ConfirmHelpBar(t *testing.T) {
 	h.waitFor("done", func() bool { c, ok := h.top().(*confirmScreen); return ok && c.state == confDone })
 	// the next step is to clone; check and the way back follow
 	if hb := h.helpLine(); !strings.HasPrefix(hb, "▸ c "+tr("tui.key.clone")) ||
-		!strings.Contains(hb, "k "+tr("tui.key.check")) || !strings.Contains(hb, "enter "+tr("tui.key.to_list")) ||
+		!strings.Contains(hb, "k "+tr("tui.key.check")) || !strings.Contains(hb, "enter "+tr("tui.key.to_accounts")) ||
 		strings.Contains(hb, "enter "+tr("tui.key.select")) {
 		t.Fatalf("done: %q", hb)
 	}
@@ -710,16 +711,18 @@ func TestG1DetailExplainsTheCompany(t *testing.T) {
 		tr("tui.detail.how"),
 		tr("tui.detail.how_default", "~/Code/acme/", "Alice Nguyen", "alice@acme.com"),
 		tr("tui.detail.how_others"),
-		defKM.T("tui.detail.how_pending"),
 	} {
 		if !strings.Contains(d, plain(want)) {
 			t.Errorf("detail lacks %q:\n%s", want, d)
 		}
 	}
-	h.mustContain(tr("tui.detail.title"))
+	// the pane starts with the company itself, not with a "Details" title
+	h.mustContain("acme · ACME Corp")
 }
 
 func TestG2G3G4Breakpoints(t *testing.T) {
+	// the detail pane has no title row: it starts with the selected company
+	const detailHead = "acme · ACME Corp"
 	titleRow := func(h *harness, s string) int {
 		for i, l := range h.lines() {
 			if strings.Contains(l, s) {
@@ -731,7 +734,7 @@ func TestG2G3G4Breakpoints(t *testing.T) {
 	for _, s := range [][2]int{{96, 30}, {84, 24}, {84, 40}} {
 		h := newHarness(t, basicCfg())
 		h.resize(s[0], s[1])
-		lt, dt := titleRow(h, tr("tui.list.panel", 3, 5)), titleRow(h, tr("tui.detail.title"))
+		lt, dt := titleRow(h, tr("tui.list.panel", 3, 5)), titleRow(h, detailHead)
 		if lt < 0 || lt != dt {
 			t.Errorf("%v: list title on line %d, detail title on line %d", s, lt, dt)
 		}
@@ -740,7 +743,7 @@ func TestG2G3G4Breakpoints(t *testing.T) {
 	for _, s := range [][2]int{{83, 24}, {60, 24}, {70, 40}} {
 		h := newHarness(t, basicCfg())
 		h.resize(s[0], s[1])
-		lt, dt := titleRow(h, tr("tui.list.panel", 3, 5)), titleRow(h, tr("tui.detail.title"))
+		lt, dt := titleRow(h, tr("tui.list.panel", 3, 5)), titleRow(h, detailHead)
 		if lt < 0 || dt <= lt+3 {
 			t.Errorf("%v: list title on line %d, detail title on line %d (want stacked)", s, lt, dt)
 		}
@@ -753,7 +756,7 @@ func TestG2G3G4Breakpoints(t *testing.T) {
 	for _, s := range [][2]int{{83, 23}, {59, 30}, {40, 10}} {
 		h := newHarness(t, basicCfg())
 		h.resize(s[0], s[1])
-		if strings.Contains(h.view(), tr("tui.detail.title")) {
+		if strings.Contains(h.view(), detailHead) {
 			t.Errorf("%v: list only expected:\n%s", s, h.view())
 		}
 		assertFits(t, h.view(), s[0], s[1], "list only")
@@ -780,11 +783,12 @@ func TestG5AccountDetail(t *testing.T) {
 
 func TestG6DetailFollowsApplyState(t *testing.T) {
 	h := newHarness(t, basicCfg())
-	if d := h.detail(); !strings.Contains(d, plain(defKM.T("tui.detail.how_pending"))) || strings.Contains(d, plain(defKM.T("tui.detail.how_applied"))) {
+	// pending: the badge and the help bar carry the next step, not the pane
+	if d := h.detail(); strings.Contains(d, "chưa áp dụng") || strings.Contains(d, plain(defKM.T("tui.detail.how_applied"))) {
 		t.Fatalf("pending: %s", d)
 	}
 	h.apply()
-	if d := h.detail(); !strings.Contains(d, plain(defKM.T("tui.detail.how_applied"))) || strings.Contains(d, plain(defKM.T("tui.detail.how_pending"))) {
+	if d := h.detail(); !strings.Contains(d, plain(defKM.T("tui.detail.how_applied"))) || strings.Contains(d, "chưa áp dụng") {
 		t.Fatalf("applied: %s", d)
 	}
 }
@@ -901,7 +905,7 @@ func TestI1ConfirmSummary(t *testing.T) {
 	}
 	h.mustContain(tr("tui.confirm.summary"), tr("tui.confirm.sum_gitconfig", "~/.gitconfig"),
 		tr("tui.confirm.sum_generated", gen, "~/.config/gitid/git"), tr("tui.confirm.sum_backup", "~/.config/gitid/backups"),
-		tr("tui.confirm.files", len(c.plan.Changes)), defKM.T("tui.confirm.question"))
+		trCount("tui.confirm.files", len(c.plan.Changes)), defKM.T("tui.confirm.question"))
 	if c.vp.Height < 3 {
 		t.Fatalf("the diff needs room: %d lines", c.vp.Height)
 	}
@@ -934,19 +938,17 @@ func TestI3DoneTellsWhatChanged(t *testing.T) {
 	h.key("y")
 	h.waitFor("done", func() bool { c, ok := h.top().(*confirmScreen); return ok && c.state == confDone })
 	h.mustContain(tr("tui.confirm.done"), tr("tui.confirm.backup"), tr("tui.confirm.effect"),
-		tr("tui.confirm.effect_line", "~/Code/acme/", "Alice Nguyen", "alice@acme.com"),
-		tr("tui.confirm.effect_line", "~/Code/globex/", "Dave D", "dave@globex.example"),
-		tr("tui.confirm.effect_line", "~/Code/beta/", "Alice B", "alice@beta.io"),
-		"gitid check")
+		tr("tui.confirm.effect_line", "~/Code/acme/")+" acme/alice · Alice Nguyen <alice@acme.com>",
+		tr("tui.confirm.effect_line", "~/Code/globex/")+" globex/dave · Dave D <dave@globex.example>",
+		tr("tui.confirm.effect_line", "~/Code/beta/")+" beta/alice · Alice B <alice@beta.io>")
 	h.mustContainPlain(tr("tui.confirm.override_note"))
-	if !strings.Contains(h.m.status.text, defKM.T("tui.status.applied")) {
-		t.Fatalf("status %q", h.m.status.text)
-	}
+	// the TUI never sends the user to the command line for what a key does
+	h.mustNotContain("gitid check")
 	// on a short terminal the files give way, not the explanation
 	h.resize(80, 24)
-	h.mustContain(tr("tui.confirm.effect"), tr("tui.confirm.backup"), tr("tui.confirm.back_hint"), "gitid check")
+	h.mustContain(tr("tui.confirm.effect"), tr("tui.confirm.backup"))
 	h.resize(60, 20)
-	h.mustContain(tr("tui.confirm.effect"), tr("tui.confirm.back_hint"))
+	h.mustContain(tr("tui.confirm.effect"))
 	for _, s := range [][2]int{{40, 10}, {60, 20}, {80, 24}, {100, 30}} {
 		h.update(tea.WindowSizeMsg{Width: s[0], Height: s[1]})
 		assertFits(t, h.view(), s[0], s[1], "done")
@@ -1034,7 +1036,7 @@ func TestEnglishFlowWords(t *testing.T) {
 	defer i18n.SetLang("vi")
 	i18n.SetLang("en")
 	h := newHarness(t, emptyCompanyCfg("personal"))
-	h.mustContain("no accounts yet", "! personal has no account — press a", "▸ a add account")
+	h.mustContain("no accounts yet", "! personal has no account", "▸ a add account")
 	h.mustNotContain("chưa", "tài khoản")
 }
 
@@ -1048,7 +1050,10 @@ func TestD2StackedPaneKeepsTheNextStep(t *testing.T) {
 		if h.listScreen().layout() != layoutStacked {
 			t.Fatalf("%d: not stacked", w)
 		}
-		h.mustContainPlain(defKM.T("tui.detail.how_pending"))
+		// pending: the help bar's primary item is the next step
+		if hb := h.helpLine(); !strings.HasPrefix(hb, "▸ p") {
+			t.Fatalf("%d: help bar %q", w, hb)
+		}
 		h.mustContainPlain(tr("tui.detail.how_default", "~/Code/acme/", "Alice Nguyen", "alice@acme.com"))
 		assertFits(t, h.view(), w, 24, "stacked")
 	}
@@ -1059,11 +1064,11 @@ func TestD2StackedPaneKeepsTheNextStep(t *testing.T) {
 		h.resize(w, 24)
 		h.mustContainPlain(defKM.T("tui.detail.how_applied"))
 	}
-	// a company without account keeps its "press a" hint
+	// a company without account says why nothing is written for it
 	h2 := newHarness(t, emptyCompanyCfg("personal"))
 	for _, w := range []int{60, 70} {
 		h2.resize(w, 24)
-		h2.mustContainPlain(defKM.T("tui.list.no_accounts_hint", "personal"))
+		h2.mustContainPlain(tr("tui.list.no_accounts_why", "personal"))
 	}
 	// even a pane of 2 lines shows the next step
 	for _, n := range []int{2, 3, 4, 5} {
@@ -1097,12 +1102,25 @@ func TestD3DetailLabelsAreNotCut(t *testing.T) {
 
 // D-4 and copy fixes.
 func TestVietnameseCopyFixes(t *testing.T) {
-	if got := i18n.In("vi", "tui.confirm.question", "y", "n"); got != "Bấm y để áp dụng, n để làm sau." {
+	if got := i18n.In("vi", "tui.confirm.question"); got != "Chưa ghi gì cho tới khi bạn áp dụng." {
 		t.Fatal(got)
 	}
 	if got := i18n.In("vi", "tui.form.auth_hint"); !strings.Contains(got, "gitid có thể tạo giúp") || strings.Contains(got, "tạo giúp được") {
 		t.Fatal(got)
 	}
+}
+
+// isCompanyRow tells a company row of the list (no indent, no branch) from an
+// account row: a company slug right after the frame and the cursor column.
+func isCompanyRow(l string) bool {
+	l = strings.TrimPrefix(strings.TrimLeft(l, "┃│ "), "▌")
+	for _, s := range []string{"acme", "globex", "beta"} {
+		// the list pads a slug with two spaces; the detail title says "acme · ..."
+		if strings.HasPrefix(l, s+"  ") {
+			return true
+		}
+	}
+	return false
 }
 
 // D-7: the base directory is shown on every company row or on none.
@@ -1112,7 +1130,8 @@ func TestD7BaseDirColumnIsConsistent(t *testing.T) {
 		h.update(tea.WindowSizeMsg{Width: w, Height: 40})
 		withBase, companies := 0, 0
 		for _, l := range h.lines() {
-			if strings.Contains(l, "▪ ") || strings.Contains(l, "▌ ") {
+			if isCompanyRow(l) {
+				l = listPart(l)
 				companies++
 				if strings.Contains(l, "~/Code/") {
 					withBase++
@@ -1123,9 +1142,18 @@ func TestD7BaseDirColumnIsConsistent(t *testing.T) {
 			t.Fatalf("w=%d: %d of %d company rows show the base dir:\n%s", w, withBase, companies, h.view())
 		}
 		for _, l := range h.lines() {
-			if (strings.Contains(l, "▪ ") || strings.Contains(l, "▌ ")) && !strings.Contains(l, "account") && !strings.Contains(l, "tài khoản") {
+			if isCompanyRow(l) && !strings.Contains(l, "account") && !strings.Contains(l, "tài khoản") {
 				t.Fatalf("w=%d: row lost its count: %q", w, l)
 			}
 		}
 	}
+}
+
+// listPart is the list pane of a screen line: the detail pane may sit beside
+// it, and its text is not a company row's.
+func listPart(l string) string {
+	if i := strings.LastIndex(l, "┃"); i >= 0 {
+		return l[:i]
+	}
+	return l
 }

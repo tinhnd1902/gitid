@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/tinhnd1902/gitid/internal/app"
 	"github.com/tinhnd1902/gitid/internal/config"
@@ -68,17 +69,29 @@ type cloneScreen struct {
 	backPops bool
 	// dir is the clone target folder; "" takes <base_dir>/<repo>.
 	dir string
+	// header, when embedded, is the tab bar the repo browser draws as the
+	// first line inside the panel.
+	header string
 }
 
 // newCloneScreen starts the clone flow. prefer (optional) is the account the
 // user had highlighted: the pick step starts on it when the URL fits it.
+// accentHex is the accent colour of the terminal's background: the progress
+// bar takes a plain colour string, not an adaptive one.
+func accentHex() string {
+	if lipgloss.HasDarkBackground() {
+		return colAccent.Dark
+	}
+	return colAccent.Light
+}
+
 func newCloneScreen(sh *shared, prefer *config.AccountRef) *cloneScreen {
 	in := textinput.New()
-	in.Prompt = "› "
+	in.Prompt = "> "
 	in.PromptStyle = sh.st.Accent
 	in.Placeholder = tr("tui.form.eg", "https://github.com/org/repo.git")
 	in.CharLimit = 1024
-	p := progress.New(progress.WithGradient("#7C6BFF", "#2DD4BF"), progress.WithoutPercentage())
+	p := progress.New(progress.WithSolidFill(accentHex()), progress.WithoutPercentage())
 	return &cloneScreen{sh: sh, id: sh.id(), input: in, prog: p, spin: sh.st.Spinner, prefer: prefer}
 }
 
@@ -109,6 +122,9 @@ func (c *cloneScreen) Help() []key.Binding {
 	km := c.sh.km
 	switch c.phase {
 	case clURL:
+		if strings.TrimSpace(c.input.Value()) == "" {
+			return []key.Binding{km.Cancel} // nothing to choose until a URL is in
+		}
 		return []key.Binding{km.Enter, km.Cancel}
 	case clPick:
 		return []key.Binding{km.Up, km.Down, withDesc(km.Enter, "enter", tr("tui.clone.start")), withDesc(km.Back, "esc", tr("tui.key.back"))}
@@ -355,7 +371,7 @@ func (c *cloneScreen) View() string {
 	case clURL:
 		b.WriteString(st.Bold.Render(tr("tui.clone.paste")) + "\n\n")
 		b.WriteString(c.input.View() + "\n\n")
-		b.WriteString(wrap(st.Faint.Render(tr("tui.clone.paste_hint")), inner))
+		b.WriteString(wrap(st.Muted.Render(tr("tui.clone.paste_hint")), proseW(inner)))
 		if c.errMsg != "" {
 			b.WriteString("\n\n" + st.Err.Render("✗ "+c.errMsg))
 		}
@@ -374,29 +390,31 @@ func (c *cloneScreen) View() string {
 	case clVerifying:
 		b.WriteString(c.spin.View() + " " + st.Muted.Render(tr("tui.clone.verifying")))
 	case clDone:
-		b.WriteString(st.OK.Bold(true).Render("✓ "+tr("tui.clone.done")) + "\n\n")
-		b.WriteString(st.Label.Render(tr("tui.f.dir")+" ") + st.Text.Render(c.sh.svc.Env.Contract(c.res.Plan.Dir)) + "\n")
-		b.WriteString(st.Label.Render(tr("tui.f.account")+" ") + st.Text.Render(c.res.Plan.Account.String()) + "\n\n")
+		b.WriteString(st.OK.Render("✓ "+tr("tui.clone.done")) + "\n\n")
+		col := kvCol(inner, tr("tui.f.dir"), tr("tui.f.account"))
+		b.WriteString(kvRow(st, col, inner, tr("tui.f.dir"), c.sh.svc.Env.Contract(c.res.Plan.Dir)) + "\n")
+		b.WriteString(st.Label.Render(pad(tr("tui.f.account"), col)) + trunc(st.identityStamp(c.res.Plan.Account), maxInt(inner-col, 4)) + "\n\n")
 		switch {
 		case c.res.EmailOK:
-			b.WriteString(st.OK.Render("✓ " + wrap(tr("tui.clone.email_ok", c.res.EffectiveEmail), inner)))
+			b.WriteString(st.OK.Render("✓ " + wrap(tr("tui.clone.email_ok", c.res.EffectiveEmail), proseW(inner))))
 		case c.res.EffectiveEmail == "":
-			b.WriteString(st.Warn.Render("! " + wrap(tr("tui.clone.email_unknown"), inner)))
+			b.WriteString(st.Warn.Render("! " + wrap(tr("tui.clone.email_unknown"), proseW(inner))))
 		default:
-			b.WriteString(st.Warn.Render("! " + wrap(tr("tui.clone.email_bad", c.res.EffectiveEmail, c.res.Plan.Account.Account.Email), inner)))
+			b.WriteString(st.Warn.Render("! " + wrap(tr("tui.clone.email_bad", c.res.EffectiveEmail, c.res.Plan.Account.Account.Email), proseW(inner))))
 		}
 	case clFailed:
 		b.WriteString(st.Err.Render("✗ "+wrap(errText(c.err), inner)) + "\n")
 		if errors.Is(c.err, app.ErrAuth) {
-			b.WriteString("\n" + st.Warn.Render(wrap(c.sh.km.T("tui.clone.auth_hint"), inner)) + "\n")
+			b.WriteString("\n" + st.Text.Render(wrap(tr("tui.clone.auth_hint"), proseW(inner))) + "\n")
 			b.WriteString("\n" + st.ButtonOn.Render(c.sh.km.keys.Label(keymap.Terminal)+"  "+tr("tui.clone.terminal_mode")))
 		}
 	}
-	title := tr("tui.clone.title")
+	// the breadcrumb (or the tab bar) already names the screen
+	body := b.String()
 	if c.embedded {
-		title = "" // the tab bar above is the title
+		body = c.header + "\n" + body
 	}
-	return c.sh.panel(title, b.String(), c.w, c.h, true)
+	return c.sh.panel("", body, c.w, c.h, true)
 }
 
 func (c *cloneScreen) candidateList(w int) string {
@@ -406,19 +424,26 @@ func (c *cloneScreen) candidateList(w int) string {
 	if c.cur >= room {
 		start = c.cur - room + 1
 	}
+	// aligned columns: the account, its platform and login, its email
+	refW, kindW := 0, 0
+	for _, r := range c.cands {
+		refW = maxInt(refW, lipgloss.Width(r.String()))
+		kindW = maxInt(kindW, lipgloss.Width(platformTag(r.Account.Platform)+" "+authTag(r.Account.Auth)))
+	}
 	var lines []string
 	for i := start; i < len(c.cands) && i < start+room; i++ {
 		r := c.cands[i]
 		a := r.Account
-		plain := fmt.Sprintf("%s  %s %s  %s", r.String(), platformTag(a.Platform), authTag(a.Auth), a.Email)
+		kind := pad(platformTag(a.Platform)+" "+authTag(a.Auth), kindW)
+		plain := pad(r.String(), refW) + "  " + kind + "  " + a.Email
 		if i == c.cur {
 			lines = append(lines, st.Selected.Render(pad("▌"+plain, w)))
 			continue
 		}
-		lines = append(lines, trunc(" "+st.Text.Render(r.String())+"  "+st.platformBadge(a.Platform)+" "+st.Muted.Render(authTag(a.Auth))+"  "+st.Faint.Render(a.Email), w))
+		lines = append(lines, trunc(" "+st.Text.Render(pad(r.String(), refW))+"  "+st.Muted.Render(kind)+"  "+st.Muted.Render(a.Email), w))
 	}
 	if more := len(c.cands) - (start + room); more > 0 {
-		lines = append(lines, st.Faint.Render(fmt.Sprintf("  … +%d", more)))
+		lines = append(lines, st.Muted.Render(fmt.Sprintf("  … +%d", more)))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -426,13 +451,14 @@ func (c *cloneScreen) candidateList(w int) string {
 func (c *cloneScreen) previewView(w int) string {
 	st := c.sh.st
 	var b strings.Builder
-	b.WriteString("\n" + st.Faint.Render(strings.Repeat("─", maxInt(w, 4))) + "\n")
+	b.WriteString("\n" + st.divider(w) + "\n")
 	if c.prevErr != nil {
 		b.WriteString(st.Err.Render("✗ " + wrap(errText(c.prevErr), w)))
 		return b.String()
 	}
+	col := kvCol(w, tr("tui.f.original"), tr("tui.f.clone_url"), tr("tui.f.dir"))
 	row := func(label, value string) {
-		b.WriteString(st.Label.Render(pad(label, 10)) + st.Text.Render(trunc(value, maxInt(w-10, 4))) + "\n")
+		b.WriteString(kvRow(st, col, w, label, value) + "\n")
 	}
 	row(tr("tui.f.original"), c.preview.Original)
 	row(tr("tui.f.clone_url"), c.preview.URL)

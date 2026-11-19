@@ -106,7 +106,11 @@ func (m *Model) helpBarItems() helpBarItems {
 		rest = append(rest, it)
 	}
 	al = rest
-	if out.exit == nil {
+	// an exit-class item the screen marks primary is the next step itself
+	// ("esc back to Accounts"): it stays in row 1 and is not repeated as the
+	// exit of row 2
+	exitIsPrimary := slices.ContainsFunc(ctx, func(it helpItem) bool { return it.primary && isExit(km, it.b) })
+	if out.exit == nil && !exitIsPrimary {
 		for i, it := range ctx {
 			if isExit(km, it.b) {
 				e := it
@@ -117,7 +121,7 @@ func (m *Model) helpBarItems() helpBarItems {
 			}
 		}
 	}
-	if out.exit == nil && !capturing && len(m.stack) > 1 {
+	if out.exit == nil && !exitIsPrimary && !capturing && len(m.stack) > 1 {
 		out.exit = &helpItem{b: withDesc(km.Back, "esc", tr("tui.key.back"))}
 	}
 
@@ -184,7 +188,7 @@ func (m *Model) helpBarItems() helpBarItems {
 // barEnt is one item on its way to a line.
 type barEnt struct {
 	it   helpItem
-	row2 bool // comes from row 2 (its own colour while the labels are hidden)
+	row2 bool // comes from row 2
 	keep int  // one-row mode: higher survives longer
 	ell  bool // the "…" mark
 }
@@ -200,16 +204,13 @@ func (e barEnt) text() string {
 	return h.Key + " " + h.Desc
 }
 
-func (e barEnt) render(st *Styles, tint bool) string {
+func (e barEnt) render(st *Styles) string {
 	if e.ell {
 		return st.Help.Ellipsis.Render("…")
 	}
 	h := e.it.b.Help()
 	if e.it.primary {
 		return st.HelpPrimary.Render("▸ " + h.Key + " " + h.Desc)
-	}
-	if e.row2 && tint {
-		return st.HelpAlwaysKey.Render(h.Key) + " " + st.HelpAlwaysDesc.Render(h.Desc)
 	}
 	return st.Help.ShortKey.Render(h.Key) + " " + st.Help.ShortDesc.Render(h.Desc)
 }
@@ -234,20 +235,22 @@ func entsOf(items []helpItem, row2 bool) []barEnt {
 }
 
 // cutFirst shortens the description of the first entry (its key stays) so
-// that the entries fit in w cells, as far as a description can shrink.
-func cutFirst(es []barEnt, w int) {
+// that the entries fit in w cells, as far as a description can shrink. It
+// reports whether it cut, in which case the "…" it left says the row is cut.
+func cutFirst(es []barEnt, w int) bool {
 	if len(es) == 0 || es[0].ell || entsWidth(es) <= w {
-		return
+		return false
 	}
 	b := es[0].it.b
 	h := b.Help()
 	room := lipgloss.Width(h.Desc) - (entsWidth(es) - w)
 	b.SetHelp(h.Key, truncWords(h.Desc, maxInt(room, 1)))
 	es[0].it.b = b
+	return true
 }
 
 // joinEnts renders the entries on one line behind prefix.
-func joinEnts(st *Styles, prefix string, es []barEnt, tint bool) string {
+func joinEnts(st *Styles, prefix string, es []barEnt) string {
 	var b strings.Builder
 	b.WriteString(prefix)
 	sep := st.Help.ShortSeparator.Render(strings.Repeat(" ", sepWidth))
@@ -255,7 +258,7 @@ func joinEnts(st *Styles, prefix string, es []barEnt, tint bool) string {
 		if i > 0 {
 			b.WriteString(sep)
 		}
-		b.WriteString(e.render(st, tint))
+		b.WriteString(e.render(st))
 	}
 	return b.String()
 }
@@ -321,11 +324,12 @@ func twoRowBar(st *Styles, b helpBarItems, w int) []string {
 		if dropped {
 			room -= sepWidth + 1
 		}
-		cutFirst(es, room)
-		if dropped {
+		cut := cutFirst(es, room)
+		if dropped && !cut {
+			// one "…" says the row is cut: not two side by side
 			es = append(es, barEnt{ell: true})
 		}
-		line1 = joinEnts(st, p, es, !labels)
+		line1 = joinEnts(st, p, es)
 	}
 
 	// row 2: drop the lowest priority first, never "?" or the exit
@@ -348,7 +352,7 @@ func twoRowBar(st *Styles, b helpBarItems, w int) []string {
 			}
 			es = slices.Delete(es, at, at+1)
 		}
-		line2 = joinEnts(st, p, es, !labels)
+		line2 = joinEnts(st, p, es)
 	}
 	return []string{trunc(line1, w), trunc(line2, w)}
 }
@@ -420,7 +424,9 @@ func oneRowBar(st *Styles, b helpBarItems, w int) string {
 	all := assemble(dropped)
 	if 1+entsWidth(all) > w {
 		// even the mandatory items do not fit: cut the first description
-		cutFirst(all, w-1)
+		if cutFirst(all, w-1) {
+			all = slices.DeleteFunc(all, func(e barEnt) bool { return e.ell })
+		}
 	}
-	return trunc(joinEnts(st, " ", all, true), w)
+	return trunc(joinEnts(st, " ", all), w)
 }

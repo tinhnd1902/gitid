@@ -77,7 +77,7 @@ func TestOV2FilterByDescriptionWithAndWithoutDiacritics(t *testing.T) {
 		if !ok || sel.desc != tr("tui.key.add_company") {
 			t.Fatalf("%s: selected %+v", name, sel)
 		}
-		h.mustContainPlain("▸ A")
+		h.mustContainPlain("▌ A")
 		h.mustNotContain(tr("tui.key.delete"))
 		h.key("esc")
 		if h.filterValue() != "" {
@@ -184,7 +184,7 @@ func TestOV6SelectionStartsOnTheNextStep(t *testing.T) {
 	if !ok || sel.desc != tr("tui.key.apply") {
 		t.Fatalf("selected %+v, want the apply row", sel)
 	}
-	h.mustContainPlain("▸ p")
+	h.mustContainPlain("▌ p")
 }
 
 func TestOV7ReopenResets(t *testing.T) {
@@ -302,7 +302,7 @@ func TestOV9GlobalRowsCannotRun(t *testing.T) {
 		t.Fatalf("rows %+v", h.runnableRows())
 	}
 	h.mustContain("pgup")
-	h.mustNotContain("▸ pgup")
+	h.mustNotContain("▌ pgup")
 	before := h.snapshot()
 	h.key("enter")
 	if h.snapshot() != before {
@@ -407,7 +407,7 @@ func TestOV15SelectionVisibleOnSmallScreens(t *testing.T) {
 		assertFits(t, v, sz[0], sz[1], "overlay")
 		line := ""
 		for _, l := range strings.Split(plain(v), "\n") {
-			if strings.Contains(l, "▸ "+sel.keyText) {
+			if strings.Contains(l, "▌ "+sel.keyText) {
 				line = l
 			}
 		}
@@ -615,7 +615,7 @@ func TestOVCutDescriptionsStayDistinct(t *testing.T) {
 			seen := map[string]map[string]string{}
 			for _, l := range strings.Split(ansi.Strip(h.view()), "\n") {
 				l = strings.TrimSpace(strings.Trim(strings.TrimSpace(l), "│╭╮╰╯─"))
-				l = strings.TrimSpace(strings.ReplaceAll(l, "▸ ", "  "))
+				l = strings.TrimSpace(strings.ReplaceAll(l, "▌ ", "  "))
 				toks := sep.Split(l, -1)
 				if len(toks) == 1 {
 					section = l

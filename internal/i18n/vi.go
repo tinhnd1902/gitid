@@ -124,7 +124,7 @@ var vi = map[string]string{
 
 	// --- errors ---
 	"err.invalid_config":       "Cấu hình không hợp lệ:",
-	"err.stale":                "Tệp %s đã thay đổi từ lúc lập kế hoạch; không ghi gì. Hãy chạy lại.",
+	"err.stale":                "Tệp %s đã thay đổi từ lúc lên kế hoạch; không ghi gì. Hãy thử lại.",
 	"err.partial":              "Đã ghi %d tệp rồi gặp lỗi: %s. Bản sao lưu: %s",
 	"err.remote.host_mismatch": "Host của remote khác host của tài khoản (dùng --force nếu thật sự muốn).",
 	"err.remote.invalid":       "URL remote không hợp lệ.",
@@ -232,7 +232,7 @@ var vi = map[string]string{
 	"doctor.ambiguous.ok":        "Không có mẫu remote nào mơ hồ.",
 	"doctor.ambiguous.found":     "Mẫu %s dùng chung bởi: %s (ngoài thư mục công ty sẽ không tự chọn).",
 	"doctor.block_last.ok":       "Khối gitid nằm cuối ~/.gitconfig.",
-	"doctor.block_last.info":     "Có cấu hình của bạn nằm sau khối gitid trong ~/.gitconfig; nó có thể ghi đè danh tính.",
+	"doctor.block_last.info":     "Có cấu hình của bạn nằm sau khối gitid trong ~/.gitconfig; nó có thể ghi đè tài khoản.",
 	"doctor.sshtest.ok":          "ssh %s xác thực được.",
 	"doctor.sshtest.fail":        "ssh %s không xác thực được.",
 	"doctor.hint.apply":          "Chạy `gitid apply`.",
@@ -242,6 +242,6 @@ var vi = map[string]string{
 	"doctor.hint.chmod":          "Chạy chmod 600 trên tệp key.",
 	"doctor.hint.mkdir":          "Tạo thư mục hoặc đổi thư mục gốc của công ty.",
 	"doctor.hint.upgrade_git":    "Nâng cấp git (brew install git).",
-	"doctor.hint.fix_config":     "Sửa cấu hình rồi chạy lại.",
+	"doctor.hint.fix_config":     "Sửa cấu hình rồi thử lại.",
 	"doctor.hint.rename_alias":   "Đổi tên Host trong ~/.ssh/config hoặc slug/id của tài khoản.",
 }

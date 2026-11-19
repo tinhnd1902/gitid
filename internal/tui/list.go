@@ -134,7 +134,38 @@ func (d rowDelegate) Render(w io.Writer, m list.Model, index int, item list.Item
 	}
 	width := m.Width()
 	selected := index == m.Index()
-	fmt.Fprint(w, d.line(r, width, selected, companyLevel(m.Items(), width)))
+	fmt.Fprint(w, d.lineOrphan(r, width, selected, companyLevel(m.Items(), width), orphanCol(m.Items(), r)))
+}
+
+// orphanCol is the width of the id column of an account row whose company row
+// is not shown (a filter hid it): the id then carries its company ("acme/alice")
+// so the row keeps its tree context. 0 means the row is not an orphan.
+func orphanCol(items []list.Item, r rowItem) int {
+	if r.isCompany() {
+		return 0
+	}
+	hidden := true
+	wide := 0
+	for _, it := range items {
+		o, ok := it.(rowItem)
+		if !ok {
+			continue
+		}
+		if o.isCompany() && o.company.Slug == r.company.Slug {
+			hidden = false
+		}
+	}
+	if hidden {
+		for _, it := range items {
+			if o, ok := it.(rowItem); ok && !o.isCompany() {
+				wide = maxInt(wide, lipgloss.Width(o.key()))
+			}
+		}
+	}
+	if !hidden {
+		return 0
+	}
+	return maxInt(wide, idCol)
 }
 
 func authTag(a config.Auth) string {
@@ -145,6 +176,12 @@ func authTag(a config.Auth) string {
 }
 
 func (d rowDelegate) line(r rowItem, width int, selected bool, level int) string {
+	return d.lineOrphan(r, width, selected, level, 0)
+}
+
+// lineOrphan is line for a row whose company row is hidden (orphan > 0, see
+// orphanCol).
+func (d rowDelegate) lineOrphan(r rowItem, width int, selected bool, level int, orphan int) string {
 	st := d.sh.st
 	if r.isCompany() {
 		return d.companyLine(r, width, selected, level)
@@ -166,7 +203,11 @@ func (d rowDelegate) line(r rowItem, width int, selected bool, level int) string
 		warn = " !" // the same login twice in one company, see the detail
 	}
 	tag := platformTag(a.Platform)
-	mid := fmt.Sprintf("%s %s  %s %s", star, pad(a.ID, idCol), tag, authTag(a.Auth))
+	idText, idW := a.ID, idCol
+	if orphan > 0 {
+		idText, idW = r.key(), orphan
+	}
+	mid := fmt.Sprintf("%s %s  %s %s", star, pad(idText, idW), tag, authTag(a.Auth))
 	email := a.Email
 	if selected {
 		left := "▌" + branch + " " + mid + warn
@@ -175,11 +216,7 @@ func (d rowDelegate) line(r rowItem, width int, selected bool, level int) string
 		}
 		return st.Selected.Render(pad(left, maxInt(width-lipgloss.Width(email)-1, 4)) + " " + email)
 	}
-	starS := " "
-	if star != " " {
-		starS = st.Warn.Render("★")
-	}
-	l := st.Faint.Render(" "+branch+" ") + starS + " " + st.Text.Render(pad(a.ID, idCol)) + "  " + st.platformBadge(a.Platform) + " " + st.Muted.Render(authTag(a.Auth))
+	l := st.Faint.Render(" "+branch+" ") + st.Text.Render(star) + " " + st.Text.Render(pad(idText, idW)) + "  " + st.platformBadge(a.Platform) + " " + st.Muted.Render(authTag(a.Auth))
 	if warn != "" {
 		l += st.Warn.Render(warn)
 	}
@@ -220,7 +257,7 @@ func companyLevel(items []list.Item, width int) int {
 				continue
 			}
 			name, base := companyParts(r.company, level)
-			if lipgloss.Width("▪ "+r.company.Slug+name)+lipgloss.Width(companyRight(r.company, base))+2 > width {
+			if lipgloss.Width(" "+r.company.Slug+name)+lipgloss.Width(companyRight(r.company, base))+2 > width {
 				ok = false
 				break
 			}
@@ -242,10 +279,10 @@ func (d rowDelegate) companyLine(r rowItem, width int, selected bool, level int)
 	right := companyRight(c, base)
 	rw := lipgloss.Width(right)
 	if selected {
-		left := trunc("▌ "+c.Slug+name, maxInt(width-rw-2, 4))
+		left := trunc("▌"+c.Slug+name, maxInt(width-rw-2, 4))
 		return st.Selected.Render(pad(left, maxInt(width-rw-1, 4)) + " " + right)
 	}
-	l := st.Accent.Bold(true).Render("▪ "+c.Slug) + st.Muted.Render(name)
+	l := " " + st.Bold.Render(c.Slug) + st.Muted.Render(name)
 	l = trunc(l, maxInt(width-rw-2, 4))
 	countStyle := st.Muted
 	if n == 0 {
@@ -374,6 +411,10 @@ func (s *listScreen) ContextHelp() []helpItem {
 		out = []helpItem{it(km.AddAccount), it(km.Edit), it(km.Delete), it(km.Clone), it(km.Check)}
 	default:
 		out = []helpItem{it(km.Edit), it(km.Delete), it(km.Check), it(km.Clone)}
+		if s.sh.planned && !s.sh.planErr && s.sh.pending == 0 {
+			// everything is applied: cloning a repo is the next step
+			out = []helpItem{prim(km.Clone), it(km.Edit), it(km.Delete), it(km.Check)}
+		}
 		if r.account.Auth == config.AuthSSH {
 			out = append(out, it(km.GenKey))
 		}
@@ -746,16 +787,16 @@ func (s *listScreen) View() string {
 		return ""
 	}
 	if s.welcome() {
-		return s.sh.activePanel(tr("tui.list.panel", 0, 0), s.welcomeBody(s.w-4, s.h-3), s.w, s.h)
+		return s.sh.activePanel("", s.welcomeBody(s.w-4, s.h-2), s.w, s.h)
 	}
 	lw, lh, dw, dh := s.dims()
 	left := s.listPanel(lw, lh)
 	switch s.layout() {
 	case layoutSide:
-		right := s.sh.panel(tr("tui.detail.title"), s.detailBody(dw-4, dh-3), dw, dh, false)
+		right := s.sh.panel("", s.detailBody(dw-4, dh-2), dw, dh, false)
 		return lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 	case layoutStacked:
-		right := s.sh.panel(tr("tui.detail.title"), s.detailBody(dw-4, dh-3), dw, dh, false)
+		right := s.sh.panel("", s.detailBody(dw-4, dh-2), dw, dh, false)
 		return lipgloss.JoinVertical(lipgloss.Left, left, right)
 	}
 	return left
@@ -770,9 +811,9 @@ func (s *listScreen) filterLine() string {
 	case filterTyping:
 		return s.filter.View()
 	case filterApplied:
-		return st.Accent.Render(prompt) + st.Text.Render(s.filter.Value()) + st.Faint.Render("  "+tr("tui.list.clear_filter"))
+		return st.Muted.Render(prompt) + st.Text.Render(s.filter.Value()) + st.Muted.Render("  "+tr("tui.list.clear_filter"))
 	}
-	return st.Faint.Render(prompt + tr("tui.list.filter_hint"))
+	return st.Muted.Render(prompt + tr("tui.list.filter_hint"))
 }
 
 func (s *listScreen) listPanel(w, h int) string {
@@ -823,30 +864,13 @@ func (s *listScreen) rowHint(w int) []string {
 	if s.l.Height()-len(s.l.Items()) < 3 {
 		return nil
 	}
-	return s.sh.noAccountsLines(r.company, w, false)
+	return s.sh.noAccountsLines(r.company, w)
 }
 
-// noAccountsLines explains what a company without account means and what to
-// press. The reason is included when withWhy is set.
-func (sh *shared) noAccountsLines(c config.Company, w int, withWhy bool) []string {
-	st := sh.st
-	var out []string
-	if withWhy {
-		for _, l := range wrapLines(tr("tui.list.no_accounts_why", c.Slug), w) {
-			out = append(out, st.Muted.Render(l))
-		}
-		out = append(out, "")
-	}
-	// centered when it fits on one line; a wrapped hint reads better flush left
-	lines := wrapLines(sh.km.T("tui.list.no_accounts_hint", c.Slug), w)
-	for _, l := range lines {
-		l = st.Accent.Bold(true).Render(l)
-		if len(lines) == 1 {
-			l = center(l, w)
-		}
-		out = append(out, l)
-	}
-	return out
+// noAccountsLines explains what a company without account means. It names no
+// key: the badge states the fact and the help bar offers the key.
+func (sh *shared) noAccountsLines(c config.Company, w int) []string {
+	return styledWrap(sh.st.Muted, tr("tui.list.no_accounts_why", c.Slug), proseW(w))
 }
 
 // center centers one (possibly styled) line in w cells.
@@ -873,13 +897,13 @@ func (s *listScreen) welcomeBody(w, h int) string {
 		var out []string
 		km := s.sh.km
 		for i, k := range []string{km.keys.Label(keymap.AddCompany), km.keys.Label(keymap.AddAccount), km.keys.Label(keymap.Apply)} {
-			prefix := st.Faint.Render(fmt.Sprintf("  %d  ", i+1)) + st.Accent.Bold(true).Render(k) + "  "
+			prefix := st.Muted.Render(fmt.Sprintf("  %d  ", i+1)) + st.Bold.Render(k) + "  "
 			text := tr(fmt.Sprintf("tui.empty.step%d", i+1))
 			if !wrapText {
 				out = append(out, trunc(prefix+st.Text.Render(text), w))
 				continue
 			}
-			for j, l := range wrapLines(text, maxInt(w-8, 8)) {
+			for j, l := range wrapLines(text, minInt(maxInt(w-8, 8), measure)) {
 				if j == 0 {
 					out = append(out, prefix+st.Text.Render(l))
 				} else {
@@ -891,7 +915,7 @@ func (s *listScreen) welcomeBody(w, h int) string {
 	}
 	para := func(style lipgloss.Style, key string) []string {
 		var out []string
-		for _, l := range wrapLines(s.sh.km.T(key), w) {
+		for _, l := range wrapLines(s.sh.km.T(key), proseW(w)) {
 			out = append(out, style.Render(l))
 		}
 		return out
@@ -952,24 +976,6 @@ func detailText(sh *shared, r rowItem, w, h int, ki keys.Info, haveKey bool) str
 	return strings.Join(pick, "\n")
 }
 
-// detailField renders "label  value" with the value cut to the width.
-func detailField(st *Styles, label, value string, w int) string {
-	lc := labelCol(w)
-	return st.Label.Render(pad(label, lc)) + st.Text.Render(trunc(value, maxInt(w-lc, 4)))
-}
-
-// labelCol is the width of the label column of the detail pane: the longest
-// label of the active language plus a space (so "Base directory" is not cut),
-// at least 12 and at most half of the pane.
-func labelCol(w int) int {
-	n := 12
-	for _, k := range []string{"tui.f.base_dir", "tui.f.default", "tui.f.accounts", "tui.f.platform", "tui.f.auth",
-		"tui.f.username", "tui.f.git_name", "tui.f.email", "tui.f.orgs", "tui.f.alias", "tui.f.key", "tui.f.remote", "tui.f.dir"} {
-		n = maxInt(n, lipgloss.Width(tr(k))+1)
-	}
-	return minInt(n, maxInt(w/2, 12))
-}
-
 func minInt(a, b int) int {
 	if a < b {
 		return a
@@ -1003,16 +1009,23 @@ func companyVariants(sh *shared, c config.Company, w int) [][]string {
 	if n := len(c.Accounts); n > 0 {
 		accounts = fmt.Sprint(n)
 	}
+	col := kvCol(w, tr("tui.f.base_dir"), tr("tui.f.default"), tr("tui.f.accounts"))
 	fields := []string{
-		detailField(st, tr("tui.f.base_dir"), c.BaseDir, w),
-		detailField(st, tr("tui.f.default"), defName, w),
-		detailField(st, tr("tui.f.accounts"), accounts, w),
+		kvRow(st, col, w, tr("tui.f.base_dir"), c.BaseDir),
+		kvRow(st, col, w, tr("tui.f.default"), defName),
+		kvRow(st, col, w, tr("tui.f.accounts"), accounts),
+	}
+	if len(c.Accounts) == 0 {
+		// no default and no accounts to list: the row, the badge and the
+		// sentence below already say so
+		col = kvCol(w, tr("tui.f.base_dir"))
+		fields = []string{kvRow(st, col, w, tr("tui.f.base_dir"), c.BaseDir)}
 	}
 	var list []string
 	for _, a := range c.Accounts {
 		star := " "
 		if a.ID == c.DefaultAccount {
-			star = st.Warn.Render("★")
+			star = st.Text.Render("★")
 		}
 		list = append(list, trunc(star+" "+st.Text.Render(a.ID)+"  "+st.platformBadge(a.Platform)+" "+st.Muted.Render(authTag(a.Auth)), w))
 	}
@@ -1027,30 +1040,26 @@ func companyVariants(sh *shared, c config.Company, w int) [][]string {
 	blank := []string{""}
 
 	if len(c.Accounts) == 0 {
-		why := sh.noAccountsLines(c, w, true)
+		why := sh.noAccountsLines(c, w)
 		return [][]string{
 			cat(one(titleLine), blank, fields, blank, one(header), why),
 			cat(one(titleLine), one(header), why),
 			cat(one(titleLine), noBlank(why)),
 			cat(noBlank(why)),
-			cat(noBlank(sh.noAccountsLines(c, w, false))),
 		}
 	}
-	// nextStep is the sentence that says what to press (apply, or verify). It
-	// is never dropped, whatever the height.
+	// nextStep is the sentence that says what to press once everything is
+	// applied. While changes are pending the badge and the help bar carry the
+	// next step, so the pane does not repeat it.
 	var nextStep []string
-	switch {
-	case sh.planErr:
-	case sh.planned && sh.pending > 0:
-		nextStep = styledWrap(st.Warn, sh.km.T("tui.detail.how_pending"), w)
-	case sh.planned:
-		nextStep = styledWrap(st.OK, sh.km.T("tui.detail.how_applied"), w)
+	if !sh.planErr && sh.planned && sh.pending == 0 {
+		nextStep = styledWrap(st.Text, sh.km.T("tui.detail.how_applied"), proseW(w))
 	}
-	howDefault := styledWrap(st.Muted, tr("tui.detail.how_default", c.BaseDir, def.Name, def.Email), w)
+	howDefault := styledWrap(st.Muted, tr("tui.detail.how_default", c.BaseDir, def.Name, def.Email), proseW(w))
 	how := func(others bool) []string {
 		out := append([]string(nil), howDefault...)
 		if others && len(c.Accounts) > 1 {
-			out = append(out, styledWrap(st.Muted, tr("tui.detail.how_others"), w)...)
+			out = append(out, styledWrap(st.Muted, tr("tui.detail.how_others"), proseW(w))...)
 		}
 		return append(out, nextStep...)
 	}
@@ -1094,58 +1103,77 @@ func accountTarget(ref config.AccountRef) string {
 	return "https://" + a.Username + "@" + a.EffectiveHost() + "/" + path + "…"
 }
 
-// wrapField renders "label  value" with the value wrapped under the value
-// column instead of cut, for values that must stay readable (the remote).
-func wrapField(st *Styles, label, value string, w int) []string {
-	lc := labelCol(w)
-	var out []string
-	for i, l := range wrapUnits(value, maxInt(w-lc, 8)) {
-		head := spaces(lc)
-		if i == 0 {
-			head = pad(label, lc)
-		}
-		out = append(out, st.Label.Render(head)+st.Text.Render(l))
+// stampLines is the identity stamp of ref in w cells: on one line when it
+// fits, else wrapped (a name or an address the user typed is never cut).
+func stampLines(st *Styles, ref config.AccountRef, w int) []string {
+	if s := st.identityStamp(ref); lipgloss.Width(s) <= w {
+		return []string{s}
 	}
-	return out
+	return styledWrap(st.Text, identityStampPlain(ref), w)
 }
 
 func accountVariants(sh *shared, r rowItem, w int, ki keys.Info, haveKey bool) [][]string {
 	st := sh.st
 	a := *r.account
 	ref := config.AccountRef{Company: r.company, Account: a}
-	titleLine := st.Bold.Render(trunc(ref.String(), w))
+	titleLines := stampLines(st, ref, w)
 	example := remoteExample(ref)
 
-	var keyState string
-	if haveKey && a.Auth == config.AuthSSH {
-		pad12 := st.Label.Render(pad("", labelCol(w)))
+	auth := authTag(a.Auth)
+	if a.Auth == config.AuthHTTPS {
+		auth = tr("tui.detail.auth_https")
+	}
+	// The label column of a block is the widest label the block shows, so a
+	// variant that shows only the login and the remote does not pay for the
+	// longest label of the full one.
+	lPlatform, lUser, lEmail, lName := tr("tui.f.platform"), tr("tui.f.username"), tr("tui.f.email"), tr("tui.f.git_name_row")
+	lAuth, lRemote, lDir := tr("tui.f.auth"), tr("tui.f.remote"), tr("tui.f.dir")
+	full := []string{lPlatform, lUser, lEmail, lName, lAuth, lRemote, lDir}
+	if len(a.Orgs) > 0 {
+		full = append(full, tr("tui.f.orgs"))
+	}
+	if r.company.DefaultAccount == a.ID {
+		full = append(full, tr("tui.f.default"))
+	}
+	if a.Auth == config.AuthSSH {
+		full = append(full, tr("tui.f.alias"), tr("tui.f.key"))
+	}
+	colFull := kvCol(w, full...)
+	colCore := kvCol(w, lUser, lEmail, lAuth, lRemote, lDir)
+	colLogin := kvCol(w, lUser, lRemote)
+	colRemote := kvCol(w, lRemote)
+	// Values the user typed wrap under their label instead of being cut.
+	wf := func(col int, label, value string) []string { return kvRows(st, col, w, label, value) }
+
+	// the key state sits right under the SSH key row it describes
+	keyState := func(col int) string {
+		if !haveKey || a.Auth != config.AuthSSH {
+			return ""
+		}
+		room := maxInt(w-col, 4)
 		switch {
 		case !ki.Exists:
-			keyState = pad12 + st.Warn.Render(trunc("! "+tr("tui.key.state_missing"), maxInt(w-labelCol(w), 4)))
+			return spaces(col) + st.Warn.Render(trunc("! "+tr("tui.key.state_missing"), room))
 		case ki.Mode&0o077 != 0:
-			keyState = pad12 + st.Warn.Render(trunc("! "+tr("tui.key.state_mode", fmt.Sprintf("%04o", ki.Mode)), maxInt(w-labelCol(w), 4)))
-		default:
-			keyState = pad12 + st.OK.Render(trunc("✓ "+tr("tui.key.state_ok"), maxInt(w-labelCol(w), 4)))
+			return spaces(col) + st.Warn.Render(trunc("! "+tr("tui.key.state_mode", fmt.Sprintf("%04o", ki.Mode)), room))
 		}
+		return spaces(col) + st.OK.Render(trunc("✓ "+tr("tui.key.state_ok"), room))
 	}
 	var how []string
 	if r.company.DefaultAccount == a.ID {
-		how = styledWrap(st.Muted, tr("tui.detail.acc_default", r.company.BaseDir), w)
+		how = styledWrap(st.Muted, tr("tui.detail.acc_default", r.company.BaseDir), proseW(w))
 	} else {
-		how = styledWrap(st.Muted, tr("tui.detail.acc_other", accountTarget(ref), r.company.BaseDir, r.company.DefaultAccount), w)
+		how = styledWrap(st.Muted, tr("tui.detail.acc_other", accountTarget(ref), r.company.BaseDir, r.company.DefaultAccount), proseW(w))
 	}
-	// next is the sentence that says what to press; it is never dropped.
+	// next is the sentence for the applied state. While changes are pending
+	// the badge and the help bar carry the next step, so it is not repeated.
 	var next []string
-	switch {
-	case sh.planErr:
-	case sh.planned && sh.pending > 0:
-		next = styledWrap(st.Warn, sh.km.T("tui.detail.how_pending"), w)
-	case sh.planned:
-		next = styledWrap(st.OK, sh.km.T("tui.detail.acc_next_applied", r.company.BaseDir), w)
+	if !sh.planErr && sh.planned && sh.pending == 0 {
+		next = styledWrap(st.Text, sh.km.T("tui.detail.acc_next_applied", r.company.BaseDir), proseW(w))
 	}
 	var dup []string
 	if other, ok := duplicateOf(r.company, a); ok {
-		dup = styledWrap(st.Warn, sh.km.T("tui.detail.dup", r.company.Slug+"/"+other.ID), w)
+		dup = styledWrap(st.Warn, sh.km.T("tui.detail.dup", r.company.Slug+"/"+other.ID), proseW(w))
 	}
 	opt := func(s string) []string {
 		if s == "" {
@@ -1160,58 +1188,52 @@ func accountVariants(sh *shared, r rowItem, w int, ki keys.Info, haveKey bool) [
 		}
 		return out
 	}
-	one := func(l string) []string { return []string{l} }
 	blank := []string{""}
 
-	auth := authTag(a.Auth)
-	if a.Auth == config.AuthHTTPS {
-		auth = tr("tui.detail.auth_https")
-	}
-	// Values the user typed wrap under their label instead of being cut.
-	wf := func(label, value string) []string { return wrapField(st, label, value, w) }
-	username := wf(tr("tui.f.username"), a.Username)
-	remoteLine := wf(tr("tui.f.remote"), example)
 	var fields []string
 	for _, part := range [][]string{
-		wf(tr("tui.f.platform"), a.Platform.DisplayName()+" ("+a.EffectiveHost()+")"),
-		username,
-		wf(tr("tui.f.email"), a.Email),
-		wf(tr("tui.f.git_name"), a.Name),
-		wf(tr("tui.f.auth"), auth),
-		remoteLine,
-		wf(tr("tui.f.dir"), r.company.BaseDir),
+		wf(colFull, lPlatform, a.Platform.DisplayName()+" ("+a.EffectiveHost()+")"),
+		wf(colFull, lUser, a.Username),
+		wf(colFull, lEmail, a.Email),
+		wf(colFull, lName, a.Name),
+		wf(colFull, lAuth, auth),
+		wf(colFull, lRemote, example),
+		wf(colFull, lDir, r.company.BaseDir),
 	} {
 		fields = append(fields, part...)
 	}
 	if len(a.Orgs) > 0 {
-		fields = append(fields, wf(tr("tui.f.orgs"), strings.Join(a.Orgs, ", "))...)
+		fields = append(fields, wf(colFull, tr("tui.f.orgs"), strings.Join(a.Orgs, ", "))...)
 	}
 	if r.company.DefaultAccount == a.ID {
-		fields = append(fields, wf(tr("tui.f.default"), "★ "+tr("tui.f.default_yes"))...)
+		fields = append(fields, wf(colFull, tr("tui.f.default"), "★ "+tr("tui.f.default_yes"))...)
 	}
 	if a.Auth == config.AuthSSH {
 		path := a.SSHKey
 		if path == "" {
 			path = r.company.DefaultKeyPath(a)
 		}
-		fields = append(fields, wf(tr("tui.f.alias"), ref.Alias())...)
-		fields = append(fields, wf(tr("tui.f.key"), path)...)
+		fields = append(fields, wf(colFull, tr("tui.f.alias"), ref.Alias())...)
+		fields = append(fields, wf(colFull, tr("tui.f.key"), path)...)
+		fields = append(fields, opt(keyState(colFull))...)
 	}
 	// Compaction, richest first: everything with blank lines; everything
 	// without them; the main fields; the login, the remote and the key state; the remote
 	// alone; the remote without its label; the next step only. The remote
-	// line and the next step survive the smallest pane that fits anything.
+	// line survives the smallest pane that fits anything.
 	last := next
 	if len(last) == 0 {
-		last = how // nothing to press yet (plan not computed): say what happens
+		last = how // nothing to press yet (plan not computed, or pending): say what happens
 	}
-	core := cat(username, wf(tr("tui.f.email"), a.Email), wf(tr("tui.f.auth"), auth), remoteLine, wf(tr("tui.f.dir"), r.company.BaseDir))
+	core := cat(wf(colCore, lUser, a.Username), wf(colCore, lEmail, a.Email), wf(colCore, lAuth, auth),
+		wf(colCore, lRemote, example), wf(colCore, lDir, r.company.BaseDir))
+	remoteLine := wf(colRemote, lRemote, example)
 	return [][]string{
-		cat(one(titleLine), blank, fields, opt(keyState), blank, dup, how, next),
-		cat(one(titleLine), fields, opt(keyState), dup, how, next),
-		cat(one(titleLine), core, opt(keyState), dup, how, next),
-		cat(one(titleLine), username, remoteLine, opt(keyState), dup, how, next),
-		cat(one(titleLine), remoteLine, how, next),
+		cat(titleLines, blank, fields, blank, dup, how, next),
+		cat(titleLines, fields, dup, how, next),
+		cat(titleLines, core, opt(keyState(colCore)), dup, how, next),
+		cat(titleLines, wf(colLogin, lUser, a.Username), wf(colLogin, lRemote, example), opt(keyState(colLogin)), dup, how, next),
+		cat(titleLines, remoteLine, how, next),
 		cat(remoteLine, next),
 		cat(styledWrap(st.Text, example, w), next),
 		last,
@@ -1319,5 +1341,5 @@ func (d *detailScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 }
 
 func (d *detailScreen) View() string {
-	return d.sh.panel(tr("tui.detail.title"), detailText(d.sh, d.row, d.w-4, d.h-3, d.ki, d.have), d.w, d.h, true)
+	return d.sh.panel("", detailText(d.sh, d.row, d.w-4, d.h-2, d.ki, d.have), d.w, d.h, true)
 }

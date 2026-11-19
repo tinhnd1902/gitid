@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/tinhnd1902/gitid/internal/app"
 	"github.com/tinhnd1902/gitid/internal/config"
@@ -142,8 +143,9 @@ type formHost struct {
 	previewHead func(w int) int
 }
 
-// Preview block height: the remote line, plus up to two lines of notes when
-// the body is tall enough; the remote line alone below previewMinBody rows.
+// Preview block height: the remote line, plus the note lines it has (at most
+// two) when the body is tall enough; the remote line alone below
+// previewMinBody rows. No row is reserved for a note that is not there.
 const (
 	previewNoteRows = 2
 	previewMinBody  = 18
@@ -171,7 +173,8 @@ func (f *formHost) fixedLines() int {
 	return len(f.fixed) + 2 // values, the hint line and a blank line
 }
 
-// previewRows is the height reserved for the preview block (0 without one).
+// previewRows is the height of the preview block (0 without one): the remote
+// line(s) and the note lines there are right now.
 func (f *formHost) previewRows() int {
 	if f.preview == nil {
 		return 0
@@ -183,7 +186,7 @@ func (f *formHost) previewRows() int {
 	if f.h < previewMinBody {
 		return head
 	}
-	return head + previewNoteRows
+	return maxInt(head, len(f.preview(f.previewWidth(), head+previewNoteRows)))
 }
 
 // previewGap is the blank row between the preview and what follows it.
@@ -223,18 +226,29 @@ func (f *formHost) errLines() []string {
 	return append(ask, lines...)
 }
 
-// formRows is the height left for the form fields inside the panel.
-func (f *formHost) formRows() int {
-	return maxInt(1, f.h-3-len(f.errLines())-f.previewRows()-f.previewGap()-f.fixedLines())
+// formRowsAt is the height left for the form fields when the panel has the
+// given number of title rows.
+func (f *formHost) formRowsAt(title int) int {
+	return maxInt(1, f.h-2-title-len(f.errLines())-f.previewRows()-f.previewGap()-f.fixedLines())
 }
 
-// previewView renders the preview block, always previewRows lines high.
-func (f *formHost) previewView() []string {
+// formRows is the height left for the form fields inside the panel. The panel
+// has no title row (the breadcrumb names the form), except for the one row of
+// a form that needs it for its position.
+func (f *formHost) formRows() int { return f.formRowsAt(f.titleRows()) }
+
+// previewView renders the preview block, always previewRows lines high, with
+// the position of the focused field at the end of its first line.
+func (f *formHost) previewView(pos string) []string {
 	n := f.previewRows()
 	if n == 0 {
 		return nil
 	}
-	return splitLines(fitHeight(joinLines(f.preview(f.previewWidth(), n)), n))
+	lines := splitLines(fitHeight(joinLines(f.preview(f.previewWidth(), n)), n))
+	if pos != "" && len(f.fixed) == 0 {
+		lines[0] = rightAlign(lines[0], f.sh.st.Muted.Render(pos), maxInt(f.w-4, 10))
+	}
+	return lines
 }
 
 func (f *formHost) fixedView() []string {
@@ -242,14 +256,59 @@ func (f *formHost) fixedView() []string {
 		return nil
 	}
 	st := f.sh.st
+	var labels []string
+	for _, kv := range f.fixed {
+		labels = append(labels, kv[0])
+	}
+	w := maxInt(f.w-6, 10)
+	col := kvCol(w, labels...)
 	var out []string
 	for _, kv := range f.fixed {
-		out = append(out, st.Label.Render(pad(kv[0], 14))+st.Text.Render(kv[1]))
+		out = append(out, kvRow(st, col, w, kv[0], kv[1]))
 	}
 	if !f.compact() {
-		out = append(out, st.Faint.Render(trunc(tr("tui.form.immutable"), maxInt(f.w-6, 10))), "")
+		out = append(out, st.Muted.Render(trunc(tr("tui.form.immutable"), w)), "")
 	}
 	return out
+}
+
+// rightAlign puts right at the end of a line of w cells when both fit.
+func rightAlign(left, right string, w int) string {
+	if right == "" {
+		return left
+	}
+	if gap := w - lipgloss.Width(left) - lipgloss.Width(right); gap >= 2 {
+		return left + spaces(gap) + right
+	}
+	return left
+}
+
+// posText is "n/m", the place of the focused field, while the fields do not
+// all fit. It rides on the first line of the preview or of the read-only
+// header; a form with neither has a row of its own for it (see titleRows).
+func (f *formHost) posText() string {
+	if f.form == nil {
+		return ""
+	}
+	f.form.SetSize(maxInt(f.w-4, 1), f.formRowsAt(0))
+	if !f.form.Overflows() {
+		return ""
+	}
+	n, m := f.form.Position()
+	return fmt.Sprintf("%d/%d", n, m)
+}
+
+// titleRows is 1 when the form has no block above it to carry the position
+// and needs one, else 0.
+func (f *formHost) titleRows() int {
+	if f.preview != nil || len(f.fixed) > 0 || f.form == nil {
+		return 0
+	}
+	f.form.SetSize(maxInt(f.w-4, 1), f.formRowsAt(0))
+	if f.form.Overflows() {
+		return 1
+	}
+	return 0
 }
 
 func (f *formHost) Resize(w, h int) {
@@ -270,7 +329,12 @@ func (f *formHost) Help() []key.Binding {
 	if f.guard.asking {
 		return f.guard.helpBindings(km)
 	}
-	return []key.Binding{km.Save, km.Next, km.Cancel}
+	// enter saves on the last field and goes on to the next one before that
+	save := km.Save
+	if f.form != nil && !f.form.onLast() {
+		save = relabel(km.Save, tr("tui.key.continue"))
+	}
+	return []key.Binding{save, km.Next, km.Cancel}
 }
 
 // ContextHelp makes "enter" the next step of every form (the answer to the
@@ -294,7 +358,7 @@ func (f *formHost) shownError() string {
 
 func (f *formHost) view() string {
 	st := f.sh.st
-	title := f.title
+	title := ""
 	var body string
 	switch {
 	case f.saving:
@@ -308,19 +372,24 @@ func (f *formHost) view() string {
 			}
 			lines = append(lines, st.Err.Render(l))
 		}
-		if pv := f.previewView(); len(pv) > 0 {
+		titleRows := f.titleRows()
+		pos := f.posText()
+		if titleRows > 0 {
+			title = st.Muted.Render(pos)
+		}
+		if pv := f.previewView(pos); len(pv) > 0 {
 			lines = append(lines, pv...)
 			if f.previewGap() > 0 {
 				lines = append(lines, "")
 			}
 		}
-		lines = append(lines, f.fixedView()...)
-		f.form.SetSize(maxInt(f.w-4, 1), f.formRows())
-		f.form.compact = f.compact()
-		if f.form.Overflows() {
-			n, m := f.form.Position()
-			title += st.Faint.Render(fmt.Sprintf("  %d/%d", n, m))
+		fixed := f.fixedView()
+		if pos != "" && len(fixed) > 0 && f.preview == nil {
+			fixed[0] = rightAlign(fixed[0], st.Muted.Render(pos), maxInt(f.w-4, 10))
 		}
+		lines = append(lines, fixed...)
+		f.form.SetSize(maxInt(f.w-4, 1), f.formRowsAt(titleRows))
+		f.form.compact = f.compact()
 		lines = append(lines, f.form.View())
 		body = joinLines(lines)
 	}
@@ -640,7 +709,7 @@ func (f *accountForm) previewLines(w, rows int) []string {
 		return lines
 	}
 	var note string
-	style := st.Faint
+	style := st.Muted
 	loginErr := f.loginError()
 	var elsewhere []string
 	if acc.Username != "" {
@@ -660,15 +729,22 @@ func (f *accountForm) previewLines(w, rows int) []string {
 	case acc.Username != "":
 		note = tr("tui.form.preview_id", acc.ID)
 	}
-	if note == "" {
-		return lines
+	if note != "" {
+		noteLines := wrapLines(note, w)
+		if left := rows - len(lines); len(noteLines) > left {
+			noteLines = noteLines[:left]
+		}
+		for _, l := range noteLines {
+			lines = append(lines, style.Render(l))
+		}
 	}
-	noteLines := wrapLines(note, w)
-	if left := rows - len(lines); len(noteLines) > left {
-		noteLines = noteLines[:left]
-	}
-	for _, l := range noteLines {
-		lines = append(lines, style.Render(l))
+	// once the name and a valid email are in, say who the commits will be by
+	// (only when it fits on a line: what the user typed is never cut)
+	if name, email := strings.TrimSpace(f.name), strings.TrimSpace(f.email); acc.Username != "" && name != "" && email != "" && len(lines) < rows && f.sh.svc.ValidateField("email", email) == "" {
+		acc.Name, acc.Email = name, email
+		if stamp := st.identityStamp(config.AccountRef{Company: f.company(), Account: acc}); lipgloss.Width(stamp) <= w {
+			lines = append(lines, stamp)
+		}
 	}
 	return lines
 }

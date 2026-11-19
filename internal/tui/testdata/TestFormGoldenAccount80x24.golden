@@ -1,24 +1,24 @@
-  gitid   Danh sách › Thêm tài khoản vào acme                            ~  test
+  gitid   Tài khoản › Thêm tài khoản vào acme                                  ~
 ╭──────────────────────────────────────────────────────────────────────────────╮
-│ Thêm tài khoản vào acme  2/7                                                 │
-│ Remote sẽ là: https://dora@github.com/<owner>/<repo>.git                     │
-│ ID trong gitid: dora (tự đặt theo username)                                  │
-│                                                                              │
+│ Remote sẽ là https://dora@github.com/<owner>/<repo>.git                  2/7 │
+│ ID trong gitid dora (tự đặt theo username)                                   │
 │                                                                              │
 │ ┃ Username                                                                   │
-│ ┃ Tên đăng nhập (login) trên nền tảng, như trong URL hồ sơ:                  │
-│ ┃ github.com/<login>. Không phải email, không phải tên hiển thị.             │
+│ ┃ Tên đăng nhập trên nền tảng, như trong github.com/<login>.                 │
 │ ┃ > dora                                                                     │
 │                                                                              │
-│   Tên git                                                                    │
-│   Tên hiển thị trong commit (user.name), vd Alice Tran. Khác với username.   │
+│   Tên trong commit                                                           │
+│   Tên hiện ở mỗi commit (user.name), vd Alice Tran.                          │
 │     Alice Nguyen                                                             │
 │                                                                              │
 │   Email                                                                      │
-│   Chỉ để ghi tác giả commit (user.email), gitid không xác minh. Dùng email   │
-│   đã thêm trên nền tảng, hoặc email noreply: GitHub → Settings → Emails      │
-│   (ID+login@users.noreply.github.com).                                       │
+│   Email đã thêm trên nền tảng, hoặc email noreply. gitid không xác minh.     │
+│     vd: alice@acme.com                                                       │
+│                                                                              │
+│   Xác thực                                                                   │
+│   HTTPS dễ nhất. SSH dùng SSH key riêng, gitid có thể tạo giúp.              │
+│   ◉ HTTPS (khuyên dùng)                                                      │
 ╰──────────────────────────────────────────────────────────────────────────────╯
-                                                    ● 11 thay đổi chưa áp dụng  
- Bước này: ▸ enter lưu / tiếp  tab ô tiếp theo                                  
+                                                                                
+ Bước này: ▸ enter tiếp  tab ô tiếp theo                                        
  Luôn có:  esc hủy                                                              

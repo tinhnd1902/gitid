@@ -105,6 +105,20 @@ func (c *checkScreen) notRepo() bool {
 
 func (c *checkScreen) canFix() bool { return c.res.Account != "" && c.res.Remote != "" }
 
+// needsFix says the check found a problem that fixing the remote can clear
+// ("not applied yet" is a note about the configuration, not about the repo).
+func (c *checkScreen) needsFix() bool {
+	if c.phase != chResult || !c.canFix() {
+		return false
+	}
+	for _, wk := range c.res.Warnings {
+		if wk != app.WarnPendingApply {
+			return true
+		}
+	}
+	return false
+}
+
 func (c *checkScreen) Help() []key.Binding {
 	km := c.sh.km
 	switch c.phase {
@@ -125,11 +139,12 @@ func (c *checkScreen) Help() []key.Binding {
 	return nil
 }
 
-// ContextHelp makes clone the next step when the folder is not a repository.
+// ContextHelp makes clone the next step when the folder is not a repository,
+// and the fix of the remote when the check found a problem it can clear.
 func (c *checkScreen) ContextHelp() []helpItem {
 	var out []helpItem
 	for i, b := range c.Help() {
-		out = append(out, helpItem{b: b, primary: i == 0 && c.notRepo()})
+		out = append(out, helpItem{b: b, primary: i == 0 && (c.notRepo() || c.needsFix())})
 	}
 	return out
 }
@@ -272,7 +287,7 @@ func (c *checkScreen) View() string {
 			b.WriteString(st.Text.Render(wrap(c.notRepoNext(), inner)))
 			break
 		}
-		b.WriteString(st.Faint.Render(c.sh.km.T("tui.check.retry_hint")))
+		b.WriteString(st.Text.Render(c.sh.km.T("tui.check.retry_hint")))
 	case chFixConfirm:
 		b.WriteString(st.Bold.Render(tr("tui.fix.title", c.fix.Remote, c.fix.Account)) + "\n\n")
 		b.WriteString(st.Err.Render("- "+trunc(c.fix.Old, inner-2)) + "\n")
@@ -281,7 +296,8 @@ func (c *checkScreen) View() string {
 	case chResult:
 		b.WriteString(c.resultView(inner))
 	}
-	return c.sh.panel(tr("tui.check.title"), b.String(), c.w, c.h, true)
+	// the breadcrumb already says "Kiểm tra repo": no title row
+	return c.sh.panel("", b.String(), c.w, c.h, true)
 }
 
 // notRepoNext says what to do instead: open a terminal in a repo (named after
@@ -295,39 +311,54 @@ func (c *checkScreen) notRepoNext() string {
 
 func (c *checkScreen) resultView(w int) string {
 	st := c.sh.st
-	var b strings.Builder
-	row := func(label, value string) {
-		if value == "" {
-			return
-		}
-		b.WriteString(st.Label.Render(pad(label, 12)) + st.Text.Render(trunc(value, maxInt(w-12, 4))) + "\n")
-	}
 	r := c.res
-	row(tr("tui.f.repo"), c.sh.svc.Env.Contract(r.Repo))
-	row(tr("tui.f.remote"), r.Remote)
-	acc := r.Account
-	if acc != "" && r.Reason != "" {
-		acc += "  (" + tr("cli.reason."+r.Reason) + ")"
+	var b strings.Builder
+	// the account is named the way gitid names an identity everywhere
+	acc := st.Text.Render(r.Account)
+	if ref, err := c.sh.cfg.ParseRef(r.Account); err == nil && r.Account != "" {
+		acc = st.identityStamp(ref)
 	}
-	row(tr("tui.f.account"), acc)
-	row(tr("tui.f.expected"), r.ExpectedEmail)
 	eff := r.EffectiveEmail
 	if eff != "" && r.EmailOrigin != "" {
-		eff += "  (" + c.origin(r.EmailOrigin) + ")"
+		eff += " · " + c.origin(r.EmailOrigin)
 	}
+	reason := ""
+	if r.Account != "" && r.Reason != "" {
+		reason = tr("cli.reason." + r.Reason)
+	}
+	col := kvCol(w, tr("tui.f.repo"), tr("tui.f.remote"), tr("tui.f.account"), tr("tui.f.reason"), tr("tui.f.expected"), tr("tui.f.effective"))
+	row := func(label, value string) {
+		if value != "" {
+			b.WriteString(kvRow(st, col, w, label, value) + "\n")
+		}
+	}
+	row(tr("tui.f.repo"), c.sh.svc.Env.Contract(r.Repo))
+	row(tr("tui.f.remote"), r.Remote)
+	if r.Account != "" {
+		b.WriteString(st.Label.Render(pad(tr("tui.f.account"), col)) + trunc(acc, maxInt(w-col, 4)) + "\n")
+	}
+	row(tr("tui.f.reason"), reason)
+	row(tr("tui.f.expected"), r.ExpectedEmail)
 	row(tr("tui.f.effective"), eff)
 	b.WriteString("\n")
-	if r.OK() {
-		b.WriteString(st.OK.Render("✓ " + tr("cli.check.ok")))
-	}
+	// "not applied yet" is a note about the configuration, not a failure of
+	// the repo: the verdict looks at the other warnings
+	var real, pending []string
 	for _, wk := range r.Warnings {
-		b.WriteString(st.Warn.Render("! "+wrap(tr(wk), w-2)) + "\n")
+		if wk == app.WarnPendingApply {
+			pending = append(pending, wk)
+		} else {
+			real = append(real, wk)
+		}
 	}
-	if c.canFix() && !r.OK() {
-		b.WriteString("\n" + st.Faint.Render(c.sh.km.T("tui.check.fix_hint")))
+	if len(real) == 0 {
+		b.WriteString(st.OK.Render("✓ "+tr("cli.check.ok")) + "\n")
+	}
+	for _, wk := range append(real, pending...) {
+		b.WriteString(st.Warn.Render("! "+wrap(trTUI(wk), proseW(w)-2)) + "\n")
 	}
 	if c.note != "" {
-		b.WriteString("\n\n" + st.Info.Render(wrap(c.note, w)))
+		b.WriteString("\n\n" + st.Text.Render("i "+wrap(c.note, proseW(w))))
 	}
 	return strings.TrimRight(b.String(), "\n")
 }

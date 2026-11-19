@@ -4,10 +4,10 @@ package i18n
 // and the Online strings the Gitea, Bitbucket and Azure DevOps listings add.
 var enCLIRepos = map[string]string{
 	// gitid repos
-	"cli.repos.short":         "List the repositories of your companies (local clones, or online with --online)",
+	"cli.repos.short":         "List the repos of your companies (local clones, or online with --online)",
 	"cli.flag.company":        "only this company (slug)",
-	"cli.flag.depth":          "how deep to look for repositories under a company folder (default 4)",
-	"cli.flag.problems":       "show only the repositories that need attention",
+	"cli.flag.depth":          "how deep to look for repos under a company folder (default 4)",
+	"cli.flag.problems":       "show only the repos that need attention",
 	"cli.flag.online":         "list what each account can see on its platform (needs a token)",
 	"cli.flag.local":          "with --online, list the local clones too",
 	"cli.flag.max_pages":      "most pages to fetch per account (default 50)",
@@ -43,8 +43,8 @@ var enCLIRepos = map[string]string{
 	"tui.repos.online.no_token.gitea":       "No token. Set %[1]s, or run: gitid token set %[2]s",
 	"tui.repos.online.no_token.bitbucket":   "No token. Set %[1]s, or run: gitid token set %[2]s",
 	"tui.repos.online.no_token.azure":       "No token. Set %[1]s to a PAT, or run: gitid token set %[2]s",
-	"tui.repos.online.hint.scope.gitea":     "Give the token the read:repository and read:organization scopes.",
-	"tui.repos.online.hint.scope.bitbucket": "Give the API token the read:repository:bitbucket and read:workspace:bitbucket scopes.",
+	"tui.repos.online.hint.scope.gitea":     "Give the token the read:repo and read:organization scopes.",
+	"tui.repos.online.hint.scope.bitbucket": "Give the API token the read:repo:bitbucket and read:workspace:bitbucket scopes.",
 	"tui.repos.online.hint.scope.azure":     "Give the PAT the Code (Read) scope for the organization.",
 	"tui.repos.online.hint.azure_signin":    "Create a new PAT for the organization with the Code (Read) scope.",
 	"tui.repos.online.hint.azure_orgs":      "Azure could not list your organizations with this token. Add them to orgs of the account.",

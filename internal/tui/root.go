@@ -362,12 +362,10 @@ func (m *Model) headerView() string {
 		}
 	}
 	left += "  " + trail
+	// the folder gitid was started in; the version lives in the "?" overlay
 	right := ""
 	if m.sh.cwd != "" {
-		right = st.Faint.Render(truncLeft(m.sh.svc.Env.Contract(m.sh.cwd), maxInt(m.w/3, 8)))
-	}
-	if m.sh.version != "" {
-		right += st.Faint.Render("  " + m.sh.version)
+		right = st.Muted.Render(truncLeft(m.sh.svc.Env.Contract(m.sh.cwd), maxInt(m.w/3, 8)))
 	}
 	avail := m.w - lipgloss.Width(right) - 2
 	left = trunc(left, maxInt(avail, 8))
@@ -382,49 +380,51 @@ func (m *Model) headerView() string {
 // maxBadgeSlug is the longest company slug quoted in the status badge.
 const maxBadgeSlug = 16
 
-// syncBadge is the right part of the status bar. It answers "what do I do
-// next?" in a fixed priority order, and shows the success mark only when
-// there is nothing left to do (no pending change and no company without an
-// account).
+// syncBadge is the right part of the status bar. It states a fact (what is
+// not applied, what is missing) and names no key: the help bar carries the
+// next step. It shows the success mark only when there is nothing left to do
+// (no pending change and no company without an account). It is shown on the
+// screens that can act on the fact: the list, the detail, the repo browser and
+// the apply screen; a form or a dialog has its own question.
 func (m *Model) syncBadge() string {
 	sh, st := m.sh, m.sh.st
-	// Only the list and the detail screen handle the keys the badge names.
-	var actionable bool
 	switch m.top().(type) {
-	case *listScreen, *detailScreen:
-		actionable = true
-	}
-	t := func(k string, args ...any) string {
-		if !actionable {
-			k += "_plain"
-		}
-		return sh.km.T(k, args...)
+	case *listScreen, *detailScreen, *reposScreen, *confirmScreen:
+	default:
+		return ""
 	}
 	switch {
 	case !sh.loaded:
 		return ""
 	case sh.planErr:
-		return st.Warn.Render("! " + t("tui.status.plan_failed"))
+		return st.Warn.Render("! " + tr("tui.status.plan_failed"))
 	case !sh.planned:
 		return ""
 	case len(sh.cfg.Companies) == 0:
-		return st.Info.Render("i " + t("tui.status.no_company"))
+		return st.Text.Render("i " + tr("tui.status.no_company"))
 	case sh.pending > 0:
-		txt := t("tui.status.pending", sh.pending)
+		txt := trCount("tui.status.pending", sh.pending)
 		if m.w < 70 {
-			txt = t("tui.status.pending_short", sh.pending)
+			txt = tr("tui.status.pending_short", sh.pending)
 		}
 		return st.Badge.Render("● " + txt)
 	}
 	if empty := emptyCompanies(sh.cfg); len(empty) == 1 {
 		slug := trunc(empty[0], maxBadgeSlug)
-		return st.Warn.Render("! " + t("tui.status.empty_company", slug))
+		return st.Warn.Render("! " + tr("tui.status.empty_company", slug))
 	} else if len(empty) > 1 {
 		return st.Warn.Render("! " + tr("tui.status.empty_companies", len(empty)))
+	}
+	if c, ok := m.top().(*confirmScreen); ok && c.state == confDone {
+		return "" // the screen itself says "applied": not twice
 	}
 	return st.OK.Render("✓ " + tr("tui.status.synced"))
 }
 
+// statusView is the status line: the newest message on the left and the badge
+// on the right. When both cannot fit, an error is never cut to keep the badge:
+// the badge gives way (it comes back when the error is replaced). A message
+// that expires also wins over the badge.
 func (m *Model) statusView() string {
 	st := m.sh.st
 	left := ""
@@ -433,10 +433,7 @@ func (m *Model) statusView() string {
 		left = st.levelStyle(m.status.level).Render(levelIcon(m.status.level) + " " + first)
 	}
 	right := m.syncBadge()
-	// A message that expires (not an error) wins over the badge when both
-	// cannot fit: the badge comes back when the message goes.
-	if left != "" && right != "" && m.status.level != levelErr &&
-		lipgloss.Width(left)+lipgloss.Width(right)+3 > m.w {
+	if left != "" && right != "" && lipgloss.Width(left)+lipgloss.Width(right)+3 > m.w {
 		right = ""
 	}
 	right = trunc(right, maxInt(m.w-2, 4))

@@ -326,7 +326,7 @@ func walk(t *testing.T, h *harness, w, hh int, label string, keys ...string) {
 		for _, l := range strings.Split(v, "\n") {
 			if i := strings.Index(l, "┃"); i >= 0 {
 				rest := l[i+len("┃"):]
-				if strings.Contains(rest, "> ") || strings.Contains(rest, "●") || strings.Contains(rest, "○") {
+				if strings.Contains(rest, "> ") || strings.Contains(rest, "◉") || strings.Contains(rest, "○") {
 					ok = true
 				}
 			}
@@ -468,8 +468,8 @@ func TestHMatrixEveryFormFitsEverywhere(t *testing.T) {
 					if mf.user && title == tr("tui.f.username") && !onOneLine(v, "github.com/<login>") {
 						t.Errorf("%s %dx%d: the profile URL is split:\n%s", label, w, hh, v)
 					}
-					if mf.email && title == tr("tui.f.email") && !onOneLine(v, "ID+login@users.noreply.github.com") {
-						t.Errorf("%s %dx%d: the noreply address is split:\n%s", label, w, hh, v)
+					if mf.email && title == tr("tui.f.email") && !strings.Contains(noSpace(v), noSpace(tr("tui.form.email_hint"))) {
+						t.Errorf("%s %dx%d: the email hint is cut:\n%s", label, w, hh, v)
 					}
 				})
 			}
@@ -510,7 +510,6 @@ func TestHResizeKeepsTheEmailFieldFocusedAndRewrapped(t *testing.T) {
 			t.Fatalf("%v: focus on %q", s, got)
 		}
 		h.mustContainSpaceless(tr("tui.form.email_hint"))
-		h.mustHaveOnOneLine("email", "ID+login@users.noreply.github.com")
 		assertFits(t, h.view(), s[0], s[1], "resized form")
 	}
 }

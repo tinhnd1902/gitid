@@ -455,7 +455,7 @@ func TestESC6DeleteEscCancels(t *testing.T) {
 
 // ---- discard question in forms ----
 
-const discardVi = "Bỏ những gì đã nhập? y/n"
+const discardVi = "Bỏ những gì đã gõ? y/n"
 
 func TestDIS1UnchangedFormClosesAtOnce(t *testing.T) {
 	h := newHarness(t, basicCfg())
@@ -802,6 +802,38 @@ func TestUX11FaintContrast(t *testing.T) {
 	if r := ratio(colFaint.Dark, "#1E1E1E"); r < 4.5 {
 		t.Errorf("dark faint contrast %.2f", r)
 	}
+	// every text role clears 4.5:1 on all the backgrounds terminals use:
+	// white and Solarized light, black, #1E1E1E, #1E1E2E and One Dark
+	roles := map[string]lipgloss.AdaptiveColor{
+		"accent": colAccent, "text": colText, "muted": colMuted, "ok": colOK, "warn": colWarn, "err": colErr,
+	}
+	for name, c := range roles {
+		for _, bg := range []string{"#FFFFFF", "#FDF6E3"} {
+			if r := ratio(c.Light, bg); r < 4.5 {
+				t.Errorf("light %s on %s: contrast %.2f", name, bg, r)
+			}
+		}
+		for _, bg := range []string{"#000000", "#1E1E1E", "#1E1E2E", "#282C34"} {
+			if r := ratio(c.Dark, bg); r < 4.5 {
+				t.Errorf("dark %s on %s: contrast %.2f", name, bg, r)
+			}
+		}
+	}
+	// the text on the cursor row and on the brand pill stays readable too
+	for name, c := range map[string]lipgloss.AdaptiveColor{"text": colText, "muted": colMuted} {
+		if r := ratio(c.Light, colSelBg.Light); r < 4.5 {
+			t.Errorf("light %s on the selected row: contrast %.2f", name, r)
+		}
+		if r := ratio(c.Dark, colSelBg.Dark); r < 4.5 {
+			t.Errorf("dark %s on the selected row: contrast %.2f", name, r)
+		}
+	}
+	if r := ratio(colOnAcc.Light, colAccent.Light); r < 4.5 {
+		t.Errorf("light text on the accent: contrast %.2f", r)
+	}
+	if r := ratio(colOnAcc.Dark, colAccent.Dark); r < 4.5 {
+		t.Errorf("dark text on the accent: contrast %.2f", r)
+	}
 }
 
 func TestUX12EnterOnTheApplyReviewSaysWhichKeyApplies(t *testing.T) {
@@ -817,8 +849,8 @@ func TestUX13DoneSSHHintIsAMultiStepInstruction(t *testing.T) {
 	h.applyToDone()
 	h.resize(120, 50)
 	h.mustContainPlain(defKM.T("tui.confirm.next_ssh"))
-	if !strings.Contains(defKM.T("tui.confirm.next_ssh"), "enter") {
-		t.Fatal("the hint must say how to get back to the list")
+	if !strings.Contains(defKM.T("tui.confirm.next_ssh"), tr("tui.list.title")) {
+		t.Fatal("the hint must say where to find the account: on the Accounts screen")
 	}
 }
 

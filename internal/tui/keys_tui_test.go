@@ -110,34 +110,36 @@ func TestTK5DetailHintNamesTheKey(t *testing.T) {
 	// the company detail says how to verify
 	openDetail(h, "personal")
 	want := h.m.sh.km.T("tui.detail.how_applied")
-	if !strings.Contains(want, "bấm v") {
+	if !strings.Contains(want, "Bấm v") {
 		t.Fatalf("hint %q", want)
 	}
 	h.mustContainPlain(want)
 	h.key("esc")
-	// the account detail names the key in its next-step line
+	// the account detail names no key (the help bar does): the rebound key is there
 	openDetail(h, "personal/tinhnd")
 	want = h.m.sh.km.T("tui.detail.acc_next_applied", "~/Code/personal/")
-	if !strings.Contains(want, "hoặc v ") {
+	if strings.Contains(want, " v ") || strings.Contains(want, "Bấm") {
 		t.Fatalf("hint %q", want)
 	}
 	h.mustContainPlain(want)
+	hasV := false
+	for _, it := range h.m.helpBarItems().all() {
+		hasV = hasV || it.b.Help().Key == "v"
+	}
+	if !hasV {
+		t.Fatalf("the rebound check key is not on the help bar: %q", h.helpLine())
+	}
 }
 
 func TestTK6DoneScreenStepAndKey(t *testing.T) {
 	h := newHarnessKeys(t, basicCfg(), "check: v\n")
 	h.applyToDone()
-	km := h.m.sh.km
-	if !strings.Contains(km.T("tui.confirm.next_check", "x"), "bấm v để kiểm tra") {
-		t.Fatalf("hint %q", km.T("tui.confirm.next_check", "x"))
+	// the help bar carries the rebound check key; the body has no step for it
+	if hb := plain(h.helpLine()); !strings.HasPrefix(hb, "▸ c ") || !strings.Contains(hb, "v "+tr("tui.key.check")) {
+		t.Fatalf("help bar %q", hb)
 	}
-	h.mustContainPlain("bấm v để kiểm tra")
-	// the step label is the key: "2  v  Kiểm tra: ..."
-	if !regexp.MustCompile(`2\s+v\s+Kiểm tra`).MatchString(plain(h.view())) {
-		t.Fatalf("the check step does not carry the label v:\n%s", h.view())
-	}
-	if !regexp.MustCompile(`1\s+c\s+`).MatchString(plain(h.view())) {
-		t.Fatalf("the clone step does not carry the label c:\n%s", h.view())
+	if stepKeyRe.MatchString(rawFrame(h.view())) {
+		t.Fatalf("the done screen repeats a key as a step:\n%s", h.view())
 	}
 	noEffect(t, h, "k")
 	h.key("v")
@@ -148,9 +150,13 @@ func TestTK6DoneScreenStepAndKey(t *testing.T) {
 
 func TestTK7PendingBadgeAndApplyKey(t *testing.T) {
 	h := newHarnessKeys(t, basicCfg(), "apply: P\n")
-	want := h.m.sh.km.T("tui.status.pending", h.m.sh.pending)
-	if !strings.Contains(want, "bấm P") || !strings.Contains(h.badge(), want) {
+	// the badge states the fact; the help bar names the (rebound) key
+	want := trCount("tui.status.pending", h.m.sh.pending)
+	if !strings.Contains(h.badge(), want) {
 		t.Fatalf("badge %q, want %q", h.badge(), want)
+	}
+	if hb := h.helpLine(); !strings.HasPrefix(hb, "▸ P "+tr("tui.key.apply")) {
+		t.Fatalf("help bar %q", hb)
 	}
 	noEffect(t, h, "p")
 	h.key("P")
@@ -165,8 +171,11 @@ func TestTK8WelcomeUsesAddCompanyKey(t *testing.T) {
 	if !regexp.MustCompile(`1\s+N\s+`).MatchString(v) {
 		t.Fatalf("welcome step 1 has no label N:\n%s", h.view())
 	}
-	if want := h.m.sh.km.T("tui.status.no_company"); !strings.Contains(want, "bấm N") || !strings.Contains(h.badge(), want) {
+	if want := tr("tui.status.no_company"); !strings.Contains(h.badge(), want) {
 		t.Fatalf("badge %q, want %q", h.badge(), want)
+	}
+	if hb := h.helpLine(); !strings.Contains(hb, "N "+tr("tui.key.add_company")) {
+		t.Fatalf("help bar %q", hb)
 	}
 	noEffect(t, h, "A")
 	h.key("N")
@@ -258,9 +267,10 @@ func TestTK13YesNoKeys(t *testing.T) {
 	noEffect(t, h, "y")
 	h.key("o")
 	h.waitReady()
+	// the question is gone from the pane; the help bar carries the rebound keys
 	h.mustContainPlain(h.m.sh.km.T("tui.confirm.question"))
-	if q := h.m.sh.km.T("tui.confirm.question"); !strings.Contains(q, "o ") || !strings.Contains(q, "m ") {
-		t.Fatalf("question %q", q)
+	if bar := plain(h.helpLine()); !strings.HasPrefix(bar, "▸ o "+tr("tui.confirm.apply")) || !strings.Contains(bar, "m/esc") {
+		t.Fatalf("help bar %q", bar)
 	}
 }
 
@@ -310,13 +320,13 @@ func TestTK16English(t *testing.T) {
 	i18n.SetLang("en")
 	defer i18n.SetLang("vi")
 	h := newHarnessKeys(t, oneAccCfg(), "check: v\napply: P\n")
-	if !strings.Contains(h.badge(), "press P") {
-		t.Fatalf("badge %q", h.badge())
+	if hb := h.helpLine(); !strings.HasPrefix(hb, "▸ P preview and apply") {
+		t.Fatalf("help bar %q", hb)
 	}
 	h.apply()
 	h.resize(60, 24)
 	openDetail(h, "personal")
-	h.mustContainPlain("press v")
+	h.mustContainPlain("Press v")
 }
 
 func TestTK17OverlayFooterWarns(t *testing.T) {
@@ -431,20 +441,12 @@ func TestSTALE4StaleRefusalKeepsTheCustomKeymap(t *testing.T) {
 // hintArgs gives each message of hintKeys a dummy for every argument the call
 // site passes after the key labels, of the kind the verb wants.
 var hintArgs = map[string][]any{
-	"tui.status.pending":             {3},
-	"tui.status.pending_short":       {3},
-	"tui.status.account_saved":       {"acme/alice"},
-	"tui.status.empty_company":       {"acme"},
 	"tui.status.company_created":     {"acme"},
 	"tui.confirm.empty_no_accounts":  {"acme"},
-	"tui.confirm.next_check":         {"~/Code/acme"},
 	"tui.check.not_repo_next":        {"~/Code/acme/"},
-	"tui.list.no_accounts_hint":      {"acme"},
-	"tui.detail.acc_next_applied":    {"~/Code/acme/"},
 	"tui.detail.dup":                 {"acme/alice"},
 	"tui.form.err.dup_account":       {"alice", "github.com"},
 	"tui.form.warn.username_changed": {"olduser"},
-	"tui.repos.hint.fix":             {"https://alice@github.com/org/repo.git"},
 }
 
 var unindexedVerb = regexp.MustCompile(`%[-+# 0-9.*]*[a-zA-Z]`)
@@ -539,9 +541,9 @@ func TestI18N3PlainBadgesTakeNoKeyArgs(t *testing.T) {
 		key  string
 		args []any
 	}{
-		{"tui.status.pending_plain", []any{3}}, {"tui.status.pending_short_plain", []any{3}},
-		{"tui.status.no_company_plain", nil}, {"tui.status.empty_company_plain", []any{"acme"}},
-		{"tui.status.plan_failed_plain", nil},
+		{"tui.status.pending_one", []any{1}}, {"tui.status.pending_many", []any{3}}, {"tui.status.pending_short", []any{3}},
+		{"tui.status.no_company", nil}, {"tui.status.empty_company", []any{"acme"}},
+		{"tui.status.plan_failed", nil},
 	} {
 		if _, ok := hintKeys[c.key]; ok {
 			t.Errorf("%s must not be a hint message", c.key)

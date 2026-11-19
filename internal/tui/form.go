@@ -280,6 +280,10 @@ func (f *form) advance(submit bool) bool {
 	return true
 }
 
+// onLast reports whether the focused field is the last visible one, where
+// enter saves instead of moving on.
+func (f *form) onLast() bool { return f.nextVisible(f.focus) < 0 }
+
 // retreat moves to the previous visible field without validating.
 func (f *form) retreat() {
 	if n := f.prevVisible(f.focus); n >= 0 {
@@ -454,7 +458,7 @@ func (f *form) parts(i int, section string) fparts {
 	cw := f.cw()
 	p := fparts{section: section, title: ff.title}
 	if h := ff.hintText(); h != "" {
-		p.hints = wrapUnits(h, cw)
+		p.hints = wrapUnits(h, minInt(cw, measure))
 	}
 	switch ff.kind {
 	case fieldInput:
@@ -541,7 +545,7 @@ func (f *form) optionRows(labels []string, cur int, inline, focused bool) ([]str
 	for i, label := range labels {
 		mark, style := "○ ", off
 		if i == cur {
-			mark, style = "● ", on
+			mark, style = "◉ ", on
 		}
 		text := mark + label
 		w := lipgloss.Width(text)

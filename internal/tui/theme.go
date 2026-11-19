@@ -8,24 +8,27 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/tinhnd1902/gitid/internal/config"
 	"github.com/tinhnd1902/gitid/internal/platform"
 )
 
 // Palette: one set of adaptive colors shared by every screen so that the
 // interface stays cohesive on light and dark terminals.
 var (
+	// accent marks what has the keyboard: the focused border, the focused
+	// field, the cursor, the chosen item, the brand pill and the spinner.
+	// Nothing else uses it.
 	colAccent = lipgloss.AdaptiveColor{Light: "#5B3FD9", Dark: "#A594FF"}
-	colTeal   = lipgloss.AdaptiveColor{Light: "#0B7F7B", Dark: "#5EEAD4"}
-	colText   = lipgloss.AdaptiveColor{Light: "#1B1F2A", Dark: "#E7E9F0"}
-	colMuted  = lipgloss.AdaptiveColor{Light: "#5F6677", Dark: "#9097AB"}
-	colFaint  = lipgloss.AdaptiveColor{Light: "#6E7587", Dark: "#80879C"}
-	colLine   = lipgloss.AdaptiveColor{Light: "#C9CEDA", Dark: "#3B4157"}
-	colSelBg  = lipgloss.AdaptiveColor{Light: "#E8E4FF", Dark: "#2C2F4A"}
-	colOK     = lipgloss.AdaptiveColor{Light: "#177A3C", Dark: "#4ADE80"}
-	colWarn   = lipgloss.AdaptiveColor{Light: "#A15C07", Dark: "#FBBF24"}
-	colErr    = lipgloss.AdaptiveColor{Light: "#B42318", Dark: "#F87171"}
-	colInfo   = lipgloss.AdaptiveColor{Light: "#0B6BA8", Dark: "#7DD3FC"}
-	colOnAcc  = lipgloss.AdaptiveColor{Light: "#FFFFFF", Dark: "#14121F"}
+	colText   = lipgloss.AdaptiveColor{Light: "#1F2328", Dark: "#E6EDF3"}
+	colMuted  = lipgloss.AdaptiveColor{Light: "#59636E", Dark: "#9198A1"}
+	// colFaint is an alias of muted: there is one grey for secondary text.
+	colFaint = colMuted
+	colLine  = lipgloss.AdaptiveColor{Light: "#D1D9E0", Dark: "#3D444D"}
+	colSelBg = lipgloss.AdaptiveColor{Light: "#EEEBFF", Dark: "#2A2B45"}
+	colOK    = lipgloss.AdaptiveColor{Light: "#1A7F37", Dark: "#56D364"}
+	colWarn  = lipgloss.AdaptiveColor{Light: "#9A6700", Dark: "#E3B341"}
+	colErr   = lipgloss.AdaptiveColor{Light: "#CF222E", Dark: "#FF7B72"}
+	colOnAcc = lipgloss.AdaptiveColor{Light: "#FFFFFF", Dark: "#14121F"}
 )
 
 // Styles is the single theme used by the whole TUI.
@@ -35,19 +38,19 @@ type Styles struct {
 	CrumbSep       lipgloss.Style
 	Text           lipgloss.Style
 	Muted          lipgloss.Style
-	Faint          lipgloss.Style
+	Faint          lipgloss.Style // alias of Muted: there is one grey
 	Accent         lipgloss.Style
 	Bold           lipgloss.Style
 	OK             lipgloss.Style
 	Warn           lipgloss.Style
 	Err            lipgloss.Style
-	Info           lipgloss.Style
+	Info           lipgloss.Style // text colour; the "i" glyph carries the level
 	Panel          lipgloss.Style // blurred panel
 	PanelFocus     lipgloss.Style // focused panel
 	PanelActive    lipgloss.Style // the pane that has the keyboard when two panes are shown (heavy border)
 	PanelTitle     lipgloss.Style
 	PanelTitleBlur lipgloss.Style // title of a pane that does not have the keyboard
-	Label          lipgloss.Style // "Email:" style labels
+	Label          lipgloss.Style // "Email" style labels
 	Selected       lipgloss.Style // selected list row
 	Button         lipgloss.Style
 	ButtonOn       lipgloss.Style
@@ -57,11 +60,9 @@ type Styles struct {
 	DiffHunk       lipgloss.Style
 	DiffMeta       lipgloss.Style
 	StatusBar      lipgloss.Style
-	Badge          lipgloss.Style // highlighted status badge (pending changes)
+	Badge          lipgloss.Style // pending-changes badge: warn colour, no fill
 	HelpPrimary    lipgloss.Style // the next-step item of the help bar
 	HelpLabel      lipgloss.Style // "This row:" / "Always:" in front of a help row
-	HelpAlwaysKey  lipgloss.Style // keys of row 2 while the row labels are hidden
-	HelpAlwaysDesc lipgloss.Style
 	HelpSelected   lipgloss.Style // the selected row of the "?" overlay
 	Help           help.Styles
 	Spinner        spinner.Model
@@ -75,86 +76,75 @@ type Styles struct {
 	FormCursor      lipgloss.Style
 	FormValue       lipgloss.Style // text typed in the focused input
 	FormValueBlur   lipgloss.Style // a filled field reads as a value: bold
-	FormPlaceholder lipgloss.Style // faint italics, never mistaken for a value
+	FormPlaceholder lipgloss.Style // muted italics, never mistaken for a value
 	FormOptionOn    lipgloss.Style // chosen option of the focused field
 	FormOption      lipgloss.Style
 	FormSection     lipgloss.Style
 }
 
-// NewStyles builds the theme.
+// NewStyles builds the theme. Bold marks a title, a section, the key inside a
+// sentence, a filled form value and the chosen radio label; nothing else.
 func NewStyles() *Styles {
 	s := &Styles{}
-	s.Brand = lipgloss.NewStyle().Bold(true).Foreground(colOnAcc).Background(colAccent).Padding(0, 1)
+	s.Brand = lipgloss.NewStyle().Foreground(colOnAcc).Background(colAccent).Padding(0, 1)
 	s.Crumb = lipgloss.NewStyle().Foreground(colText).Bold(true)
-	s.CrumbSep = lipgloss.NewStyle().Foreground(colFaint)
+	s.CrumbSep = lipgloss.NewStyle().Foreground(colMuted)
 	s.Text = lipgloss.NewStyle().Foreground(colText)
 	s.Muted = lipgloss.NewStyle().Foreground(colMuted)
-	s.Faint = lipgloss.NewStyle().Foreground(colFaint)
+	s.Faint = s.Muted
 	s.Accent = lipgloss.NewStyle().Foreground(colAccent)
 	s.Bold = lipgloss.NewStyle().Bold(true).Foreground(colText)
 	s.OK = lipgloss.NewStyle().Foreground(colOK)
 	s.Warn = lipgloss.NewStyle().Foreground(colWarn)
 	s.Err = lipgloss.NewStyle().Foreground(colErr)
-	s.Info = lipgloss.NewStyle().Foreground(colInfo)
+	s.Info = s.Text
 	s.Panel = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(colLine).Padding(0, 1)
 	s.PanelFocus = s.Panel.BorderForeground(colAccent)
 	// a heavy border has the same frame size as a rounded one (one cell per
 	// side), so no layout arithmetic changes
 	s.PanelActive = s.Panel.Border(lipgloss.ThickBorder()).BorderForeground(colAccent)
-	s.PanelTitle = lipgloss.NewStyle().Bold(true).Foreground(colAccent)
-	s.PanelTitleBlur = lipgloss.NewStyle().Foreground(colMuted)
+	// the focus is told by the border, not by the title colour
+	s.PanelTitle = lipgloss.NewStyle().Bold(true).Foreground(colText)
+	s.PanelTitleBlur = lipgloss.NewStyle().Bold(true).Foreground(colMuted)
 	s.Label = lipgloss.NewStyle().Foreground(colMuted)
-	s.Selected = lipgloss.NewStyle().Background(colSelBg).Foreground(colText).Bold(true)
+	s.Selected = lipgloss.NewStyle().Background(colSelBg).Foreground(colText)
 	s.Button = lipgloss.NewStyle().Padding(0, 2).Foreground(colText).Background(colSelBg)
-	s.ButtonOn = lipgloss.NewStyle().Padding(0, 2).Bold(true).Foreground(colOnAcc).Background(colAccent)
-	s.ButtonDanger = lipgloss.NewStyle().Padding(0, 2).Bold(true).Foreground(colOnAcc).Background(colErr)
+	s.ButtonOn = lipgloss.NewStyle().Padding(0, 2).Foreground(colOnAcc).Background(colAccent)
+	s.ButtonDanger = lipgloss.NewStyle().Padding(0, 2).Foreground(colOnAcc).Background(colErr)
 	s.DiffAdd = lipgloss.NewStyle().Foreground(colOK)
 	s.DiffDel = lipgloss.NewStyle().Foreground(colErr)
-	s.DiffHunk = lipgloss.NewStyle().Foreground(colInfo)
-	s.DiffMeta = lipgloss.NewStyle().Foreground(colMuted).Bold(true)
+	s.DiffHunk = lipgloss.NewStyle().Foreground(colMuted)
+	s.DiffMeta = lipgloss.NewStyle().Foreground(colMuted)
 	s.StatusBar = lipgloss.NewStyle().Foreground(colMuted)
-	// Reverse video plus bold plus the "●" marker: the badge never relies on
-	// color alone. colOnAcc is white on the light warn and near-black on the
-	// dark warn, which keeps the contrast readable in both themes.
-	s.Badge = lipgloss.NewStyle().Bold(true).Foreground(colOnAcc).Background(colWarn).Padding(0, 1)
-	s.HelpPrimary = lipgloss.NewStyle().Bold(true).Foreground(colAccent)
-	s.HelpLabel = lipgloss.NewStyle().Foreground(colFaint)
-	s.HelpAlwaysKey = lipgloss.NewStyle().Foreground(colTeal)
-	s.HelpAlwaysDesc = lipgloss.NewStyle().Foreground(colMuted)
+	// A normal state (edits not applied yet) must not be the loudest thing on
+	// the screen: warn colour and the "●" marker, no fill.
+	s.Badge = lipgloss.NewStyle().Foreground(colWarn)
+	s.HelpPrimary = lipgloss.NewStyle().Foreground(colAccent)
+	s.HelpLabel = lipgloss.NewStyle().Foreground(colMuted)
 	s.HelpSelected = s.Selected
 	s.Help = help.Styles{
-		ShortKey:       lipgloss.NewStyle().Foreground(colAccent),
+		ShortKey:       lipgloss.NewStyle().Foreground(colText),
 		ShortDesc:      lipgloss.NewStyle().Foreground(colMuted),
-		ShortSeparator: lipgloss.NewStyle().Foreground(colFaint),
-		Ellipsis:       lipgloss.NewStyle().Foreground(colFaint),
-		FullKey:        lipgloss.NewStyle().Foreground(colAccent),
+		ShortSeparator: lipgloss.NewStyle().Foreground(colMuted),
+		Ellipsis:       lipgloss.NewStyle().Foreground(colMuted),
+		FullKey:        lipgloss.NewStyle().Foreground(colText),
 		FullDesc:       lipgloss.NewStyle().Foreground(colMuted),
-		FullSeparator:  lipgloss.NewStyle().Foreground(colFaint),
+		FullSeparator:  lipgloss.NewStyle().Foreground(colMuted),
 	}
 	s.FormTitle = lipgloss.NewStyle().Foreground(colAccent).Bold(true)
 	s.FormTitleBlur = lipgloss.NewStyle().Foreground(colMuted)
 	s.FormHint = lipgloss.NewStyle().Foreground(colMuted)
 	s.FormGutter = lipgloss.NewStyle().Foreground(colAccent)
 	s.FormPrompt = lipgloss.NewStyle().Foreground(colAccent)
-	s.FormCursor = lipgloss.NewStyle().Foreground(colTeal)
+	s.FormCursor = lipgloss.NewStyle().Foreground(colAccent)
 	s.FormValue = lipgloss.NewStyle().Foreground(colText)
 	s.FormValueBlur = lipgloss.NewStyle().Foreground(colText).Bold(true)
-	s.FormPlaceholder = lipgloss.NewStyle().Foreground(colFaint).Italic(true)
+	s.FormPlaceholder = lipgloss.NewStyle().Foreground(colMuted).Italic(true)
 	s.FormOptionOn = lipgloss.NewStyle().Foreground(colAccent).Bold(true)
 	s.FormOption = lipgloss.NewStyle().Foreground(colText)
 	s.FormSection = lipgloss.NewStyle().Foreground(colText).Bold(true)
 	s.Spinner = spinner.New(spinner.WithSpinner(spinner.MiniDot), spinner.WithStyle(lipgloss.NewStyle().Foreground(colAccent)))
 	return s
-}
-
-// Platform badge colors (the text is always the short platform name so the
-// meaning never depends on color alone).
-var platformColor = map[platform.Platform]lipgloss.AdaptiveColor{
-	platform.GitHub:      {Light: "#24292F", Dark: "#C9D1D9"},
-	platform.GitLab:      {Light: "#C2410C", Dark: "#FB923C"},
-	platform.Bitbucket:   {Light: "#1D4ED8", Dark: "#60A5FA"},
-	platform.Gitea:       {Light: "#15803D", Dark: "#86EFAC"},
-	platform.AzureDevOps: {Light: "#0369A1", Dark: "#38BDF8"},
 }
 
 // platformTag is the short badge text of a platform.
@@ -174,13 +164,40 @@ func platformTag(p platform.Platform) string {
 	return "??"
 }
 
-// platformBadge renders a colored platform tag.
+// platformBadge renders the platform tag. It has no colour of its own: the
+// text already says which platform it is.
 func (s *Styles) platformBadge(p platform.Platform) string {
-	c, ok := platformColor[p]
-	if !ok {
-		c = colMuted
+	return s.Text.Render(platformTag(p))
+}
+
+// identityStamp is how gitid names an identity everywhere: Git's own author
+// notation behind the gitid ref, "acme/alice · Alice Nguyen <alice@acme.com>".
+// The ref and the name are in text colour, the address in muted. It is what
+// ends up in a commit, so the user sees who they are about to commit as.
+func (s *Styles) identityStamp(ref config.AccountRef) string {
+	out := s.Text.Render(ref.String())
+	a := ref.Account
+	if a.Name != "" {
+		out += s.Text.Render(" · " + a.Name)
 	}
-	return lipgloss.NewStyle().Foreground(c).Bold(true).Render(platformTag(p))
+	if a.Email != "" {
+		out += " " + s.Muted.Render("<"+a.Email+">")
+	}
+	return out
+}
+
+// identityStampPlain is identityStamp without styling (for rows that carry
+// their own background).
+func identityStampPlain(ref config.AccountRef) string {
+	out := ref.String()
+	a := ref.Account
+	if a.Name != "" {
+		out += " · " + a.Name
+	}
+	if a.Email != "" {
+		out += " <" + a.Email + ">"
+	}
+	return out
 }
 
 // trunc cuts s (which may contain ANSI escapes) to at most w cells.

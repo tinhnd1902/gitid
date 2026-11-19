@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/tinhnd1902/gitid/internal/app"
 	"github.com/tinhnd1902/gitid/internal/config"
@@ -82,7 +83,8 @@ func (s *importScreen) Help() []key.Binding {
 	switch s.phase {
 	case imList:
 		if len(s.res.Proposals) == 0 {
-			return []key.Binding{km.Back} // nothing to pick: only the way out
+			// nothing to pick: only the way out, back to the Accounts screen
+			return []key.Binding{withDesc(km.Back, "esc", tr("tui.key.to_accounts"))}
 		}
 		return []key.Binding{km.Up, km.Down, withDesc(km.Enter, "enter", tr("tui.import.pick")), km.Back}
 	case imForm:
@@ -92,6 +94,15 @@ func (s *importScreen) Help() []key.Binding {
 		return []key.Binding{km.Save, km.Next, km.Cancel}
 	}
 	return nil
+}
+
+// ContextHelp makes the way out the next step when there is nothing to import.
+func (s *importScreen) ContextHelp() []helpItem {
+	var out []helpItem
+	for _, b := range s.Help() {
+		out = append(out, helpItem{b: b, primary: s.phase == imList && len(s.res.Proposals) == 0})
+	}
+	return out
 }
 
 func (s *importScreen) buildForm() {
@@ -228,7 +239,7 @@ func (s *importScreen) View() string {
 		title := tr("tui.import.form_title", s.res.Proposals[s.cur].Slug)
 		if s.form.Overflows() {
 			n, m := s.form.Position()
-			title += st.Faint.Render(fmt.Sprintf("  %d/%d", n, m))
+			title += st.Muted.Render(fmt.Sprintf("  %d/%d", n, m))
 		}
 		body := s.form.View()
 		if s.guard.asking {
@@ -242,33 +253,37 @@ func (s *importScreen) View() string {
 		}
 		b.WriteString(s.listView(inner))
 	}
-	return s.sh.panel(tr("tui.import.title"), b.String(), s.w, s.h, true)
+	return s.sh.panel("", b.String(), s.w, s.h, true)
 }
 
 func (s *importScreen) listView(w int) string {
 	st := s.sh.st
 	var b strings.Builder
 	if s.errMsg != "" {
-		b.WriteString(st.Err.Render("✗ "+wrap(s.errMsg, w)) + "\n\n")
+		b.WriteString(st.Err.Render("✗ "+wrap(s.errMsg, proseW(w))) + "\n\n")
 	}
 	if len(s.res.Proposals) == 0 {
-		b.WriteString(st.Muted.Render(wrap(tr("cli.import.none"), w)) + "\n")
-		b.WriteString("\n" + st.Text.Render(wrap(s.sh.km.T("tui.import.none_next"), w)) + "\n")
+		b.WriteString(st.Muted.Render(wrap(tr("cli.import.none"), proseW(w))) + "\n")
+		b.WriteString("\n" + st.Text.Render(wrap(s.sh.km.T("tui.import.none_next"), proseW(w))) + "\n")
 	} else {
 		b.WriteString(st.Bold.Render(tr("tui.import.proposals")) + "\n")
+		slugW := 0
+		for _, p := range s.res.Proposals {
+			slugW = maxInt(slugW, lipgloss.Width(p.Slug))
+		}
 		for i, p := range s.res.Proposals {
-			line := p.Slug + "  " + p.BaseDir
 			if i == s.cur {
-				b.WriteString(st.Selected.Render(pad("▌"+line, w)) + "\n")
+				b.WriteString(st.Selected.Render(pad("▌"+pad(p.Slug, slugW)+"  "+p.BaseDir, w)) + "\n")
 			} else {
-				b.WriteString(trunc(" "+st.Text.Render(p.Slug)+"  "+st.Faint.Render(p.BaseDir), w) + "\n")
+				b.WriteString(trunc(" "+st.Text.Render(pad(p.Slug, slugW))+"  "+st.Muted.Render(p.BaseDir), w) + "\n")
 			}
 		}
 		p := s.res.Proposals[s.cur]
 		b.WriteString("\n")
+		col := kvCol(w, tr("tui.f.name"), tr("tui.f.email"), tr("tui.f.source"))
 		row := func(label, value string) {
 			if value != "" {
-				b.WriteString(st.Label.Render(pad(label, 12)) + st.Text.Render(trunc(value, maxInt(w-12, 4))) + "\n")
+				b.WriteString(kvRow(st, col, w, label, value) + "\n")
 			}
 		}
 		row(tr("tui.f.name"), p.UserName)
@@ -279,13 +294,13 @@ func (s *importScreen) listView(w int) string {
 		}
 	}
 	if len(s.res.Hosts) > 0 {
-		b.WriteString("\n" + st.Faint.Render(tr("cli.import.hosts")) + "\n")
+		b.WriteString("\n" + st.Bold.Render(tr("cli.import.hosts")) + "\n")
 		for _, h := range s.res.Hosts {
 			line := strings.Join(h.Patterns, " ")
 			if len(h.IdentityFile) > 0 {
-				line += "  → " + strings.Join(h.IdentityFile, ", ")
+				line += "  " + tr("tui.f.key") + " " + strings.Join(h.IdentityFile, ", ")
 			}
-			b.WriteString(trunc("  "+st.Faint.Render(line), w) + "\n")
+			b.WriteString(trunc("  "+st.Muted.Render(line), w) + "\n")
 		}
 	}
 	return strings.TrimRight(b.String(), "\n")

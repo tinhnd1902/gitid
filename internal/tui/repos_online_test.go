@@ -92,12 +92,24 @@ func TestT82NoToken(t *testing.T) {
 	h, api := onlineHarness(t)
 	r := openOnlineTab(h, true)
 	gotoAccount(h, r, "globex/dave")
-	h.mustContainPlain(tr("tui.repos.online.no_token.gitlab", "GITID_TOKEN_GLOBEX__DAVE"))
+	h.mustContainPlain(tr("tui.repos.online.no_token_head"))
+	// one way per line: no sentence lists three alternatives
+	for _, opt := range strings.Split(tr("tui.repos.online.no_token_opts.gitlab", "GITID_TOKEN_GLOBEX__DAVE", "globex/dave"), "\n") {
+		h.mustContainPlain(opt)
+		if n := strings.Count(opt, ","); n > 0 {
+			t.Errorf("option %q is more than one", opt)
+		}
+	}
+	if hb := h.helpLine(); !strings.HasPrefix(hb, "▸ r "+tr("tui.key.retry")) {
+		t.Errorf("help bar %q", hb)
+	}
 	if api.hitsFor("git.example.com") != 0 {
 		t.Error("a request was made for an account without a token")
 	}
 	gotoAccount(h, r, "acme/carol")
-	h.mustContainPlain(tr("tui.repos.online.no_token.github", "GITID_TOKEN_ACME__CAROL"))
+	for _, opt := range strings.Split(tr("tui.repos.online.no_token_opts.github", "GITID_TOKEN_ACME__CAROL", "acme/carol"), "\n") {
+		h.mustContainPlain(opt)
+	}
 	// enter, copy and open do nothing without a list
 	before := h.snapshot()
 	h.key("enter")
@@ -165,7 +177,7 @@ func TestT85Badges(t *testing.T) {
 	h.resize(120, 30)
 	openOnlineTab(h, true)
 	row := h.rowOf("acme/api")
-	for _, want := range []string{tr("tui.repos.online.badge.private"), "3d"} {
+	for _, want := range []string{tr("tui.repos.online.badge.private"), tr("tui.age.days", 3)} {
 		if !strings.Contains(row, want) {
 			t.Errorf("row %q lacks %q", row, want)
 		}
@@ -204,11 +216,11 @@ func TestT87SeenByAnotherAccount(t *testing.T) {
 	h.resize(120, 30)
 	r := openOnlineTab(h, true)
 	gotoAccount(h, r, "acme/alice")
-	if row := h.rowOf("acme/api"); !strings.Contains(row, tr("tui.repos.online.also", 2)) {
+	if row := h.rowOf("acme/api"); !strings.Contains(row, trCount("tui.repos.online.also", 2)) {
 		t.Errorf("alice: %q", row)
 	}
 	gotoAccount(h, r, "acme/bob")
-	if row := h.rowOf("acme/api"); !strings.Contains(row, tr("tui.repos.online.also", 2)) {
+	if row := h.rowOf("acme/api"); !strings.Contains(row, trCount("tui.repos.online.also", 2)) {
 		t.Errorf("bob: %q", row)
 	}
 	if row := h.rowOf("bob/notes"); strings.Contains(row, "+") {

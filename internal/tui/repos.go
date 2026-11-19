@@ -258,7 +258,7 @@ func (s *reposScreen) Title() string { return tr("tui.repos.title") }
 
 func (s *reposScreen) Resize(w, h int) {
 	s.w, s.h = w, h
-	s.url.Resize(w, maxInt(h-1, 1))
+	s.url.Resize(w, h)
 	s.filter.Width = maxInt(w-12, 8)
 	s.ofilter.Width = s.filter.Width
 	s.ensureVisible()
@@ -525,6 +525,11 @@ func (s *reposScreen) AlwaysHelp() []helpItem {
 		if s.tabLocked() {
 			return nil
 		}
+		if s.url.phase == clURL && strings.TrimSpace(s.url.input.Value()) == "" {
+			// nothing to do here yet: the tab key is the one thing to offer, so
+			// it stays in row 1
+			return nil
+		}
 	}
 	return []helpItem{{b: s.tabBinding(), prio: 3}}
 }
@@ -558,14 +563,14 @@ func (s *reposScreen) tabLabel(t reposTab) string {
 	return tr("tui.repos.tab.online")
 }
 
-// tabBar draws the three tabs; the active one carries the "▸" mark. Up to 50
-// columns the separators shrink.
+// tabBar draws the three tabs, the first line inside the panel of the active
+// one; the active tab carries the "▸" mark. Up to 50 columns the gaps shrink.
 func (s *reposScreen) tabBar() string {
 	st := s.sh.st
 	narrow := s.w <= 50
-	sep := st.Faint.Render(" │ ")
+	sep := "   "
 	if narrow {
-		sep = st.Faint.Render("│")
+		sep = "  "
 	}
 	var parts []string
 	for t := reposTab(0); t < numTabs; t++ {
@@ -574,12 +579,12 @@ func (s *reposScreen) tabBar() string {
 		case t != s.tab:
 			parts = append(parts, st.Muted.Render(label))
 		case narrow:
-			parts = append(parts, st.Accent.Bold(true).Render("▸"+label))
+			parts = append(parts, st.Accent.Render("▸")+st.Bold.Render(label))
 		default:
-			parts = append(parts, st.Accent.Bold(true).Render("▸ "+label))
+			parts = append(parts, st.Accent.Render("▸ ")+st.Bold.Render(label))
 		}
 	}
-	return " " + trunc(strings.Join(parts, sep), maxInt(s.w-1, 4))
+	return trunc(strings.Join(parts, sep), maxInt(s.w-4, 4))
 }
 
 func (s *reposScreen) View() string {
@@ -588,11 +593,12 @@ func (s *reposScreen) View() string {
 	case tabLocal:
 		body = s.localView()
 	case tabURL:
+		s.url.header = s.tabBar()
 		body = s.url.View()
 	default:
 		body = s.onlineView()
 	}
-	return fitHeight(s.tabBar()+"\n"+body, s.h)
+	return fitHeight(body, s.h)
 }
 
 // ---- helpers ----

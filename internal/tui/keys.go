@@ -96,36 +96,22 @@ func NewKeyMap(m keymap.Map) *KeyMap {
 // hintKeys lists, for every message that names keys in its prose, the actions
 // whose labels km.T puts in front of the call's own arguments: the first
 // action is %[1]s, the second %[2]s, and the original arguments follow. Every
-// verb of such a message carries an explicit index. The "_plain" variants of
-// the status badges name no key and are not listed, so they pass through.
+// verb of such a message carries an explicit index. The status badges name no
+// key (the help bar does) and are not listed, so they pass through.
 var hintKeys = map[string][]keymap.Action{
-	"tui.status.pending":             {keymap.Apply},
-	"tui.status.pending_short":       {keymap.Apply},
 	"tui.status.need_company":        {keymap.AddCompany},
-	"tui.status.account_saved":       {keymap.Yes},
-	"tui.status.applied":             {keymap.Check},
-	"tui.status.no_company":          {keymap.AddCompany},
-	"tui.status.empty_company":       {keymap.AddAccount},
-	"tui.status.plan_failed":         {keymap.Doctor},
 	"tui.status.company_created":     {keymap.AddAccount},
 	"tui.status.apply_later":         {keymap.Apply},
 	"tui.status.press_yes":           {keymap.Yes},
-	"tui.confirm.question":           {keymap.Yes, keymap.No},
 	"tui.confirm.retry_hint":         {keymap.Retry},
 	"tui.confirm.empty_no_accounts":  {keymap.AddAccount},
-	"tui.confirm.next_check":         {keymap.Check},
 	"tui.confirm.next_ssh":           {keymap.SSHKey},
 	"tui.keyresult.apply_hint":       {keymap.Apply},
-	"tui.clone.auth_hint":            {keymap.Terminal},
 	"tui.check.retry_hint":           {keymap.Retry},
-	"tui.check.fix_hint":             {keymap.Fix},
 	"tui.check.not_repo_next":        {keymap.Clone},
 	"tui.check.not_repo_next_none":   {keymap.Clone},
 	"tui.empty.import":               {keymap.Import},
-	"tui.list.no_accounts_hint":      {keymap.AddAccount},
-	"tui.detail.how_pending":         {keymap.Apply},
 	"tui.detail.how_applied":         {keymap.Check},
-	"tui.detail.acc_next_applied":    {keymap.Clone, keymap.Check},
 	"tui.detail.dup":                 {keymap.Delete},
 	"tui.form.err.dup_account":       {keymap.Edit},
 	"tui.form.warn.username_changed": {keymap.Check, keymap.Fix},
@@ -135,9 +121,6 @@ var hintKeys = map[string][]keymap.Action{
 	"tui.help.close_filter":          {keymap.Help, keymap.Palette},
 	"tui.repos.local.cancelled":      {keymap.Reload},
 	"tui.repos.local.no_problems":    {keymap.Problems},
-	"tui.repos.hint.fix":             {keymap.Fix},
-	"tui.repos.online.cancelled":     {keymap.Reload},
-	"tui.repos.online.hint.retry":    {keymap.Reload},
 }
 
 // T translates a message like tr, but a message that names keys (see

@@ -97,7 +97,8 @@ func TestFix2UsernameHintKeepsTheURLWhole(t *testing.T) {
 	i18n.SetLang("vi")
 }
 
-// D2: the email hint keeps the noreply address whole.
+// D2: the email hint is shown whole, never cut (it is one line now: the
+// noreply address is named, not spelled out).
 func TestFix2EmailHintKeepsTheAddressWhole(t *testing.T) {
 	for _, lang := range []string{"vi", "en"} {
 		i18n.SetLang(lang)
@@ -110,10 +111,8 @@ func TestFix2EmailHintKeepsTheAddressWhole(t *testing.T) {
 			h.key("enter")
 			h.typeText("Alice Tran")
 			h.key("enter") // focus: email
-			h.mustHaveOnOneLine(lang, "ID+login@users.noreply.github.com")
-			if !onOneLine(h.view(), "@users.noreply.github.com") {
-				t.Errorf("%s %v: noreply domain split", lang, s)
-			}
+			h.mustContainSpaceless(tr("tui.form.email_hint"))
+			h.mustHaveOnOneLine(lang, "noreply")
 			assertFits(t, h.view(), s[0], s[1], "email")
 		}
 	}

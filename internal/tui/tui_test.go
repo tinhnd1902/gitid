@@ -155,11 +155,13 @@ func TestT4ConfirmApplyAndCancel(t *testing.T) {
 		t.Fatal("gitconfig must exist after apply:", err)
 	}
 	h.waitFor("badge synced", func() bool { return h.m.sh.planned && h.m.sh.pending == 0 })
-	h.mustContain(tr("tui.status.synced"))
+	// the done screen says "applied" itself: the badge does not say it again
+	h.mustNotContain(tr("tui.status.synced"))
 	h.key("enter")
 	if h.depth() != 1 {
 		t.Fatal("enter returns to the list")
 	}
+	h.mustContain(tr("tui.status.synced"))
 }
 
 func TestConfirmEmptyAndRetry(t *testing.T) {
@@ -362,7 +364,7 @@ func TestDeleteCompanyAndEsc(t *testing.T) {
 	h.key("down") // acme
 	h.key("up")
 	h.key("d")
-	h.mustContain(tr("tui.delete.q_company", "acme", 3))
+	h.mustContain(trCount("tui.delete.q_company", 3, "acme"))
 	h.key("n")
 	if h.depth() != 1 {
 		t.Fatal("n cancels")
@@ -510,7 +512,7 @@ func TestT8DoctorSpinnersAndOutOfOrder(t *testing.T) {
 		t.Fatalf("want %d spinners, got %d", n-2, got)
 	}
 	if !strings.Contains(v, tr("tui.doctor.check.git_version")) || !strings.Contains(v, tr("doctor.git.ok", "2.56.0")) ||
-		!strings.Contains(v, tr("doctor.plan.pending", "3")) || !strings.Contains(v, tr("doctor.hint.apply")) {
+		!strings.Contains(v, tr("doctor.plan.pending", "3")) || !strings.Contains(v, tr("tui.doctor.hint.apply")) {
 		t.Fatalf("results not rendered:\n%s", v)
 	}
 	// a result of an older run is ignored
@@ -563,7 +565,10 @@ func TestT9CheckAndFix(t *testing.T) {
 	h.key("k")
 	h.waitFor("result", func() bool { c, ok := h.top().(*checkScreen); return ok && c.phase == chResult })
 	h.mustContain(tr("warn.check.email_mismatch"), "acme/bob", "wrong@example.com", "bob@acme.com")
-	h.mustContain(defKM.T("tui.check.fix_hint"))
+	// fixing the remote is the next step: the help bar says so, the pane does not
+	if hb := h.helpLine(); !strings.HasPrefix(hb, "▸ f") {
+		t.Fatalf("help bar %q", hb)
+	}
 	// fix targets the account matching the remote: nothing to change here
 	h.key("f")
 	h.waitFor("fix planned", func() bool { c := h.top().(*checkScreen); return c.phase != chFixPlanning })
@@ -865,8 +870,8 @@ func TestLanguageEnglish(t *testing.T) {
 	defer i18n.SetLang("vi")
 	i18n.SetLang("en")
 	h := newHarness(t, basicCfg())
-	h.mustContain("Overview", "to filter by name")
-	h.mustContain("3 accounts", "unapplied change(s) — press p", "preview & apply", "all keys")
+	h.mustContain("Accounts", "filter by name")
+	h.mustContain("3 accounts", "11 unapplied changes", "preview and apply", "all keys")
 	h.mustNotContain("tài khoản", "chưa áp dụng")
 	h.key("A")
 	h.mustContain("Add company", "e.g. acme")

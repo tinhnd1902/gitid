@@ -60,7 +60,7 @@ func newDeleteScreen(sh *shared, c config.Company, a *config.Account) *deleteScr
 	d := &deleteScreen{sh: sh, company: c, account: a, id: sh.id(), spin: sh.st.Spinner}
 	d.pick = choice{labels: [2]string{tr("tui.delete.no"), tr("tui.delete.yes")}, danger: true}
 	d.input = textinput.New()
-	d.input.Prompt = "› "
+	d.input.Prompt = "> "
 	d.input.PromptStyle = sh.st.Accent
 	d.input.Placeholder = d.word()
 	d.input.CharLimit = 64
@@ -111,7 +111,7 @@ func (d *deleteScreen) Help() []key.Binding {
 	case 0:
 		return []key.Binding{km.Yes, km.No, km.Toggle, km.Enter, km.Back}
 	case 1:
-		return []key.Binding{withDesc(km.Enter, "enter", tr("tui.delete.keep_key")), withDesc(km.Back, "esc", tr("tui.key.cancel"))}
+		return []key.Binding{withDesc(km.Enter, "enter", tr("tui.key.keep_key")), withDesc(km.Back, "esc", tr("tui.key.cancel"))}
 	}
 	return nil
 }
@@ -225,7 +225,7 @@ func (d *deleteScreen) run(keep bool) tea.Cmd {
 
 func (d *deleteScreen) View() string {
 	st := d.sh.st
-	inner := maxInt(d.w-6, 10)
+	inner := proseW(maxInt(d.w-6, 10))
 	var b strings.Builder
 	switch d.step {
 	case 0:
@@ -233,7 +233,7 @@ func (d *deleteScreen) View() string {
 			b.WriteString(st.Bold.Render(tr("tui.delete.q_account", d.company.Slug+"/"+d.account.ID)) + "\n\n")
 			b.WriteString(wrap(st.Muted.Render(tr("tui.delete.account_note")), inner) + "\n")
 		} else {
-			b.WriteString(st.Bold.Render(tr("tui.delete.q_company", d.company.Slug, len(d.company.Accounts))) + "\n\n")
+			b.WriteString(st.Bold.Render(trCount("tui.delete.q_company", len(d.company.Accounts), d.company.Slug)) + "\n\n")
 			b.WriteString(wrap(st.Muted.Render(tr("tui.delete.company_note")), inner) + "\n")
 		}
 		b.WriteString("\n" + d.pick.view(st) + "\n")
@@ -242,7 +242,7 @@ func (d *deleteScreen) View() string {
 		for _, k := range d.keys {
 			b.WriteString("  " + st.Text.Render(k) + "\n")
 		}
-		b.WriteString("\n" + st.ButtonOn.Render(tr("tui.delete.keep_key")) + "  " + st.Faint.Render("enter") + "\n\n")
+		b.WriteString("\n" + st.ButtonOn.Render(tr("tui.delete.keep_key")) + "  " + st.Muted.Render("enter") + "\n\n")
 		b.WriteString(wrap(st.Muted.Render(tr("tui.delete.type_to_delete", d.word())), inner) + "\n")
 		b.WriteString(d.input.View() + "\n")
 	case 2:
@@ -251,5 +251,5 @@ func (d *deleteScreen) View() string {
 	if d.errMsg != "" {
 		b.WriteString("\n" + st.Err.Render("✗ "+wrap(d.errMsg, inner)))
 	}
-	return d.sh.panel(tr("tui.delete.title"), b.String(), d.w, d.h, true)
+	return d.sh.panel("", b.String(), d.w, d.h, true)
 }

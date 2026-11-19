@@ -788,8 +788,20 @@ func (s *reposScreen) onlineContextHelp() []helpItem {
 		}
 	}
 	var out []helpItem
+	_, st, _ := s.curAccount()
 	for i, b := range s.onlineHelp() {
-		out = append(out, helpItem{b: b, primary: i == 0 && s.onlineEnter() != enterNone})
+		it := helpItem{b: b, primary: i == 0 && s.onlineEnter() != enterNone}
+		switch {
+		case s.onlineEnter() != enterNone:
+		case st != nil && st.running():
+			// nothing to do but wait, or stop
+			it.primary = isExit(s.sh.km, b)
+		case st != nil && (st.phase == opNoToken || st.phase == opFailed || st.phase == opCancelled) && slices.Equal(b.Keys(), s.sh.km.Reload.Keys()):
+			// add the token (or fix it), then ask again
+			it.b = relabel(b, tr("tui.key.retry"))
+			it.primary = true
+		}
+		out = append(out, it)
 	}
 	return out
 }
@@ -845,6 +857,10 @@ func (s *reposScreen) ogeom() onlineGeom {
 		g.detail = 5
 	case avail >= 7:
 		g.detail = 3
+	}
+	if len(s.orows) == 0 {
+		// no divider and no hint to select with nothing to select
+		g.detail = 0
 	}
 	g.listH = maxInt(avail-g.detail, 1)
 	return g

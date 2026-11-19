@@ -569,8 +569,11 @@ func (s *reposScreen) localHelp() []key.Binding {
 		}
 	}
 	out = append(out, s.tabBinding())
-	if s.scanning {
+	switch {
+	case s.scanning:
 		return append(out, withDesc(km.Back, "esc", tr("tui.key.stop_scan")))
+	case len(s.sh.cfg.Companies) == 0:
+		return append(out, withDesc(km.Back, "esc", tr("tui.key.to_accounts")))
 	}
 	return append(out, withDesc(km.Back, "esc", tr("tui.key.back")))
 }
@@ -586,9 +589,22 @@ func (s *reposScreen) localContextHelp() []helpItem {
 	}
 	var out []helpItem
 	first := true
+	check := s.canCheck()
 	for _, b := range s.localHelp() {
-		// the first item is the next step when there is a repository to check
-		out = append(out, helpItem{b: b, primary: first && s.canCheck()})
+		// the first item is the next step when there is a repository to check;
+		// otherwise it is the one key that moves things on: stop the scan, go
+		// back to the Accounts screen to add a company, or scan again when the
+		// folders hold no repository
+		next := first && check
+		if !check {
+			switch {
+			case s.scanning, len(s.sh.cfg.Companies) == 0:
+				next = isExit(s.sh.km, b)
+			case s.repoCount() == 0 && !s.problemsOnly && strings.TrimSpace(s.filter.Value()) == "":
+				next = slices.Equal(b.Keys(), s.sh.km.Reload.Keys())
+			}
+		}
+		out = append(out, helpItem{b: b, primary: next})
 		first = false
 	}
 	return out
@@ -607,6 +623,7 @@ type localGeom struct{ iw, ih, listH, detail int }
 // lines, the list, and (when there is room) the detail block.
 func (s *reposScreen) geom() localGeom {
 	fr := s.sh.st.Panel
+	// ih is the inner height without the tab bar, the first line of the panel
 	g := localGeom{iw: s.w - fr.GetHorizontalFrameSize(), ih: (s.h - 1) - fr.GetVerticalFrameSize()}
 	head := 1
 	if s.fmode != filterOff {
@@ -673,6 +690,29 @@ func (s *reposScreen) counts(c ...app.CompanyScan) string {
 	return r + " · " + p
 }
 
+// countPending says the scan is running and has found nothing in the company
+// yet and not finished it: "0 repo · 0 vấn đề" would be a guess.
+func (s *reposScreen) countPending(c app.CompanyScan) bool {
+	if !s.scanning || len(c.Repos) > 0 {
+		return false
+	}
+	if s.sh.repos != nil {
+		if _, done := s.sh.repos.done[c.Slug]; done {
+			return false
+		}
+	}
+	return true
+}
+
+// found is the number of repos in the scans so far.
+func (s *reposScreen) found(c ...app.CompanyScan) int {
+	n := 0
+	for _, x := range c {
+		n += len(x.Repos)
+	}
+	return n
+}
+
 func (s *reposScreen) selectorLine() string {
 	st := s.sh.st
 	name := tr("tui.repos.local.all")
@@ -682,7 +722,12 @@ func (s *reposScreen) selectorLine() string {
 		name = c.Slug + " · " + c.BaseDir
 		scans = []app.CompanyScan{c}
 	}
-	line := st.Accent.Render("◂ ") + st.Bold.Render(name) + st.Accent.Render(" ▸") + "  " + st.Muted.Render(s.counts(scans...))
+	// ← and → are the keys that switch the company
+	line := st.Muted.Render("← ") + st.Bold.Render(name) + st.Muted.Render(" →")
+	if !s.scanning || s.found(scans...) > 0 {
+		// no "0 repo · 0 vấn đề" while the first scan has found nothing yet
+		line += "  " + st.Muted.Render(s.counts(scans...))
+	}
 	if s.problemsOnly {
 		line += "  " + st.Warn.Render("["+tr("tui.repos.local.problems_only")+"]")
 	}
@@ -696,7 +741,7 @@ func (s *reposScreen) filterLine() string {
 	if s.fmode == filterTyping {
 		return s.filter.View()
 	}
-	return st.Accent.Render(prompt) + st.Text.Render(s.filter.Value()) + st.Faint.Render("  "+tr("tui.repos.local.clear_filter"))
+	return st.Muted.Render(prompt) + st.Text.Render(s.filter.Value()) + st.Muted.Render("  "+tr("tui.repos.local.clear_filter"))
 }
 
 // statusLine shows the running scan or says it was stopped.
@@ -704,7 +749,8 @@ func (s *reposScreen) statusLine() string {
 	st := s.sh.st
 	switch {
 	case s.scanning:
-		if s.prog.company == "" {
+		if s.prog.company == "" || (s.prog.dirs == 0 && s.prog.found == 0) {
+			// no counts until the scan has something to count
 			return s.spin.View() + " " + st.Muted.Render(tr("tui.repos.local.scanning_wait"))
 		}
 		root := s.prog.company
@@ -722,10 +768,10 @@ func (s *reposScreen) statusLine() string {
 
 func (s *reposScreen) localView() string {
 	st := s.sh.st
-	h := maxInt(s.h-1, 3)
+	h := maxInt(s.h, 4)
 	if len(s.sh.cfg.Companies) == 0 {
-		msg := st.Muted.Render(wrap(tr("tui.repos.local.no_company"), maxInt(s.w-6, 10)))
-		return s.sh.panel("", msg, s.w, h, true)
+		msg := st.Muted.Render(wrap(tr("tui.repos.local.no_company"), proseW(maxInt(s.w-6, 10))))
+		return s.sh.panel("", s.tabBar()+"\n\n"+msg, s.w, h, true)
 	}
 	g := s.geom()
 	var lines []string
@@ -740,7 +786,8 @@ func (s *reposScreen) localView() string {
 	if g.detail > 0 {
 		lines = append(lines, s.detailBlock(g)...)
 	}
-	return s.sh.panel("", strings.Join(lines, "\n"), s.w, h, true)
+	// the tab bar is the first line of the panel, above what the geometry counts
+	return s.sh.panel("", s.tabBar()+"\n"+strings.Join(lines, "\n"), s.w, h, true)
 }
 
 // listLines draws exactly g.listH rows of the list (blank lines pad).
@@ -771,15 +818,21 @@ func (s *reposScreen) listLines(g localGeom) []string {
 
 type localCols struct{ path, account, note int }
 
+// colGap is the space between two columns of a repo row.
+const colGap = 2
+
 // columns sizes the columns of the repository rows: the account column hides
 // under 60 columns of screen width, the note shrinks before the path does.
+// The path column hugs its widest path, and the account and the note follow it.
 func (s *reposScreen) columns(iw int) localCols {
 	var c localCols
+	widest := 0
 	for _, row := range s.rows {
 		if row.kind != rowRepo {
 			continue
 		}
 		r := s.scans[row.scan].Repos[row.repo]
+		widest = maxInt(widest, lipgloss.Width(s.sh.svc.RelPath(s.scans[row.scan].BaseDir, r.Path)))
 		if s.w >= 60 {
 			c.account = maxInt(c.account, lipgloss.Width(r.Account))
 		}
@@ -790,10 +843,10 @@ func (s *reposScreen) columns(iw int) localCols {
 	size := func() int {
 		n := iw - 3
 		if c.account > 0 {
-			n -= c.account + 1
+			n -= c.account + colGap
 		}
 		if c.note > 0 {
-			n -= c.note + 1
+			n -= c.note + colGap
 		}
 		return n
 	}
@@ -803,7 +856,7 @@ func (s *reposScreen) columns(iw int) localCols {
 	for size() < 8 && c.note > 6 {
 		c.note--
 	}
-	c.path = maxInt(size(), 4)
+	c.path = minInt(maxInt(size(), 4), maxInt(widest, 4))
 	return c
 }
 
@@ -850,7 +903,12 @@ func (s *reposScreen) rowLine(i int, cols localCols, iw int) string {
 	switch row.kind {
 	case rowHeader:
 		c := s.scans[row.scan]
-		line := st.Bold.Render(c.Slug) + "  " + st.Faint.Render(c.BaseDir) + "  " + st.Muted.Render(s.counts(c))
+		line := st.Bold.Render(c.Slug) + "  " + st.Muted.Render(c.BaseDir)
+		if c.State != app.ScanMissing && c.State != app.ScanNotDir && !s.countPending(c) {
+			// a folder that is not there has no count (the notice below says
+			// so), nor has a folder the scan has not reached yet
+			line += "  " + st.Muted.Render(s.counts(c))
+		}
 		return trunc(line, iw)
 	case rowNotice:
 		if row.warn {
@@ -863,11 +921,11 @@ func (s *reposScreen) rowLine(i int, cols localCols, iw int) string {
 	path := pad(s.sh.svc.RelPath(c.BaseDir, r.Path), cols.path)
 	account, note := "", s.note(r)
 	if cols.account > 0 {
-		account = " " + pad(r.Account, cols.account)
+		account = spaces(colGap) + pad(r.Account, cols.account)
 	}
 	noteCol := ""
 	if cols.note > 0 {
-		noteCol = " " + trunc(note, cols.note)
+		noteCol = spaces(colGap) + trunc(note, cols.note)
 	}
 	if i == s.sel {
 		plain := "▌" + plainMark(r) + " " + path + account + noteCol
@@ -902,7 +960,7 @@ func plainMark(r app.LocalRepo) string {
 // repository, padded to g.detail lines.
 func (s *reposScreen) detailBlock(g localGeom) []string {
 	st := s.sh.st
-	out := []string{st.Faint.Render(strings.Repeat("─", maxInt(g.iw, 4)))}
+	out := []string{st.divider(g.iw)}
 	r, ok := s.selected()
 	if !ok {
 		out = append(out, st.Faint.Render(trunc(tr("tui.repos.local.none_selected"), g.iw)))
@@ -918,36 +976,40 @@ func (s *reposScreen) detailBlock(g localGeom) []string {
 func (s *reposScreen) detailLines(r app.LocalRepo, iw, room int) []string {
 	st := s.sh.st
 	svc := s.sh.svc
-	row := func(label, value string) string {
-		return st.Label.Render(pad(label, 10)) + st.Text.Render(trunc(value, maxInt(iw-10, 4)))
-	}
+	none := tr("tui.value.none")
+	col := kvCol(iw, tr("tui.f.dir"), tr("tui.f.remote"), tr("tui.f.account"), tr("tui.f.effective"), tr("tui.f.fix_to"))
+	row := func(label, value string) string { return kvRow(st, col, iw, label, value) }
 	var lines []string
 	lines = append(lines, row(tr("tui.f.dir"), svc.Env.Contract(r.Path)))
 	if room >= 5 {
 		remote := r.Remote
 		if remote == "" {
-			remote = "–"
+			remote = none
 		}
 		lines = append(lines, row(tr("tui.f.remote"), remote))
-		acc := "–"
+		acc := st.Text.Render(none)
 		if r.Account != "" {
-			acc = r.Account
-			if r.Reason != "" {
-				acc += "  (" + tr("cli.reason."+r.Reason) + ")"
+			acc = st.Text.Render(r.Account)
+			if ref, err := s.sh.cfg.ParseRef(r.Account); err == nil {
+				acc = st.identityStamp(ref)
 			}
 		}
-		lines = append(lines, row(tr("tui.f.account"), acc))
-		inUse := "–"
-		if r.EffectiveEmail != "" {
-			inUse = r.EffectiveEmail
+		lines = append(lines, st.Label.Render(pad(tr("tui.f.account"), col))+trunc(acc, maxInt(iw-col, 4)))
+		// the email in use is told when it is not the account's
+		if r.EffectiveEmail != "" && (r.HasFlag(app.FlagEmailMismatch) || r.HasFlag(app.FlagLocalOverride)) {
+			inUse := r.EffectiveEmail
 			if r.EmailOrigin != "" {
-				inUse += "  (" + s.origin(r.EmailOrigin) + ")"
+				inUse += " · " + s.origin(r.EmailOrigin)
 			}
+			lines = append(lines, row(tr("tui.f.effective"), inUse))
 		}
-		lines = append(lines, row(tr("tui.f.effective"), inUse))
+	}
+	if r.Fixable() {
+		// the fix is a field, not a sentence: the help bar names the key
+		return append(lines, row(tr("tui.f.fix_to"), r.FixTo))
 	}
 	hint, warn := s.hint(r)
-	style := st.Faint
+	style := st.Text
 	if warn {
 		style = st.Warn
 	}
@@ -966,10 +1028,9 @@ func (s *reposScreen) origin(o string) string {
 // hint is the most useful sentence about a repository and whether it is a
 // warning. A key is named only when it does something here.
 func (s *reposScreen) hint(r app.LocalRepo) (string, bool) {
-	km := s.sh.km
 	switch {
 	case r.Fixable():
-		return km.T("tui.repos.hint.fix", r.FixTo), true
+		return tr("tui.repos.hint.wrong_remote"), true
 	case r.Status == app.StatusBroken:
 		return tr(app.DetailBroken), true
 	case r.Status == app.StatusDubious:

@@ -731,7 +731,10 @@ func TestLAY3LayoutTiers(t *testing.T) {
 		}
 	}
 	h.resize(80, 24)
-	h.mustContainPlain(defKM.T("tui.detail.how_pending"))
+	// pending: the help bar's primary item is the next step
+	if hb := h.helpLine(); !strings.HasPrefix(hb, "▸ p") {
+		t.Fatalf("help bar %q", hb)
+	}
 }
 
 func TestLAY4ReposDetailAt60x20(t *testing.T) {

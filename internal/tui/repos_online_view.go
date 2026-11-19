@@ -17,34 +17,35 @@ import (
 
 // The view of the Online tab.
 
-// ageText is how long ago t was, in one short unit: 5m, 3h, 3d, 4mo, 2y. The
-// zero time (the platform does not say) is "–".
+// ageText is how long ago t was, in one short unit written in the active
+// language (vi: 5 phút, 3 giờ, 3 ngày, 4 tháng, 2 năm; en: 5m, 3h, 3d, 4mo, 2y).
+// The zero time (the platform does not say) is "".
 func ageText(t, now time.Time) string {
 	if t.IsZero() {
-		return "–"
+		return ""
 	}
 	d := now.Sub(t)
 	switch {
 	case d < time.Minute:
-		return "0m"
+		return tr("tui.age.now")
 	case d < time.Hour:
-		return strconv.Itoa(int(d/time.Minute)) + "m"
+		return tr("tui.age.minutes", int(d/time.Minute))
 	case d < 24*time.Hour:
-		return strconv.Itoa(int(d/time.Hour)) + "h"
+		return tr("tui.age.hours", int(d/time.Hour))
 	case d < 30*24*time.Hour:
-		return strconv.Itoa(int(d/(24*time.Hour))) + "d"
+		return tr("tui.age.days", int(d/(24*time.Hour)))
 	case d < 365*24*time.Hour:
-		return strconv.Itoa(int(d/(30*24*time.Hour))) + "mo"
+		return tr("tui.age.months", int(d/(30*24*time.Hour)))
 	}
-	return strconv.Itoa(int(d/(365*24*time.Hour))) + "y"
+	return tr("tui.age.years", int(d/(365*24*time.Hour)))
 }
 
 func (s *reposScreen) onlineView() string {
 	st := s.sh.st
-	h := maxInt(s.h-1, 3)
+	h := maxInt(s.h, 4)
 	if len(s.oacc) == 0 {
-		msg := st.Muted.Render(wrap(tr("tui.repos.online.no_accounts"), maxInt(s.w-6, 10)))
-		return s.sh.panel("", msg, s.w, h, true)
+		msg := st.Muted.Render(wrap(tr("tui.repos.online.no_accounts"), proseW(maxInt(s.w-6, 10))))
+		return s.sh.panel("", s.tabBar()+"\n\n"+msg, s.w, h, true)
 	}
 	g := s.ogeom()
 	var lines []string
@@ -59,7 +60,8 @@ func (s *reposScreen) onlineView() string {
 	if g.detail > 0 {
 		lines = append(lines, s.onlineDetailBlock(g)...)
 	}
-	return s.sh.panel("", strings.Join(lines, "\n"), s.w, h, true)
+	// the tab bar is the first line of the panel, above what the geometry counts
+	return s.sh.panel("", s.tabBar()+"\n"+strings.Join(lines, "\n"), s.w, h, true)
 }
 
 func (s *reposScreen) onlineFilterLine() string {
@@ -69,10 +71,10 @@ func (s *reposScreen) onlineFilterLine() string {
 	if s.ofmode == filterTyping {
 		return s.ofilter.View()
 	}
-	return st.Accent.Render(prompt) + st.Text.Render(s.ofilter.Value()) + st.Faint.Render("  "+tr("tui.repos.online.clear_filter"))
+	return st.Muted.Render(prompt) + st.Text.Render(s.ofilter.Value()) + st.Muted.Render("  "+tr("tui.repos.online.clear_filter"))
 }
 
-// accountBar: ◂ acme/alice · GitHub · token: gh ▸  (1/5)
+// accountBar: ← acme/alice · GitHub · token: gh →  (1/5)
 func (s *reposScreen) accountBar(iw int) string {
 	st := s.sh.st
 	a := s.oacc[s.osel]
@@ -90,7 +92,7 @@ func (s *reposScreen) accountBar(iw int) string {
 	}
 	left, right := "", ""
 	if len(s.oacc) > 1 {
-		left, right = st.Accent.Render("◂ "), st.Accent.Render(" ▸")+"  "+st.Faint.Render("("+strconv.Itoa(s.osel+1)+"/"+strconv.Itoa(len(s.oacc))+")")
+		left, right = st.Muted.Render("← "), st.Muted.Render(" →")+"  "+st.Muted.Render("("+strconv.Itoa(s.osel+1)+"/"+strconv.Itoa(len(s.oacc))+")")
 	}
 	return trunc(left+st.Bold.Render(a.Ref.String())+st.Muted.Render(" · "+info)+right, iw)
 }
@@ -114,7 +116,8 @@ func (s *reposScreen) stateLines(os *onlineState, iw int) []string {
 		return out
 	}
 	warn := func(t string) []string { return wrapped(st.Warn, "!", t) }
-	faint := func(t string) []string { return wrapped(st.Faint, " ", t) }
+	faint := func(t string) []string { return wrapped(st.Muted, " ", t) }
+	plain := func(t string) []string { return wrapped(st.Text, " ", t) }
 	if !a.Supported {
 		return []string{trunc(st.Muted.Render(tr("tui.repos.online.unsupported", a.Ref.Account.Platform.DisplayName())), iw)}
 	}
@@ -123,7 +126,12 @@ func (s *reposScreen) stateLines(os *onlineState, iw int) []string {
 	case opResolving, opIdle:
 		out = append(out, trunc(s.spin.View()+" "+st.Muted.Render(tr("tui.repos.online.resolving")), iw))
 	case opFetching:
-		out = append(out, trunc(s.spin.View()+" "+st.Muted.Render(tr("tui.repos.online.fetching", a.Ref.String(), maxInt(os.pages, 1), groupDigits(len(os.repos)))), iw))
+		// no counts until the first page has brought something
+		label := tr("tui.repos.online.fetching_wait", a.Ref.String())
+		if len(os.repos) > 0 {
+			label = tr("tui.repos.online.fetching", a.Ref.String(), maxInt(os.pages, 1), groupDigits(len(os.repos)))
+		}
+		out = append(out, trunc(s.spin.View()+" "+st.Muted.Render(label), iw))
 	case opDone:
 		switch {
 		case len(os.repos) == 0 && os.login == "": // Azure DevOps names no user
@@ -138,12 +146,27 @@ func (s *reposScreen) stateLines(os *onlineState, iw int) []string {
 	case opCancelled:
 		out = append(out, warn(km.T("tui.repos.online.cancelled"))...)
 	case opNoToken:
-		out = append(out, warn(s.noTokenText(a, os))...)
+		head, opts := s.noTokenText(a, os)
+		out = append(out, warn(head)...)
+		// one way to get a token per line
+		for _, o := range opts {
+			for i, l := range wrapUnits(o, maxInt(iw-4, 4)) {
+				mark := "  "
+				if i == 0 {
+					mark = "- "
+				}
+				out = append(out, trunc(st.Text.Render("  "+mark+l), iw))
+			}
+		}
 	case opFailed:
-		msg, hint := s.errText(a, os)
+		msg, hint, detail := s.errText(a, os)
 		out = append(out, wrapped(st.Err, "✗", msg)...)
 		if hint != "" {
-			out = append(out, faint(hint)...)
+			out = append(out, plain(hint)...)
+		}
+		if detail != "" {
+			// what the platform said, in its own words, apart from ours
+			out = append(out, faint(tr("tui.repos.online.server_said")+": "+detail)...)
 		}
 	}
 	for _, w := range os.warnings {
@@ -155,24 +178,30 @@ func (s *reposScreen) stateLines(os *onlineState, iw int) []string {
 	return out
 }
 
-func (s *reposScreen) noTokenText(a app.OnlineAccount, os *onlineState) string {
+// noTokenText is the sentence for an account without a token and, when there
+// are several ways to get one, those ways one by one.
+func (s *reposScreen) noTokenText(a app.OnlineAccount, os *onlineState) (string, []string) {
 	switch os.note {
 	case online.NoteEnvAmbiguous:
-		return tr("tui.repos.online.env_ambiguous", a.EnvName)
+		return tr("tui.repos.online.env_ambiguous", a.EnvName), nil
 	case online.NoteInvalidValue:
-		return tr("tui.repos.online.invalid_value")
+		return tr("tui.repos.online.invalid_value"), nil
 	}
+	opts := func(p string) []string {
+		return splitLines(tr("tui.repos.online.no_token_opts."+p, a.EnvName, a.Ref.String()))
+	}
+	head := tr("tui.repos.online.no_token_head")
 	switch a.Ref.Account.Platform {
 	case platform.GitLab:
-		return tr("tui.repos.online.no_token.gitlab", a.EnvName)
+		return head, opts("gitlab")
 	case platform.Gitea:
-		return tr("tui.repos.online.no_token.gitea", a.EnvName, a.Ref.String())
+		return head, opts("gitea")
 	case platform.Bitbucket:
-		return tr("tui.repos.online.no_token.bitbucket", a.EnvName, a.Ref.String())
+		return head, opts("bitbucket")
 	case platform.AzureDevOps:
-		return tr("tui.repos.online.no_token.azure", a.EnvName, a.Ref.String())
+		return head, opts("azure")
 	}
-	return tr("tui.repos.online.no_token.github", a.EnvName)
+	return head, opts("github")
 }
 
 // warnText is the message of a warning of a listing that worked. A warning
@@ -188,17 +217,21 @@ func warnText(w string) string {
 // errText is the message and the hint for a failed listing, in the language
 // of the UI. Both are built from fixed texts, the kind of the error and the
 // platform's message (already sanitized and redacted by the online package).
-func (s *reposScreen) errText(a app.OnlineAccount, os *onlineState) (msg, hint string) {
+func (s *reposScreen) errText(a app.OnlineAccount, os *onlineState) (msg, hint, detail string) {
+	msg, hint = s.errParts(a, os)
+	var oe *online.Error
+	if errors.As(os.err, &oe) && oe.Detail != "" && oe.Detail != online.AzureSignInHint {
+		detail = oe.Detail
+	}
+	return msg, hint, detail
+}
+
+// errParts is errText without the platform's own words (the detail).
+func (s *reposScreen) errParts(a app.OnlineAccount, os *onlineState) (msg, hint string) {
 	km := s.sh.km
 	var oe *online.Error
 	if !errors.As(os.err, &oe) {
 		return tr("tui.repos.online.err.other"), ""
-	}
-	withDetail := func(m string) string {
-		if oe.Detail != "" {
-			return m + " (" + oe.Detail + ")"
-		}
-		return m
 	}
 	authHint := func() string {
 		switch os.src {
@@ -224,12 +257,12 @@ func (s *reposScreen) errText(a app.OnlineAccount, os *onlineState) (msg, hint s
 			return tr("tui.repos.online.err.auth"), tr("tui.repos.online.hint.azure_signin")
 		case len(a.Account.Orgs) == 0 && (oe.Kind == online.KindAuth || oe.Kind == online.KindScope || oe.Kind == online.KindBadResponse):
 			// the organizations could not be discovered with this token
-			return withDetail(tr("tui.repos.online.err.auth")), tr("tui.repos.online.hint.azure_orgs")
+			return tr("tui.repos.online.err.auth"), tr("tui.repos.online.hint.azure_orgs")
 		}
 	}
 	switch oe.Kind {
 	case online.KindAuth:
-		return withDetail(tr("tui.repos.online.err.auth")), authHint()
+		return tr("tui.repos.online.err.auth"), authHint()
 	case online.KindOTP:
 		return tr("tui.repos.online.err.otp"), tr("tui.repos.online.hint.otp", a.EnvName)
 	case online.KindScope:
@@ -244,7 +277,7 @@ func (s *reposScreen) errText(a app.OnlineAccount, os *onlineState) (msg, hint s
 		case platform.AzureDevOps:
 			k = "tui.repos.online.hint.scope.azure"
 		}
-		return withDetail(tr("tui.repos.online.err.scope")), tr(k)
+		return tr("tui.repos.online.err.scope"), tr(k)
 	case online.KindSSO:
 		if oe.SSOURL != "" {
 			return tr("tui.repos.online.err.sso"), tr("tui.repos.online.hint.sso", oe.SSOURL)
@@ -264,19 +297,19 @@ func (s *reposScreen) errText(a app.OnlineAccount, os *onlineState) (msg, hint s
 	case online.KindTimeout:
 		return tr("tui.repos.online.err.timeout"), km.T("tui.repos.online.hint.retry")
 	case online.KindServer:
-		return withDetail(tr("tui.repos.online.err.server", oe.Status)), km.T("tui.repos.online.hint.retry")
+		return tr("tui.repos.online.err.server", oe.Status), km.T("tui.repos.online.hint.retry")
 	case online.KindTLS:
 		return tr("tui.repos.online.err.tls"), tr("tui.repos.online.hint.tls")
 	case online.KindProxy:
 		return tr("tui.repos.online.err.proxy"), tr("tui.repos.online.hint.proxy")
 	case online.KindBadResponse:
-		return withDetail(tr("tui.repos.online.err.bad_response")), tr("tui.repos.online.hint.bad_response")
+		return tr("tui.repos.online.err.bad_response"), tr("tui.repos.online.hint.bad_response")
 	case online.KindInsecureHost, online.KindUnsupported:
 		return tr("tui.repos.online.err.insecure"), tr("tui.repos.online.hint.bad_response")
 	case online.KindCancelled:
 		return tr("tui.repos.online.err.cancelled"), ""
 	}
-	return withDetail(tr("tui.repos.online.err.other")), ""
+	return tr("tui.repos.online.err.other"), ""
 }
 
 // ---- the list ----
@@ -333,23 +366,24 @@ func (s *reposScreen) localOf(key string) (path string, problem, ok bool) {
 func (s *reposScreen) onlineColumns(iw int, os *onlineState) onlineCols {
 	var c onlineCols
 	wide := iw >= 70
+	now := s.sh.svc.Env.Now()
 	for _, ri := range s.orows {
 		r := os.repos[ri]
 		c.name = maxInt(c.name, lipgloss.Width(r.FullPath))
+		if iw >= 40 {
+			c.age = maxInt(c.age, lipgloss.Width(ageText(r.Updated, now)))
+		}
 		if iw >= 50 {
 			c.badges = maxInt(c.badges, lipgloss.Width(badgeText(r)))
 		}
 		if wide {
 			if n := s.alsoCount(os.keys[ri], os.key); n > 0 {
-				c.also = maxInt(c.also, lipgloss.Width(tr("tui.repos.online.also", n)))
+				c.also = maxInt(c.also, lipgloss.Width(trCount("tui.repos.online.also", n)))
 			}
 			if p, _, ok := s.localOf(os.keys[ri]); ok {
 				c.local = maxInt(c.local, lipgloss.Width(p))
 			}
 		}
-	}
-	if iw >= 40 {
-		c.age = 4
 	}
 	c.badges = minInt(c.badges, 14)
 	c.local = minInt(c.local, maxInt(iw/3, 12))
@@ -357,7 +391,7 @@ func (s *reposScreen) onlineColumns(iw int, os *onlineState) onlineCols {
 		n := iw - 3
 		for _, w := range []int{c.badges, c.age, c.also, c.local} {
 			if w > 0 {
-				n -= w + 1
+				n -= w + colGap
 			}
 		}
 		return n
@@ -368,7 +402,8 @@ func (s *reposScreen) onlineColumns(iw int, os *onlineState) onlineCols {
 		}
 		*drop = 0
 	}
-	c.name = maxInt(size(), 4)
+	// the name column hugs its widest name; the columns after it follow
+	c.name = minInt(maxInt(size(), 4), maxInt(c.name, 4))
 	return c
 }
 
@@ -413,21 +448,21 @@ func (s *reposScreen) onlineRowLine(i, sel int, os *onlineState, cols onlineCols
 	name := pad(r.FullPath, cols.name)
 	var parts, plains []string
 	add := func(text, styled string) {
-		parts = append(parts, " "+styled)
-		plains = append(plains, " "+text)
+		parts = append(parts, spaces(colGap)+styled)
+		plains = append(plains, spaces(colGap)+text)
 	}
 	if cols.badges > 0 {
 		b := pad(trunc(badgeText(r), cols.badges), cols.badges)
-		add(b, st.Warn.Render(b))
+		add(b, st.Muted.Render(b)) // facts, not warnings
 	}
 	if cols.age > 0 {
 		a := pad(ageText(r.Updated, s.sh.svc.Env.Now()), cols.age)
-		add(a, st.Faint.Render(a))
+		add(a, st.Muted.Render(a))
 	}
 	if cols.also > 0 {
 		t := ""
 		if n := s.alsoCount(key, os.key); n > 0 {
-			t = tr("tui.repos.online.also", n)
+			t = trCount("tui.repos.online.also", n)
 		}
 		t = pad(t, cols.also)
 		add(t, st.Muted.Render(t))
@@ -450,7 +485,7 @@ func (s *reposScreen) onlineRowLine(i, sel int, os *onlineState, cols onlineCols
 
 func (s *reposScreen) onlineDetailBlock(g onlineGeom) []string {
 	st := s.sh.st
-	out := []string{st.Faint.Render(strings.Repeat("─", maxInt(g.iw, 4)))}
+	out := []string{st.divider(g.iw)}
 	d := s.odetail
 	if !d.ok {
 		out = append(out, st.Faint.Render(trunc(tr("tui.repos.online.none_selected"), g.iw)))
@@ -465,13 +500,12 @@ func (s *reposScreen) onlineDetailBlock(g onlineGeom) []string {
 
 func (s *reposScreen) onlineDetailLines(d onlineDetail, iw, room int) []string {
 	st := s.sh.st
-	row := func(label, value string) string {
-		return st.Label.Render(pad(label, 11)) + st.Text.Render(trunc(value, maxInt(iw-11, 4)))
-	}
+	col := kvCol(iw, tr("tui.f.clone_url"), tr("tui.f.dir"), tr("tui.repos.online.d.cloned"))
+	row := func(label, value string) string { return kvRow(st, col, iw, label, value) }
 	var lines []string
 	url := d.url
 	if url == "" {
-		url = "–"
+		url = tr("tui.value.none")
 	}
 	cloned := len(d.oc.AlreadyCloned) > 0
 	if room >= 4 {
@@ -482,11 +516,11 @@ func (s *reposScreen) onlineDetailLines(d onlineDetail, iw, room int) []string {
 		case d.oc.Plan.Dir != "":
 			lines = append(lines, row(tr("tui.f.dir"), s.sh.svc.Env.Contract(d.oc.Plan.Dir)))
 		default:
-			lines = append(lines, row(tr("tui.f.dir"), "–"))
+			lines = append(lines, row(tr("tui.f.dir"), tr("tui.value.none")))
 		}
 	}
 	text, warn := s.onlineHint(d)
-	style := st.Faint
+	style := st.Text
 	if warn {
 		style = st.Warn
 	}

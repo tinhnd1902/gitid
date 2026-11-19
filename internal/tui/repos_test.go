@@ -496,8 +496,8 @@ func TestT43LocalRows(t *testing.T) {
 	v := plain(h.view())
 	for _, want := range []string{
 		"✓ api", "acme/alice", "! org/x", tr("tui.repos.status.wrong_remote"), tr("tui.repos.status.foreign_host"),
-		tr("tui.repos.flag.wrong_folder", "acme"), "×2", tr("tui.repos.kind.worktree"),
-		tr("tui.repos.local.repos_many", 7), "◂ " + tr("tui.repos.local.all") + " ▸", "acme", "beta",
+		tr("tui.repos.flag.wrong_folder", "acme"), tr("tui.repos.flag.duplicate", 2), tr("tui.repos.kind.worktree"),
+		tr("tui.repos.local.repos_many", 7), "← " + tr("tui.repos.local.all") + " →", "acme", "beta",
 	} {
 		if !strings.Contains(v, want) {
 			t.Errorf("view lacks %q:\n%s", want, v)
@@ -757,7 +757,7 @@ func TestT53Groups(t *testing.T) {
 	r := openLocal(h)
 	for _, want := range []string{"acme · ~/Code/acme/", "globex · ~/Code/globex/", "beta · ~/Code/beta/", tr("tui.repos.local.all")} {
 		h.key("right")
-		if !strings.Contains(plain(h.view()), "◂ "+want) {
+		if !strings.Contains(plain(h.view()), "← "+want) {
 			t.Fatalf("group %q:\n%s", want, h.view())
 		}
 	}
@@ -1029,7 +1029,7 @@ func TestT66NarrowHidesTheAccountColumn(t *testing.T) {
 		t.Fatalf("the account column is shown at 50 columns:\n%s", v)
 	}
 	bar := r.tabBar()
-	if !strings.Contains(bar, "│") || strings.Contains(bar, " │ ") {
+	if !strings.Contains(bar, "▸"+r.tabLabel(r.tab)) || strings.Contains(bar, "▸ ") {
 		t.Fatalf("tab bar is not in its short form: %q", bar)
 	}
 	h.resize(100, 30)

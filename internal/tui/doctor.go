@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/tinhnd1902/gitid/internal/doctor"
 )
@@ -51,7 +52,7 @@ func (d *doctorScreen) Title() string { return tr("tui.doctor.title") }
 
 func (d *doctorScreen) Resize(w, h int) {
 	d.w, d.h = w, h
-	d.vp.Width, d.vp.Height = maxInt(w-4, 10), maxInt(h-2-2, 1)
+	d.vp.Width, d.vp.Height = maxInt(w-4, 10), maxInt(h-2-1, 1) // borders, summary line
 	d.render()
 }
 
@@ -172,9 +173,22 @@ func statusGlyph(st *Styles, s doctor.Status) string {
 	case doctor.Fail:
 		return st.Err.Render("✗")
 	case doctor.Info:
-		return st.Info.Render("i")
+		return st.Text.Render("i")
 	}
-	return st.Faint.Render("-")
+	return st.Muted.Render("-")
+}
+
+// resultStyle is the text colour of one result of a check.
+func resultStyle(st *Styles, s doctor.Status) lipgloss.Style {
+	switch s {
+	case doctor.Warn:
+		return st.Warn
+	case doctor.Fail:
+		return st.Err
+	case doctor.OK:
+		return st.OK
+	}
+	return st.Text
 }
 
 func anyArgs(s []string) []any {
@@ -222,22 +236,32 @@ func (d *doctorScreen) render() {
 		default:
 			ok++
 		}
-		head := statusGlyph(st, w) + " " + st.Bold.Render(r.label)
-		if len(r.results) == 1 && r.results[0].Status == doctor.OK {
-			head += st.Muted.Render("  " + tr(r.results[0].Msg, anyArgs(r.results[0].Args)...))
+		// one glyph per item, in front of its name
+		head := statusGlyph(st, w) + " " + st.Text.Render(r.label)
+		single := len(r.results) == 1
+		if single && r.results[0].Status == doctor.OK {
+			// the verdict follows the name; the name is not said twice
+			msg := tr(r.results[0].Msg, anyArgs(r.results[0].Args)...)
+			msg = strings.TrimPrefix(msg, r.label+": ")
+			head += st.Muted.Render("  " + msg)
 		}
 		b.WriteString(trunc(head, width) + "\n")
-		if len(r.results) == 1 && r.results[0].Status == doctor.OK {
+		if single && r.results[0].Status == doctor.OK {
 			return
 		}
 		for _, res := range r.results {
-			line := "  " + statusGlyph(st, res.Status) + " " + tr(res.Msg, anyArgs(res.Args)...)
+			// the item has one glyph, in front of its name; the results of an
+			// item with several are told apart by colour, not by more glyphs
+			line := "  " + tr(res.Msg, anyArgs(res.Args)...)
+			if !single {
+				line = "  " + resultStyle(st, res.Status).Render(tr(res.Msg, anyArgs(res.Args)...))
+			}
 			b.WriteString(trunc(line, width) + "\n")
 			if res.Detail != "" && res.Status != doctor.OK {
-				b.WriteString(trunc("      "+st.Faint.Render(res.Detail), width) + "\n")
+				b.WriteString(trunc("    "+st.Muted.Render(res.Detail), width) + "\n")
 			}
 			if res.HintKey != "" && res.Status != doctor.OK {
-				b.WriteString(trunc("      "+st.Accent.Render("→ "+tr(res.HintKey)), width) + "\n")
+				b.WriteString(trunc("    "+st.Text.Render(tr("tui.doctor.fix")+": "+trTUI(res.HintKey)), width) + "\n")
 			}
 		}
 	}
@@ -245,7 +269,7 @@ func (d *doctorScreen) render() {
 		emit(r)
 	}
 	if len(d.ssh) > 0 {
-		b.WriteString("\n" + st.Faint.Render(tr("tui.doctor.ssh_header")) + "\n")
+		b.WriteString("\n" + st.Bold.Render(tr("tui.doctor.ssh_header")) + "\n")
 		for _, r := range d.ssh {
 			emit(r)
 		}
@@ -253,8 +277,8 @@ func (d *doctorScreen) render() {
 	d.vp.SetContent(b.String())
 	d.summary = ""
 	if !d.pending() {
-		d.summary = st.OK.Render(fmt.Sprintf("✓ %d", ok)) + st.Faint.Render(" · ") +
-			st.Warn.Render(fmt.Sprintf("! %d", warn)) + st.Faint.Render(" · ") + st.Err.Render(fmt.Sprintf("✗ %d", fail))
+		d.summary = st.OK.Render(fmt.Sprintf("✓ %d", ok)) + st.Muted.Render(" · ") +
+			st.Warn.Render(fmt.Sprintf("! %d", warn)) + st.Muted.Render(" · ") + st.Err.Render(fmt.Sprintf("✗ %d", fail))
 	}
 }
 
@@ -263,5 +287,5 @@ func (d *doctorScreen) View() string {
 	if head == "" {
 		head = d.sh.st.Faint.Render(tr("tui.doctor.running"))
 	}
-	return d.sh.panel(tr("tui.doctor.title"), head+"\n"+d.vp.View(), d.w, d.h, true)
+	return d.sh.panel("", head+"\n"+d.vp.View(), d.w, d.h, true)
 }

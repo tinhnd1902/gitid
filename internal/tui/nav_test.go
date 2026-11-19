@@ -283,20 +283,25 @@ func TestDET13DetailSizes(t *testing.T) {
 
 // ---- badge (R5) ----
 
-func TestBAD2FormBadgeHasNoKey(t *testing.T) {
+// A form has its own question: the badge is not shown there.
+func TestBAD2FormHasNoBadge(t *testing.T) {
 	h := newHarness(t, emptyCompanyCfg("personal"))
 	h.key("a")
-	b := h.badge()
-	if !strings.Contains(b, tr("tui.status.empty_company_plain", "personal")) || strings.Contains(b, "bấm a") {
+	if b := h.badge(); b != "" {
 		t.Fatalf("badge %q", b)
 	}
 }
 
-func TestBAD3DetailBadgeKeepsKey(t *testing.T) {
+// The badge states the fact on the detail screen and names no key: the help
+// bar names it.
+func TestBAD3DetailBadgeNamesNoKey(t *testing.T) {
 	h := newHarness(t, emptyCompanyCfg("personal"))
 	h.key("enter")
-	if !strings.Contains(h.badge(), "bấm a") {
-		t.Fatalf("badge %q", h.badge())
+	if b := h.badge(); !strings.Contains(b, tr("tui.status.empty_company", "personal")) || strings.Contains(b, "bấm a") {
+		t.Fatalf("badge %q", b)
+	}
+	if hb := h.helpLine(); !strings.HasPrefix(hb, "▸ a") {
+		t.Fatalf("help bar %q", hb)
 	}
 }
 
@@ -312,24 +317,30 @@ func TestBAD4ConfirmBadgeHasNoKey(t *testing.T) {
 	}
 }
 
-func TestBAD5PlanFailedOnForm(t *testing.T) {
+func TestBAD5PlanFailedHasNoBadgeOnForm(t *testing.T) {
 	h := newHarness(t, basicCfg())
 	h.key("a")
 	h.m.sh.planErr = true
-	b := h.badge()
-	if !strings.Contains(b, tr("tui.status.plan_failed_plain")) || strings.Contains(b, "bấm D") {
+	if b := h.badge(); b != "" {
 		t.Fatalf("badge %q", b)
+	}
+	h.key("esc")
+	if b := h.badge(); !strings.Contains(b, tr("tui.status.plan_failed")) || strings.Contains(b, "bấm D") {
+		t.Fatalf("badge on the list %q", b)
 	}
 }
 
-func TestBAD6EnglishFormBadge(t *testing.T) {
+func TestBAD6EnglishFormHasNoBadge(t *testing.T) {
 	i18n.SetLang("en")
 	defer i18n.SetLang("vi")
 	h := newHarness(t, emptyCompanyCfg("personal"))
 	h.key("a")
-	b := h.badge()
-	if strings.Contains(b, "press a") || !strings.Contains(b, "personal") {
+	if b := h.badge(); b != "" {
 		t.Fatalf("badge %q", b)
+	}
+	h.key("esc")
+	if b := h.badge(); strings.Contains(b, "press a") || !strings.Contains(b, "personal") {
+		t.Fatalf("badge on the list %q", b)
 	}
 }
 

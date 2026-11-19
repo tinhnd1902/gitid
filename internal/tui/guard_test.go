@@ -386,8 +386,8 @@ func grdStates() []grdState {
 // needs a reason.
 var grdAllowed = map[string]string{
 	"confirm empty/add_account": "tui.confirm.empty_no_accounts says: press esc, then the add-account key",
-	"import none/add_company":   "tui.import.none_next says: press esc, then the add-company key",
-	"confirm done/ssh_key":      "tui.confirm.next_ssh says: enter to the list, select the account, then the key",
+	"import none/add_company":   "tui.import.none_next says: on the Accounts screen, press the add-company key",
+	"confirm done/ssh_key":      "tui.confirm.next_ssh says: on the Accounts screen, select the account, then the key",
 	"account form/check":        "tui.form.warn.username_changed names the keys to press in the repo after saving",
 	"account form/fix":          "tui.form.warn.username_changed names the keys to press in the repo after saving",
 }
@@ -472,11 +472,25 @@ func guardState(t *testing.T, st grdState, keysYAML string) []string {
 		lines := strings.Split(probe.view(), "\n")
 		last := plain(lines[len(lines)-1])
 		bar := probe.m.helpBarItems()
-		for name, it := range map[string]*helpItem{"all keys": bar.more, "exit": bar.exit} {
+		exit, exitLine := bar.exit, last
+		if exit == nil && len(bar.row) > 0 && bar.row[0].primary && isExit(probe.m.sh.km, bar.row[0].b) {
+			// the exit is the next step itself ("▸ esc stop"): it stands in
+			// row 1, above the last line, and is not drawn twice
+			exit = &bar.row[0]
+			exitLine = plain(lines[len(lines)-probe.m.helpRowCount()])
+			if probe.m.helpRowCount() == 2 && strings.Contains(last, plain(exit.b.Help().Key+" "+exit.b.Help().Desc)) {
+				failf("%s: the exit key is drawn in both rows of the help bar: %q", st.name, last)
+			}
+		}
+		for name, it := range map[string]*helpItem{"all keys": bar.more, "exit": exit} {
+			line := last
+			if name == "exit" {
+				line = exitLine
+			}
 			if it == nil {
 				failf("%s: the help bar has no %s item", st.name, name)
-			} else if want := plain(it.b.Help().Key + " " + it.b.Help().Desc); !strings.Contains(last, want) {
-				failf("%s: the last line %q lacks the %s item %q", st.name, last, name, want)
+			} else if want := plain(it.b.Help().Key + " " + it.b.Help().Desc); !strings.Contains(line, want) {
+				failf("%s: the line %q lacks the %s item %q", st.name, line, name, want)
 			}
 		}
 	}
