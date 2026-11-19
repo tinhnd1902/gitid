@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-11-19
+
+### Changed
+
+- TUI style pass: one accent colour, used only for focus, cursor and choice,
+  plus ok/warn/error colours. Every text role meets a 4.5:1 contrast ratio in
+  light and dark themes.
+- One meaning per glyph: `▌` cursor, `▸` chosen/primary key, `●` pending badge,
+  `◉` radio, `← →` cyclers.
+- Detail panes use aligned label columns and an identity stamp
+  (`ref · Name <email>`) as their title.
+- The next step is named once, as the `▸` primary key in the help bar. Every
+  screen now has a primary key.
+- The home screen is called "Accounts" ("Tài khoản"). Wording is consistent
+  across Vietnamese and English. Errors are no longer truncated.
+- Key bindings are unchanged.
+
 ## [0.1.7] - 2026-11-19
 
 ### Added
@@ -375,7 +392,8 @@ First public version.
 - Every value written to git or ssh configuration is validated and escaped;
   clone arguments are always passed after `--`.
 
-[Unreleased]: https://github.com/tinhnd1902/gitid/compare/v0.1.7...HEAD
+[Unreleased]: https://github.com/tinhnd1902/gitid/compare/v0.1.8...HEAD
+[0.1.8]: https://github.com/tinhnd1902/gitid/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/tinhnd1902/gitid/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/tinhnd1902/gitid/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/tinhnd1902/gitid/compare/v0.1.4...v0.1.5
