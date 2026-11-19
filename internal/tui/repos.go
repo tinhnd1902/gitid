@@ -218,6 +218,24 @@ type reposScreen struct {
 	rows         []localRow
 	sel, top     int
 	listH        int
+	lidx         app.LocalIndex // the local clones by RepoKey, for the Online tab
+
+	// Online tab (see repos_online.go)
+	prefer   *config.AccountRef // the account the tab starts on
+	oacc     []app.OnlineAccount
+	osel     int // index in oacc
+	ostarted bool
+	octx     context.Context
+	ocancel  context.CancelFunc
+	och      chan tea.Msg
+	oarmed   bool // a waiter listens to och
+	ofilter  textinput.Model
+	ofmode   filterMode
+	orows    []int // indices into the shown account's repos
+	oview    map[string]*onlineView
+	olistH   int
+	odetail  onlineDetail
+	odcache  map[string]onlineDetail // by account key and repo path, see refreshDetail
 }
 
 // newReposScreen opens the browser on the URL tab, the clone flow of old.
@@ -229,7 +247,11 @@ func newReposScreen(sh *shared, prefer *config.AccountRef) *reposScreen {
 	fi.Prompt = sh.km.keys.Label(keymap.Filter) + " "
 	fi.PromptStyle = sh.st.Accent
 	fi.CharLimit = 64
-	return &reposScreen{sh: sh, id: sh.id(), tab: tabURL, url: u, spin: sh.st.Spinner, filter: fi, sel: -1}
+	of := textinput.New()
+	of.Prompt = fi.Prompt
+	of.PromptStyle = sh.st.Accent
+	of.CharLimit = 64
+	return &reposScreen{sh: sh, id: sh.id(), tab: tabURL, url: u, spin: sh.st.Spinner, filter: fi, ofilter: of, sel: -1, prefer: prefer}
 }
 
 func (s *reposScreen) Title() string { return tr("tui.repos.title") }
@@ -238,7 +260,9 @@ func (s *reposScreen) Resize(w, h int) {
 	s.w, s.h = w, h
 	s.url.Resize(w, maxInt(h-1, 1))
 	s.filter.Width = maxInt(w-12, 8)
+	s.ofilter.Width = s.filter.Width
 	s.ensureVisible()
+	s.ensureOnlineVisible()
 }
 
 // Init starts the clone flow's input and, unless the cache is good, the scan.
@@ -249,6 +273,7 @@ func (s *reposScreen) Init() tea.Cmd {
 // Close stops the scan and a clone in progress: the screen is leaving.
 func (s *reposScreen) Close() tea.Cmd {
 	s.stopScan()
+	s.closeOnline()
 	if s.url.cancel != nil {
 		s.url.cancelled = true
 		s.url.cancel()
@@ -264,6 +289,8 @@ func (s *reposScreen) Capturing() bool {
 		return s.url.Capturing()
 	case tabLocal:
 		return s.fmode == filterTyping
+	case tabOnline:
+		return s.ofmode == filterTyping
 	}
 	return false
 }
@@ -271,6 +298,17 @@ func (s *reposScreen) Capturing() bool {
 // StepBack: esc on the Local tab stops a running scan first, then clears an
 // applied filter. false lets the root leave the screen.
 func (s *reposScreen) StepBack() bool {
+	if s.tab == tabOnline {
+		switch {
+		case s.onlineBusy():
+			s.cancelOnlineRuns()
+			return true
+		case s.ofmode == filterApplied:
+			s.setOnlineFilter(filterOff, true)
+			return true
+		}
+		return false
+	}
 	if s.tab != tabLocal {
 		return false
 	}
@@ -298,8 +336,11 @@ func (s *reposScreen) setTab(t reposTab) tea.Cmd {
 		s.url.input.Blur()
 	}
 	s.tab = t
-	if t == tabURL && s.url.phase == clURL {
+	switch {
+	case t == tabURL && s.url.phase == clURL:
 		return s.url.input.Focus()
+	case t == tabOnline:
+		return s.openOnline()
 	}
 	return nil
 }
@@ -318,7 +359,7 @@ func (s *reposScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		return s.key(msg)
 	case spinner.TickMsg:
 		var cmds []tea.Cmd
-		if s.scanning {
+		if s.scanning || s.onlineBusy() {
 			var c tea.Cmd
 			s.spin, c = s.spin.Update(msg)
 			cmds = append(cmds, c)
@@ -332,7 +373,27 @@ func (s *reposScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		return s.onBatch(msg)
 	case cfgLoadedMsg, cfgChangedMsg:
 		_, c := s.url.Update(msg)
-		return s, tea.Batch(c, s.onConfig())
+		return s, tea.Batch(c, s.onConfig(), s.syncOnline())
+	case onlineResolvedMsg, onlinePageMsg, onlineDoneMsg:
+		return s.onOnlineMsg(msg)
+	case onlineStaleMsg:
+		return s.onOnlineStale(msg)
+	case onlineCopyMsg:
+		if msg.screen != s.id {
+			return s, nil
+		}
+		if msg.err != nil {
+			return s, say(levelWarn, tr("tui.repos.online.copy_failed", msg.url))
+		}
+		return s, say(levelOK, tr("tui.repos.online.copied", msg.url))
+	case onlineOpenMsg:
+		if msg.screen != s.id {
+			return s, nil
+		}
+		if msg.err != nil {
+			return s, say(levelWarn, tr("tui.repos.online.open_failed", msg.url))
+		}
+		return s, say(levelOK, tr("tui.repos.online.opened", msg.url))
 	case repoClonedMsg:
 		return s, s.reinspect(msg.dir, msg.company)
 	case repoTouchedMsg:
@@ -359,19 +420,22 @@ func (s *reposScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	if s.tab == tabLocal && s.fmode == filterTyping {
 		s.filter, fcmd = s.filter.Update(msg)
 	}
+	if s.tab == tabOnline && s.ofmode == filterTyping {
+		s.ofilter, fcmd = s.ofilter.Update(msg)
+	}
 	_, cmd := s.url.Update(msg)
 	return s, tea.Batch(fcmd, cmd)
 }
 
 func (s *reposScreen) key(msg tea.KeyMsg) (Screen, tea.Cmd) {
 	if msg.Type == tea.KeyTab || msg.Type == tea.KeyShiftTab {
-		if s.tabLocked() || (s.tab == tabLocal && s.fmode == filterTyping) {
+		if s.tabLocked() || s.typingFilter() {
 			return s, nil
 		}
 		return s, s.cycleTab(msg.Type == tea.KeyShiftTab)
 	}
 	// a paste lands in the URL input wherever the user is
-	if msg.Paste && s.tab != tabURL && !s.tabLocked() && !(s.tab == tabLocal && s.fmode == filterTyping) {
+	if msg.Paste && s.tab != tabURL && !s.tabLocked() && !s.typingFilter() {
 		if s.url.phase != clURL {
 			return s, nil
 		}
@@ -385,8 +449,15 @@ func (s *reposScreen) key(msg tea.KeyMsg) (Screen, tea.Cmd) {
 		return s, cmd
 	case tabLocal:
 		return s.localKey(msg)
+	case tabOnline:
+		return s.onlineKey(msg)
 	}
 	return s, nil
+}
+
+// typingFilter says whether a filter input of Local or Online has the keys.
+func (s *reposScreen) typingFilter() bool {
+	return (s.tab == tabLocal && s.fmode == filterTyping) || (s.tab == tabOnline && s.ofmode == filterTyping)
 }
 
 // ---- help ----
@@ -396,7 +467,6 @@ func (s *reposScreen) tabBinding() key.Binding {
 }
 
 func (s *reposScreen) Help() []key.Binding {
-	km := s.sh.km
 	switch s.tab {
 	case tabURL:
 		out := s.url.Help()
@@ -405,15 +475,18 @@ func (s *reposScreen) Help() []key.Binding {
 		}
 		return out
 	case tabOnline:
-		return []key.Binding{s.tabBinding(), withDesc(km.Back, "esc", tr("tui.key.back"))}
+		return s.onlineHelp()
 	}
 	return s.localHelp()
 }
 
 // ContextHelp: the short help bar. The Local tab puts the check key first.
 func (s *reposScreen) ContextHelp() []helpItem {
-	if s.tab == tabLocal {
+	switch s.tab {
+	case tabLocal:
 		return s.localContextHelp()
+	case tabOnline:
+		return s.onlineContextHelp()
 	}
 	var out []helpItem
 	for _, b := range s.Help() {
@@ -446,6 +519,8 @@ func (s *reposScreen) AlwaysHelp() []helpItem {
 				helpItem{b: relabel(km.Reload, tr("tui.key.rescan")), prio: 1})
 		}
 		return append(out, helpItem{b: s.tabBinding(), prio: 3})
+	case tabOnline:
+		return s.onlineAlwaysHelp()
 	case tabURL:
 		if s.tabLocked() {
 			return nil
@@ -518,16 +593,6 @@ func (s *reposScreen) View() string {
 		body = s.onlineView()
 	}
 	return fitHeight(s.tabBar()+"\n"+body, s.h)
-}
-
-// onlineView is the Online tab of this version: it says what is coming.
-func (s *reposScreen) onlineView() string {
-	st := s.sh.st
-	inner := maxInt(s.w-6, 10)
-	var b strings.Builder
-	b.WriteString(st.Bold.Render(tr("tui.repos.online.soon")) + "\n\n")
-	b.WriteString(st.Faint.Render(wrap(tr("tui.repos.online.hint"), inner)))
-	return s.sh.panel(tr("tui.repos.online.title"), b.String(), s.w, maxInt(s.h-1, 3), true)
 }
 
 // ---- helpers ----

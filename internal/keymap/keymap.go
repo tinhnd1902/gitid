@@ -127,7 +127,7 @@ var defs = []Def{
 	{Fix, []string{"f"}, scopes(ScopeCheck, ScopeRepos), "tui.key.fix"},
 	{Retry, []string{"r"}, scopes(ScopeApply, ScopeCheck, ScopeDoctor), "tui.key.retry"},
 	{Copy, []string{"c"}, scopes(ScopeKeyResult, ScopeRepos), "tui.key.copy"},
-	{Open, []string{"o"}, scopes(ScopeKeyResult), "tui.key.open"},
+	{Open, []string{"o"}, scopes(ScopeKeyResult, ScopeRepos), "tui.key.open"},
 	{SSHTest, []string{"s"}, scopes(ScopeDoctor), "tui.key.ssh_test"},
 	{Terminal, []string{"t"}, scopes(ScopeClone), "tui.key.terminal"},
 	{Problems, []string{"!"}, scopes(ScopeRepos), "tui.key.problems"},

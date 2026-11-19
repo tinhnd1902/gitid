@@ -33,7 +33,7 @@ var enTUI = map[string]string{
 	"tui.key.no":            "no",
 	"tui.key.toggle":        "switch choice",
 	"tui.key.copy":          "copy",
-	"tui.key.open":          "open add-key page",
+	"tui.key.open":          "open page",
 	"tui.key.fix":           "fix remote",
 	"tui.key.retry":         "run again",
 	"tui.key.ssh_test":      "test ssh -T",

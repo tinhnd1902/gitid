@@ -71,11 +71,30 @@ func build(ctx context.Context, c Cmd) *exec.Cmd {
 		cmd = exec.Command(c.Name, c.Args...)
 	}
 	cmd.Dir = c.Dir
-	cmd.Env = append(os.Environ(), c.Env...)
+	cmd.Env = childEnv(append(os.Environ(), c.Env...))
 	if c.Stdin != "" {
 		cmd.Stdin = strings.NewReader(c.Stdin)
 	}
 	return cmd
+}
+
+// tokenEnvPrefix starts the names of the variables that hold an account's
+// Online token (GITID_TOKEN_<COMPANY>__<ACCOUNT>). gitid reads them itself and
+// never hands them to a program it starts: git, gh, glab, security, open and
+// pbcopy do not need them, and a helper that logged its environment would
+// otherwise leak the tokens of every account.
+const tokenEnvPrefix = "GITID_TOKEN_"
+
+// childEnv returns env without any GITID_TOKEN_* variable.
+func childEnv(env []string) []string {
+	out := make([]string, 0, len(env))
+	for _, kv := range env {
+		if strings.HasPrefix(strings.ToUpper(kv), tokenEnvPrefix) {
+			continue
+		}
+		out = append(out, kv)
+	}
+	return out
 }
 
 func finish(c Cmd, cmd *exec.Cmd, err error, so, se *bytes.Buffer) (Result, error) {

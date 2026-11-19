@@ -91,6 +91,9 @@ func TestExternalKeysAreTranslated(t *testing.T) {
 	for _, k := range keymap.AllIssueCodes() {
 		keys[k] = true
 	}
+	for _, k := range []string{app.OnlineWarnDirFallback, app.OnlineWarnOtherAcc, app.OnlineWarnNoAccount} {
+		keys[k] = true
+	}
 	keys[sshcfg.WarnIncludeScoped] = true
 	keys[plan.WarnGitidConfForeign] = true
 	for _, r := range []string{"alias", "username", "default"} {

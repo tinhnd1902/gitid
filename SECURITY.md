@@ -47,6 +47,16 @@ Examples that are in scope:
   shown instead of being dropped and masked.
 - A way to make `apply` overwrite content outside the managed blocks, or to
   skip the backup.
+- A token read for the Online tab (from an environment variable, the gitid
+  Keychain item, `gh`/`glab` or git's credential helper) that is shown,
+  logged, written to disk, put in a command line, a URL or an error message,
+  or sent anywhere other than the `Authorization` header of a request to the
+  API host of the account it belongs to (for example through a redirect or a
+  "next page" link to another host, or over plain `http`). The same goes for
+  certificate verification being skipped, or for gitid changing what a
+  credential helper stores.
+- Text from a hosting platform's API (a repository name, an error message)
+  that reaches the terminal with its escape or control characters intact.
 
 Out of scope: problems that need an attacker who already controls your user
 account or your configuration files, and issues in git, ssh or your terminal

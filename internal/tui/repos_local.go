@@ -254,7 +254,12 @@ func (s *reposScreen) rebuild() {
 		s.scans = app.ClassifyLocal(cfg, s.sh.svc.Env, sess.rawList(cfg), sess.done)
 	}
 	s.stale, s.lastClass = false, time.Now()
+	s.lidx = app.IndexLocal(s.scans)
+	s.dropDetailCache()
 	s.buildRows(prev)
+	if s.ostarted {
+		s.rebuildOnline() // the clones decide which online repos show as cloned
+	}
 }
 
 func (s *reposScreen) selPath() string {

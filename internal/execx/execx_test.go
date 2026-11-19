@@ -147,3 +147,51 @@ func TestFakeInteractive(t *testing.T) {
 		t.Fatal("String must not include stdin")
 	}
 }
+
+// DEF-2: the token variables of gitid are not handed to child processes, in
+// any of the run modes; everything else still is.
+func TestChildEnvDropsGitidTokens(t *testing.T) {
+	t.Setenv("GITID_TOKEN_ACME__ALICE", "tok_SECRET_9f3c")
+	t.Setenv("GITID_TOKEN_GLOBEX__DAVE", "tok_SECRET_9f3c")
+	t.Setenv("gitid_token_lower__x", "tok_SECRET_9f3c")
+	t.Setenv("GITID_OTHER", "kept")
+	t.Setenv("GITID_TOKEN", "kept-no-trailing-underscore")
+	script := `env`
+	check := func(name, out string) {
+		t.Helper()
+		if strings.Contains(out, "tok_SECRET_9f3c") || strings.Contains(strings.ToUpper(out), "GITID_TOKEN_") {
+			t.Errorf("%s: a token variable reached the child:\n%s", name, out)
+		}
+		if !strings.Contains(out, "GITID_OTHER=kept") || !strings.Contains(out, "GITID_TOKEN=kept-no-trailing-underscore") {
+			t.Errorf("%s: unrelated variables were dropped:\n%s", name, out)
+		}
+	}
+	res, err := OSRunner{}.Run(context.Background(), Cmd{Name: "sh", Args: []string{"-c", script}, Env: []string{"EXTRA=1"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	check("Run", res.Stdout)
+	if !strings.Contains(res.Stdout, "EXTRA=1") {
+		t.Errorf("Cmd.Env lost:\n%s", res.Stdout)
+	}
+	res, err = OSRunner{}.Stream(context.Background(), Cmd{Name: "sh", Args: []string{"-c", script}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check("Stream", res.Stdout)
+	cmd := OSRunner{}.Interactive(Cmd{Name: "sh", Args: []string{"-c", script}})
+	check("Interactive", strings.Join(cmd.Env, "\n"))
+}
+
+func TestChildEnvKeepsOrderAndDropsExplicitToken(t *testing.T) {
+	got := childEnv([]string{"A=1", "GITID_TOKEN_X__Y=s", "B=2"})
+	if strings.Join(got, ",") != "A=1,B=2" {
+		t.Fatalf("%v", got)
+	}
+	// a token variable passed in Cmd.Env is dropped too; other entries stay
+	cmd := build(context.Background(), Cmd{Name: "true", Env: []string{"GITID_TOKEN_Z__Z=explicit", "KEEP=1"}})
+	all := strings.Join(cmd.Env, "\n")
+	if strings.Contains(all, "GITID_TOKEN_Z__Z") || !strings.Contains(all, "KEEP=1") {
+		t.Fatalf("env: %q", all)
+	}
+}

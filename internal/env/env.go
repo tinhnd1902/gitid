@@ -4,6 +4,7 @@
 package env
 
 import (
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -23,6 +24,11 @@ type Env struct {
 	// needs a variable other than HOME / XDG_CONFIG_HOME goes through it, so
 	// tests can inject a map instead of the real environment.
 	LookupEnv func(key string) (string, bool)
+	// HTTP is the transport of every request gitid makes to a hosting
+	// platform. nil means the real network (with the proxy and CA settings
+	// of the process); tests inject a transport that fails the test or one
+	// that answers from an httptest server.
+	HTTP http.RoundTripper
 }
 
 // New returns an Env with sane defaults for the optional fields.

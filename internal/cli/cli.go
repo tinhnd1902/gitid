@@ -105,7 +105,9 @@ func Execute(d Deps, args []string) int {
 	if d.Runner == nil {
 		d.Runner = execx.OSRunner{}
 	}
-	c := &cli{d: d, svc: app.New(d.Env, d.Runner), out: d.Stdout, err: d.Stderr}
+	svc := app.New(d.Env, d.Runner)
+	svc.Version = d.Version
+	c := &cli{d: d, svc: svc, out: d.Stdout, err: d.Stderr}
 	c.setLanguage()
 	root := c.root()
 	root.SetArgs(args)

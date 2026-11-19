@@ -5,7 +5,7 @@ LDFLAGS := -X main.version=$(VERSION)
 
 # Core packages and their minimum statement coverage (percent). See plan N5.
 CORE85 := remote gitcfg sshcfg block fsx plan config scan
-CORE70 := app keys gitops doctor importer
+CORE70 := app keys gitops doctor importer online
 
 .PHONY: build test cover vet fmt-check lint test-integration check-home check-install install clean
 

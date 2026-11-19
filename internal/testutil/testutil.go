@@ -6,10 +6,14 @@ package testutil
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"io/fs"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
 	"testing"
 	"time"
 
@@ -42,7 +46,68 @@ func TempEnv(t testing.TB) env.Env {
 	// no variable of the real process environment is visible to the code
 	// under test; MapEnv installs the ones a test needs
 	e.LookupEnv = func(string) (string, bool) { return "", false }
+	// and no request leaves the test process: a test that needs the network
+	// layer installs RedirectTransport
+	e.HTTP = failTransport{t}
 	return e
+}
+
+// ErrNetworkInTest is what the transport of TempEnv returns.
+var ErrNetworkInTest = errors.New("testutil: network request in a test")
+
+// failTransport fails the test that sends a request through it.
+type failTransport struct{ t testing.TB }
+
+func (f failTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	f.t.Errorf("network in test: %s %s", r.Method, r.URL.Redacted())
+	return nil, ErrNetworkInTest
+}
+
+// RedirectRT sends every request to one httptest server whatever host the
+// request names, and remembers what it was asked for. The server sees the
+// original host in r.Host, so a handler can route on it. The client side
+// trusts the certificate of the server.
+type RedirectRT struct {
+	inner http.RoundTripper
+	addr  string
+
+	mu    sync.Mutex
+	hosts []string
+	reqs  []string
+}
+
+// RedirectTransport points the requests of a test at srv (an
+// httptest.NewTLSServer).
+func RedirectTransport(srv *httptest.Server) *RedirectRT {
+	return &RedirectRT{inner: srv.Client().Transport, addr: srv.Listener.Addr().String()}
+}
+
+// RoundTrip implements http.RoundTripper.
+func (r *RedirectRT) RoundTrip(req *http.Request) (*http.Response, error) {
+	r.mu.Lock()
+	r.hosts = append(r.hosts, req.URL.Host)
+	r.reqs = append(r.reqs, req.Method+" "+req.URL.Host+req.URL.RequestURI())
+	r.mu.Unlock()
+	out := req.Clone(req.Context())
+	out.Host = req.URL.Host
+	u := *req.URL
+	u.Host = r.addr
+	out.URL = &u
+	return r.inner.RoundTrip(out)
+}
+
+// Hosts lists the host of every request, in order, as the code asked for it.
+func (r *RedirectRT) Hosts() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string(nil), r.hosts...)
+}
+
+// Requests lists "METHOD host/path?query" of every request.
+func (r *RedirectRT) Requests() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string(nil), r.reqs...)
 }
 
 // MapEnv makes e.LookupEnv answer from vars only and returns the updated Env.

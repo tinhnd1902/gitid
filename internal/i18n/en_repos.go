@@ -16,11 +16,6 @@ var enRepos = map[string]string{
 	"tui.key.rescan":       "rescan",
 	"tui.key.stop_scan":    "stop scan",
 
-	// Online tab (placeholder in this version)
-	"tui.repos.online.title": "Online repositories",
-	"tui.repos.online.soon":  "Listing the repositories of your accounts is coming soon.",
-	"tui.repos.online.hint":  "For now, paste a repository URL on the URL tab, or browse the repositories already on this machine on the Local tab.",
-
 	// Local tab
 	"tui.repos.local.all":               "All companies",
 	"tui.repos.local.repos_one":         "1 repo",

@@ -45,20 +45,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a time. The result is kept for the session; a configuration change is
   applied to it without scanning again, and a finished clone or fix updates
   only that repository. Leaving the screen stops the scan.
-- Online tab: a placeholder that says listing online repositories is coming
-  soon (no network is used).
+- Online tab of the repo browser: lists the repositories each account can see
+  on GitHub (github.com and GitHub Enterprise Server, `https://HOST/api/v3`)
+  or GitLab (gitlab.com and self-hosted, `https://HOST/api/v4`), page by page
+  as they arrive: `owner/name`, `priv`/`arch`/`fork`/`empty` badges, how long
+  ago it was updated, `+N acc` when another of your accounts sees it too and,
+  when you already have it, where (`✓`, or `!` when that clone has a problem).
+  Accounts of other platforms say "not available yet". Nothing is looked up or
+  sent until you open the tab. `enter` on a repository that is not cloned opens
+  the clone flow at the account pick with this account chosen (the URL is built
+  from the host in your configuration and rendered like a pasted URL; if
+  `<base folder>/<repo>` is taken by something else, the target becomes
+  `<base folder>/<owner>-<repo>` and the tab says so), on a cloned one it opens
+  the Check screen for the existing clone. `c` copies the clone URL, `o` opens
+  the repository's page, `/` filters, `left`/`right` switch account, `r`
+  forgets the token and fetches again, `esc` stops a fetch and keeps the pages
+  that came. Before a clone starts gitid checks that `config.yaml` has not
+  changed on disk.
+- Tokens for the Online tab, found per account in this order (first hit wins):
+  the environment variable `GITID_TOKEN_<COMPANY>__<ACCOUNT>` (for example
+  `GITID_TOKEN_ACME__ALICE`); a gitid Keychain item (macOS; service `gitid`,
+  account `<host>/<username>`; read only for now); `gh auth token` or
+  `glab config get token`; and git's credential helper (`git credential fill`,
+  run only when the Online tab is opened, with every prompt suppressed, and
+  without `approve`/`reject`; macOS may still show its own Keychain dialog).
+  The tab shows the source per account (`token: env`, `keychain`, `gh`, `glab`,
+  `git`, `none`) and never the token. Before listing, the API's `/user` login
+  must match the account's username, otherwise nothing is listed ("this token
+  belongs to @x"). The token stays in memory and is never written to disk,
+  put in a command line, a URL, a log or an error.
+- Errors of the Online tab have their own message and hint, in vi and en: 401
+  (with a hint per token source, and "looks like a password" for a credential
+  from git), missing scope, SAML SSO (with the authorization link), a one-time
+  code requirement, rate limit (with the reset time; a wait of 10 s or less is
+  waited out once), offline/DNS, timeout, proxy, untrusted certificate,
+  server error, an answer that is not the API's, wrong user, cancelled and
+  truncated (50 pages).
+- Network safety of the Online tab: `GET` only; https only; a redirect or a
+  "next page" link to another host or to `http` is refused, so the token is
+  sent only to the account's own API host; `HTTPS_PROXY`/`NO_PROXY` and
+  `SSL_CERT_FILE` are honoured; TLS 1.2 or newer and certificates are always
+  verified; 30 s per request, 3 accounts at a time, 8 MiB per page; texts
+  from the API are stripped of control and escape characters before they are
+  shown. `SECURITY.md` lists a leaked or misdirected token as in scope.
 - New rebindable action `problems` (default `!`) and the `repos` screen scope
   for `filter`, `check`, `fix`, `copy` and `reload` (`gitid keys` lists them).
   Since `filter`, `check`, `fix`, `copy`, `reload` and `problems` now share the
   repo browser screen, they cannot share a key with each other there: for
   example `filter: "f"` is reported as a conflict with `fix` (the default key
   stays).
-- README.md and README_VI.md: "Clone and the repo browser".
+- README.md and README_VI.md: "Clone and the repo browser", "Online tab and tokens".
 - Test: the shortcut guard covers the repo browser states and its sentinel
   keys now run through `alt+a` to `alt+z` and then `alt+A` to `alt+Z`.
 
 ### Changed
 
+- The `open` action (default `o`) now also works on the repo browser (open the
+  repository's page on the Online tab); its description is "open page".
+  `reload` reads "refetch" and `copy` "copy URL" on the Online tab.
+- README.md and README_VI.md: the sentences "gitid itself never signs in to or
+  verifies anything with the platform" and "the only step that uses the
+  network" are reworded: network use is now on demand in three places (a clone,
+  the `ssh -T` test and the Online tab). New section "Online tab and tokens".
 - Internal: `gitid check` and the local scan share one classification, so they
   always agree; the TUI root closes screens that own background work when
   they leave the stack, and broadcasts the results of background work to

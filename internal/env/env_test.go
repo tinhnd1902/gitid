@@ -115,4 +115,8 @@ func TestNewHasLookupEnv(t *testing.T) {
 	if v, ok := e.LookupEnv("GITID_ENV_TEST_VAR"); !ok || v != "x" {
 		t.Fatalf("LookupEnv = %q, %v", v, ok)
 	}
+	// the real network is the default
+	if e.HTTP != nil {
+		t.Fatal("HTTP is set by default")
+	}
 }

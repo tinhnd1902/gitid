@@ -866,7 +866,7 @@ func TestK1ReposScope(t *testing.T) {
 		}
 	}
 	slices.Sort(keysSeen)
-	want := []string{"!", "/", "?", "c", "ctrl+k", "f", "k", "q", "r"}
+	want := []string{"!", "/", "?", "c", "ctrl+k", "f", "k", "o", "q", "r"} // o: open the web page (Online tab)
 	if !slices.Equal(keysSeen, want) {
 		t.Fatalf("repos defaults %v, want %v", keysSeen, want)
 	}

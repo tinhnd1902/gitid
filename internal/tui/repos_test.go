@@ -407,7 +407,8 @@ func TestT40Tabs(t *testing.T) {
 	if r.tab != tabOnline {
 		t.Fatalf("tab %v", r.tab)
 	}
-	h.mustContainPlain(tr("tui.repos.online.soon"))
+	// the Online tab lists the accounts
+	h.mustContainPlain(tr("tui.repos.online.token", "none"))
 	h.key("tab") // Online -> Local
 	if r.tab != tabLocal {
 		t.Fatalf("tab %v", r.tab)
@@ -1175,15 +1176,17 @@ func TestT75BareRow(t *testing.T) {
 	}
 }
 
-// the Online tab of this version only announces itself
-func TestOnlineTabIsAPlaceholder(t *testing.T) {
+// the Online tab lists the accounts; with no token anywhere it says so and
+// makes no request (TempEnv's HTTP transport would fail the test)
+func TestOnlineTabListsAccounts(t *testing.T) {
 	h, _ := localHarness(t)
 	r := openRepos(h)
 	h.key("tab")
 	if r.tab != tabOnline {
 		t.Fatalf("tab %v", r.tab)
 	}
-	h.mustContainPlain(tr("tui.repos.online.title"), tr("tui.repos.online.soon"))
+	h.waitFor("settled", func() bool { return !r.onlineBusy() })
+	h.mustContainPlain("acme/alice", tr("tui.repos.online.token", "none"))
 	if got := plain(h.helpLine()); !strings.Contains(got, tr("tui.key.tab")) || !strings.Contains(got, tr("tui.key.back")) {
 		t.Fatalf("help %q", got)
 	}

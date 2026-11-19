@@ -417,7 +417,7 @@ func TestHB14RowLabel(t *testing.T) {
 	}
 	h.act(keymap.Clone)
 	r := reposOf(h)
-	for tab, want := range map[reposTab]string{tabLocal: "tui.help.row_this", tabURL: "tui.help.row_step", tabOnline: "tui.help.row_step"} {
+	for tab, want := range map[reposTab]string{tabLocal: "tui.help.row_this", tabURL: "tui.help.row_step", tabOnline: "tui.help.row_this"} {
 		r.tab = tab
 		if got := h.m.helpBarItems().rowLabel; got != want {
 			t.Errorf("repos tab %d: %q, want %q", tab, got, want)

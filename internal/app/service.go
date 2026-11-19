@@ -19,6 +19,13 @@ import (
 type Service struct {
 	Env env.Env
 	Run execx.Runner
+	// Version is gitid's version, sent in the User-Agent of the Online
+	// listing ("gitid/<version>").
+	Version string
+
+	// onl is the state of the Online tab: the token cache and the HTTP client
+	// (see online.go). It is created on first use.
+	onl onlineState
 }
 
 // New creates a Service.

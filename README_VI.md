@@ -35,7 +35,7 @@ tồn tại, để trang không bao giờ hiện ảnh lỗi.
 - **An toàn mặc định:** mọi thay đổi đều hiện diff trước, tệp được sao lưu trước khi ghi, khối do gitid quản lý có tính idempotent, và `--dry-run` không ghi gì cả.
 - **SSH đỡ đau đầu:** mỗi tài khoản một key ed25519 và một alias `Host`, public key chép vào clipboard chỉ với một phím, còn private key không bao giờ bị đọc.
 - **Clone và sửa remote:** clone bằng đúng tài khoản với thanh tiến trình, kiểm tra repo đang dùng danh tính nào, và sửa remote sai.
-- **Trình duyệt repo:** một màn hình có tab Trên máy (mọi repo trong thư mục các công ty, tài khoản mà remote khớp và điều gì đang sai), tab URL (clone) và tab Online (sắp có).
+- **Trình duyệt repo:** một màn hình có tab Trên máy (mọi repo trong thư mục các công ty, tài khoản mà remote khớp và điều gì đang sai), tab URL (clone) và tab Online (repo mà từng tài khoản thấy trên GitHub hoặc GitLab, nếu bạn có token cho nó).
 - **Chẩn đoán và nhập cấu hình:** kiểm tra toàn bộ thiết lập với tiến trình từng mục, và bắt đầu nhanh từ các `includeIf` bạn đã có.
 - **Hai ngôn ngữ:** tiếng Việt (mặc định) và tiếng Anh, đổi được cho từng lần chạy.
 
@@ -111,7 +111,7 @@ Lần đầu dùng TUI, làm ba bước (màn hình cũng hiện sẵn các bư�
 
 1. `A` thêm công ty: một slug ngắn và một thư mục gốc như `~/Code/acme/`.
 2. `a` thêm tài khoản Git (username, email) cho công ty đó. Form hiện sẵn remote tài khoản sẽ dùng (`https://<username>@github.com/…`) và ID gitid tự đặt theo username. Username là tên đăng nhập của bạn trên nền tảng (phần trong `github.com/<login>`), không phải email; email chỉ để ghi tác giả commit và gitid không xác minh nó.
-3. `p` xem trước các tệp gitid sẽ ghi, rồi `y` để áp dụng (mọi tệp đều được sao lưu trước). Từ đó mọi repo trong thư mục gốc tự dùng đúng tài khoản: `c` clone repo vào đó, `k` kiểm tra một repo. Lần đầu clone hoặc push qua HTTPS, git sẽ hỏi đăng nhập (nếu hỏi mật khẩu, hãy dùng Personal Access Token); bản thân gitid không đăng nhập hay xác minh gì với nền tảng.
+3. `p` xem trước các tệp gitid sẽ ghi, rồi `y` để áp dụng (mọi tệp đều được sao lưu trước). Từ đó mọi repo trong thư mục gốc tự dùng đúng tài khoản: `c` clone repo vào đó, `k` kiểm tra một repo. Lần đầu clone hoặc push qua HTTPS, git sẽ hỏi đăng nhập (nếu hỏi mật khẩu, hãy dùng Personal Access Token); bản thân gitid không đăng nhập thay bạn. Việc duy nhất nó làm với nền tảng là tab Online của trình duyệt repo: chỉ đọc một token bạn đã có (xem [Tab Online và token](#tab-online-và-token)) và chỉ khi bạn mở tab đó.
 
 **Xem trước an toàn:**
 
@@ -227,7 +227,8 @@ gitid sửa tệp trong thư mục home của bạn, nên nó rất chặt chẽ
 - **Bí mật trong URL:** mật khẩu hoặc token dán trong URL bị loại bỏ và che đi ở mọi nơi có thể hiển thị.
 - **Chống chèn lệnh:** tên, email, host và username được kiểm tra và escape trước khi vào cấu hình git hay ssh; lệnh clone luôn dùng `git clone -- <url> <thư mục>`.
 - **Quét repo:** tab Trên máy của trình duyệt repo chỉ đọc: nó liệt kê thư mục trong các thư mục gốc của công ty và chạy một lệnh `git config` chỉ đọc trong mỗi repo tìm được. Nó không ghi gì; bản thân gitid không mở tệp nào bên trong repo, trừ tệp `.git` một dòng của worktree hay submodule (git tự đọc cấu hình của repo).
-- **Mạng:** không dùng, trừ khi bạn clone hoặc tự bấm bài thử `ssh -T`. Không có telemetry.
+- **Mạng:** không dùng, trừ ba chỗ, mỗi chỗ chỉ khi bạn yêu cầu: clone, bài thử `ssh -T` tùy chọn, và tab Online của trình duyệt repo (chỉ khi bạn mở nó), nơi gửi các yêu cầu `GET` chỉ đọc tới API của host các tài khoản của bạn. Không có telemetry.
+- **Token (tab Online):** đọc từ biến môi trường, mục Keychain của gitid, `gh`/`glab` hoặc credential helper của git; chỉ giữ trong bộ nhớ, không bao giờ ghi ra đĩa, không bao giờ nằm trong dòng lệnh, URL, log hay lỗi, và chỉ được gửi dưới dạng header `Authorization` tới API của host chính tài khoản đó qua https (không theo chuyển hướng hay liên kết trang kế sang host khác; không bao giờ tắt kiểm tra chứng chỉ). gitid không ghi token ở đâu cả và không bao giờ đổi những gì credential helper lưu.
 - **Gỡ bỏ:** xóa hết công ty trong TUI rồi áp dụng; tệp của bạn trở về đúng từng byte ban đầu. Hoặc khôi phục thủ công (bên dưới). Để gỡ chính chương trình gitid, xem [Gỡ cài đặt chương trình](#gỡ-cài-đặt-chương-trình).
 
 <details>
@@ -345,12 +346,12 @@ clone: ["c", "n"]   # hai phím cho một hành động
 | `apply` | `p` | danh sách, chi tiết, kết quả SSH key |
 | `ssh_key` | `g` | danh sách, chi tiết |
 | `import` | `i` | danh sách |
-| `reload` | `r` | danh sách, trình duyệt repo (quét lại) |
+| `reload` | `r` | danh sách, trình duyệt repo (quét lại; tải lại ở tab Online) |
 | `yes` / `no` | `y` / `n` | màn hình xem trước, hộp xác nhận (cả câu hỏi «bỏ những gì đã nhập?») |
 | `fix` | `f` | kiểm tra, trình duyệt repo |
 | `retry` | `r` | áp dụng, kiểm tra, chẩn đoán |
-| `copy` | `c` | kết quả SSH key, trình duyệt repo (chép đường dẫn) |
-| `open` | `o` | kết quả SSH key |
+| `copy` | `c` | kết quả SSH key, trình duyệt repo (chép đường dẫn, hoặc URL clone ở tab Online) |
+| `open` | `o` | kết quả SSH key, trình duyệt repo (tab Online: mở trang của repo) |
 | `ssh_test` | `s` | chẩn đoán |
 | `terminal` | `t` | clone |
 | `problems` | `!` | trình duyệt repo (chỉ hiện repo có vấn đề) |
@@ -437,7 +438,44 @@ Cách quét: tìm sâu tối đa 4 thư mục bên dưới mỗi thư mục côn
 
 Công ty chưa có thư mục sẽ được báo («chưa tồn tại, clone một repo để tạo»); chưa có công ty nào thì tab nhắc bạn thêm công ty ở danh sách chính trước.
 
-**Tab Online.** Liệt kê repo của các tài khoản sẽ có trong bản sau; hiện giờ tab chỉ báo như vậy.
+**Tab Online.** Liệt kê repo mà từng tài khoản trong cấu hình thấy được trên nền tảng của nó (GitHub và GitHub Enterprise Server, GitLab và GitLab tự dựng; nền tảng khác báo «chưa hỗ trợ»). Chỉ tài khoản có token mới được tải, và chưa có gì được tìm hay gửi đi cho đến khi bạn mở tab này. `←` `→` đổi tài khoản; thanh trên cùng hiện tài khoản, nền tảng và nguồn token (`token: env`, `keychain`, `gh`, `glab`, `git` hoặc `none`). Bản thân token không bao giờ được hiện.
+
+```text
+◂ acme/alice · GitHub · token: gh ▸  (1/5)
+  Token của @alice · 5 repo
+▌✓ acme/api         riêng 3d  +2 tk  ~/Code/acme/api
+ ! acme/x                  3d  +1 tk  ~/Code/acme/org/x
+   acme-org/tools   rỗng   3d  +1 tk
+```
+
+Mỗi dòng hiện `chủ/tên`, nhãn (`riêng`, `lưu`, `fork`, `rỗng`), cập nhật cách đây bao lâu, `+N tk` khi tài khoản khác của bạn cũng thấy repo đó, và nếu bạn đã có repo này trên máy thì ở đâu (`✓` ổn, `!` bản trên máy có vấn đề). Khối dưới danh sách cho biết URL clone theo tài khoản và thư mục đích.
+
+| Phím | Tác dụng |
+| ---- | -------- |
+| `enter` | chưa clone: mở luồng clone ở bước chọn tài khoản, đã chọn sẵn tài khoản này; đã clone: mở màn hình Kiểm tra cho bản đang có |
+| `c` | chép URL clone (theo tài khoản, không có token) |
+| `o` | mở trang web của repo trong trình duyệt |
+| `/` | lọc theo `chủ/tên` |
+| `←` `→` | đổi tài khoản |
+| `r` | quên token của tài khoản này, tìm lại và tải lại |
+| `esc` | dừng lần tải đang chạy (các trang đã tải vẫn còn); `esc` lần hai thì rời màn hình |
+
+URL clone được dựng từ host trong cấu hình của bạn và đường dẫn repo, rồi viết lại như mọi URL bạn dán, nên dùng username hoặc ssh alias của tài khoản. Token của API không bao giờ dùng để clone: git đăng nhập bằng thông tin riêng của nó như mọi khi. Nếu `<thư mục gốc>/<repo>` đã tồn tại và là thứ khác, gitid clone vào `<thư mục gốc>/<chủ>-<repo>` và báo cho bạn; nếu thư mục đó cũng có rồi thì `enter` không làm gì và khối dưới danh sách nhắc dùng tab URL với thư mục khác. Repo online được ghép với bản clone trên máy theo `host/chủ/repo` (repo đổi tên hay chuyển chủ thì không theo được). Trước khi clone, gitid kiểm tra `config.yaml` chưa đổi kể từ lúc màn hình nạp nó; nếu đã đổi, nó nạp lại và nhắc bạn kiểm tra lại tài khoản.
+
+#### Tab Online và token
+
+Với mỗi tài khoản, gitid tìm token theo thứ tự này và dừng ở nguồn đầu tiên có:
+
+1. **Biến môi trường** `GITID_TOKEN_<CÔNG-TY>__<TÀI-KHOẢN>`: viết hoa, `-` thành `_`, hai dấu gạch dưới giữa hai phần. Với `acme/alice` là `GITID_TOKEN_ACME__ALICE`. Nếu hai tài khoản cho cùng một tên, biến bị bỏ qua và tab báo như vậy. gitid không đọc `GITHUB_TOKEN`, `GH_TOKEN` hay `GITLAB_TOKEN` vì chúng không phân biệt được tài khoản. Riêng chương trình `gh` có thể tự đọc chúng khi gitid nhờ nó lấy token (nguồn 3), nên hãy bỏ đặt các biến này nếu bạn muốn dùng token của chính đăng nhập `gh` của tài khoản. gitid cũng gỡ mọi biến `GITID_TOKEN_*` khỏi môi trường của các chương trình nó chạy.
+2. **Mục Keychain của gitid** (macOS): service `gitid`, account `<host>/<username>` (ví dụ `github.com/alice`), đọc bằng `security find-generic-password -w`. Bản này gitid chỉ đọc mục đó.
+3. **Đăng nhập `gh` hoặc `glab`:** `gh auth token --hostname=<host> --user=<username>` (`gh` cũ không có `--user` thì được hỏi lại không có cờ đó), hoặc `glab config get token --host=<host>`. `glab` chỉ giữ một token cho mỗi host.
+4. **Credential helper của git:** `git credential fill` cho `https://<host>` và username của bạn, tức là bí mật git vẫn dùng để push. gitid chỉ chạy nó khi bạn mở tab Online, với `GIT_TERMINAL_PROMPT=0`, không chương trình askpass và `credential.interactive` đặt là `never` và `false` (hai giá trị Git Credential Manager ghi là «không hỏi»), nên nó không thể hỏi bạn gì; nó không bao giờ chạy `approve` hay `reject`, nên không đổi gì trong nơi helper lưu. Lần đọc đầu tiên vẫn có thể làm macOS hiện hộp thoại «cho phép truy cập Keychain» của chính nó, gitid không tắt được. Thứ helper lưu có thể là mật khẩu chứ không phải token; khi đó GitHub trả 401 và tab báo thông tin đã lưu giống một mật khẩu.
+
+Token được giữ trong bộ nhớ suốt phiên (nên hộp thoại Keychain không lặp lại) và gitid không bao giờ ghi nó ra đĩa. Nó không bao giờ nằm trong dòng lệnh, URL, log hay thông báo. Nguồn nào không có hoặc lỗi thì thử nguồn kế tiếp; sau khi một lần gọi API thất bại thì không có phương án dự phòng, và lỗi nêu tên nguồn để bạn biết sửa bí mật nào (`r` tìm lại).
+
+Trước khi liệt kê gì, gitid hỏi API token thuộc về ai (`GET /user`). Nếu login đó khác username của tài khoản (không phân biệt hoa thường) thì không liệt kê gì và tab báo «token này thuộc về @x». Quyền cần có: token classic của GitHub cần `repo` (hoặc `public_repo` nếu chỉ repo công khai), token fine-grained cần «Metadata: read»; GitLab cần `read_api`. gitid không bao giờ yêu cầu hay tạo token.
+
+Yêu cầu chỉ là `GET`, tới `https://api.github.com` (GitHub.com), `https://<host>/api/v3` (GitHub Enterprise Server) hoặc `https://<host>/api/v4` (GitLab), mỗi yêu cầu tối đa 30 giây, tối đa 3 tài khoản cùng lúc, tối đa 50 trang 100 repo mỗi tài khoản (quá thì tab báo đã dừng) và tối đa 8 MiB mỗi trang. Chuyển hướng hoặc liên kết «trang kế» tới host khác, hoặc tới `http` thường, đều bị từ chối, nên token không bao giờ đi đâu ngoài host của chính tài khoản. `HTTPS_PROXY` và `NO_PROXY` được tôn trọng; chứng chỉ được kiểm tra theo gốc tin cậy của hệ thống cộng với tệp `SSL_CERT_FILE` nếu có (không bao giờ tắt kiểm tra). Giới hạn truy cập ngắn hơn 10 giây thì được chờ một lần; dài hơn thì báo kèm giờ được đặt lại và các trang đã tải vẫn còn. Chưa hỗ trợ: GitHub Enterprise có tiền tố đường dẫn, GitHub Enterprise Cloud lưu dữ liệu theo vùng (`*.ghe.com`), GitLab dưới relative URL root, Gitea, Bitbucket và Azure DevOps (các tài khoản này báo «chưa hỗ trợ»).
 
 ### Kiểm tra và sửa remote
 
@@ -458,7 +496,7 @@ Sửa remote origin theo tài khoản acme/alice
 
 ### Chẩn đoán (doctor)
 
-`D` chạy mọi kiểm tra cùng lúc, mỗi mục một spinner riêng: phiên bản git, cấu hình hợp lệ, credential helper, `Include` của ssh, `gitid.conf`, key và quyền truy cập, thay đổi chưa áp dụng, thư mục gốc, trùng alias và pattern mơ hồ. Nhấn `s` để thử thêm `ssh -T` tới từng alias (đây là bước duy nhất dùng mạng, và chỉ khi bạn nhấn).
+`D` chạy mọi kiểm tra cùng lúc, mỗi mục một spinner riêng: phiên bản git, cấu hình hợp lệ, credential helper, `Include` của ssh, `gitid.conf`, key và quyền truy cập, thay đổi chưa áp dụng, thư mục gốc, trùng alias và pattern mơ hồ. Nhấn `s` để thử thêm `ssh -T` tới từng alias (một trong ba việc dùng mạng, và chỉ khi bạn nhấn).
 
 ```text
 ✓ Phiên bản git      git 2.56.0

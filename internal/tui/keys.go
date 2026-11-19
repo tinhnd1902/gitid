@@ -136,6 +136,8 @@ var hintKeys = map[string][]keymap.Action{
 	"tui.repos.local.cancelled":      {keymap.Reload},
 	"tui.repos.local.no_problems":    {keymap.Problems},
 	"tui.repos.hint.fix":             {keymap.Fix},
+	"tui.repos.online.cancelled":     {keymap.Reload},
+	"tui.repos.online.hint.retry":    {keymap.Reload},
 }
 
 // T translates a message like tr, but a message that names keys (see

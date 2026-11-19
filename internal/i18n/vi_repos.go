@@ -16,11 +16,6 @@ var viRepos = map[string]string{
 	"tui.key.rescan":       "quét lại",
 	"tui.key.stop_scan":    "dừng quét",
 
-	// Online tab (placeholder in this version)
-	"tui.repos.online.title": "Repository online",
-	"tui.repos.online.soon":  "Tính năng liệt kê repository của các tài khoản sẽ có trong bản sau.",
-	"tui.repos.online.hint":  "Hiện tại, hãy dán URL repository ở tab URL, hoặc xem các repository đã có trên máy ở tab Trên máy.",
-
 	// Local tab
 	"tui.repos.local.all":               "Tất cả công ty",
 	"tui.repos.local.repos_one":         "1 repo",

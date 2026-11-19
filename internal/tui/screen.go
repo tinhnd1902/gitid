@@ -110,6 +110,9 @@ type shared struct {
 	// repos is the session cache of the repo browser: the raw results of the
 	// local scan, kept for the life of the process (see repoSession).
 	repos *repoSession
+	// online is the session cache of the Online tab, one entry per account
+	// (see onlineState); it holds no token.
+	online map[string]*onlineState
 	// scanOpts bounds the local scan (the zero value takes the scan defaults;
 	// tests lower the caps).
 	scanOpts app.ScanOptions

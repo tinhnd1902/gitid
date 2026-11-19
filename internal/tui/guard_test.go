@@ -3,6 +3,7 @@ package tui
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -83,7 +84,7 @@ var grdOverlay = map[string]bool{
 	"list welcome": true, "list account applied": true, "list pending": true, "detail ssh account": true,
 	"confirm ready": true, "confirm done": true, "check result": true, "clone pick": true,
 	"key result": true, "doctor": true, "import proposals": true, "delete step 0": true, "keygen mode": true,
-	"repos local list": true,
+	"repos local list": true, "repos online list": true,
 	// the mutation of GRD-4b: the swallowed add-account key must show up via the overlay too
 	"detail ssh account (blind)": true,
 }
@@ -255,6 +256,56 @@ func grdStates() []grdState {
 			return h
 		}},
 		{"repos local scanning", func(t *testing.T, y string) *harness { return scanningHarness(t, y) }},
+		{"repos online no token", func(t *testing.T, y string) *harness {
+			h, _ := onlineHarness(t, y)
+			r := openOnlineTab(h, true)
+			gotoAccount(h, r, "globex/dave")
+			return h
+		}},
+		{"repos online list", func(t *testing.T, y string) *harness {
+			h, _ := onlineHarness(t, y)
+			h.resize(100, 30)
+			r := openOnlineTab(h, true)
+			selectRepo(h, r, "acme/web") // not cloned, so enter clones and every key is offered
+			return h
+		}},
+		{"repos online error", func(t *testing.T, y string) *harness {
+			api := newFakeAPI(t)
+			api.setHook(func(w http.ResponseWriter, r *http.Request, login string, page int) bool {
+				if login == "alice" {
+					writeJSONResp(w, 401, map[string]any{"message": "Bad credentials"})
+					return true
+				}
+				return false
+			})
+			h := onlineHarnessRT(t, api, api.rt, y)
+			openRepos(h)
+			h.key("tab")
+			r := reposOf(h)
+			h.waitFor("settled", func() bool { return !r.onlineBusy() })
+			return h
+		}},
+		{"repos online fetching", func(t *testing.T, y string) *harness {
+			api := newFakeAPI(t)
+			release := make(chan struct{})
+			t.Cleanup(func() { close(release) })
+			api.setHook(func(w http.ResponseWriter, r *http.Request, login string, page int) bool {
+				if login == "alice" && strings.HasSuffix(r.URL.Path, "/repos") {
+					select {
+					case <-release:
+					case <-r.Context().Done():
+					}
+					return true
+				}
+				return false
+			})
+			h := onlineHarnessRT(t, api, api.rt, y)
+			r := openRepos(h)
+			h.key("tab")
+			a := r.oacc[0]
+			h.waitFor("fetching", func() bool { st := r.sh.online[a.Key]; return st != nil && st.phase == opFetching })
+			return h
+		}},
 		{"delete step 0", func(t *testing.T, y string) *harness {
 			h := hk(t, basicCfg(), []string{y})
 			h.selectKey("acme/bob")

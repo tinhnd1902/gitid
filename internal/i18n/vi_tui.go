@@ -33,7 +33,7 @@ var viTUI = map[string]string{
 	"tui.key.no":            "không",
 	"tui.key.toggle":        "đổi lựa chọn",
 	"tui.key.copy":          "sao chép",
-	"tui.key.open":          "mở trang thêm key",
+	"tui.key.open":          "mở trang",
 	"tui.key.fix":           "sửa remote",
 	"tui.key.retry":         "chạy lại",
 	"tui.key.ssh_test":      "thử ssh -T",

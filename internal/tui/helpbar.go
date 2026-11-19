@@ -171,7 +171,7 @@ func (m *Model) helpBarItems() helpBarItems {
 	case *listScreen:
 		out.rowLabel = "tui.help.row_this"
 	case *reposScreen:
-		if top.(*reposScreen).tab == tabLocal {
+		if t := top.(*reposScreen).tab; t == tabLocal || t == tabOnline {
 			out.rowLabel = "tui.help.row_this"
 		}
 	}

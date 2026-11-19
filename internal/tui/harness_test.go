@@ -72,7 +72,18 @@ func newHarnessKeys(t *testing.T, cfg *config.Config, keysYAML string) *harness 
 // saved and before the model starts.
 func buildHarness(t *testing.T, cfg *config.Config, before func(e env.Env)) *harness {
 	t.Helper()
+	return buildHarnessEnv(t, cfg, nil, before)
+}
+
+// buildHarnessEnv is buildHarness with a hook that changes the Env before the
+// service is built (the Online tests put the token variables and the HTTP
+// transport there).
+func buildHarnessEnv(t *testing.T, cfg *config.Config, mutate func(*env.Env), before func(e env.Env)) *harness {
+	t.Helper()
 	e := testutil.TempEnv(t)
+	if mutate != nil {
+		mutate(&e)
+	}
 	fake := execx.NewFake()
 	svc := app.New(e, fake)
 	if cfg != nil {

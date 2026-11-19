@@ -35,7 +35,7 @@ page never shows a broken image.
 - **Safe by default:** every change is shown as a diff first, files are backed up before they are written, managed blocks are idempotent, and `--dry-run` writes nothing at all.
 - **SSH without the pain:** one ed25519 key and one `Host` alias per account, the public key one keypress from your clipboard, and private keys are never read.
 - **Clone and repair:** clone with the right account and a live progress bar, check which identity a repository really uses, and rewrite a wrong remote.
-- **Repo browser:** one screen with a Local tab (every repository under your company folders, the account its remote maps to, and what is wrong), a URL tab (clone) and an Online tab (coming soon).
+- **Repo browser:** one screen with a Local tab (every repository under your company folders, the account its remote maps to, and what is wrong), a URL tab (clone) and an Online tab (the repositories each of your accounts can see on GitHub or GitLab, if you have a token for it).
 - **Doctor and import:** diagnose the whole setup with per-check progress, and bootstrap from the `includeIf` entries you already have.
 - **Two languages:** Vietnamese (default) and English, switchable per run.
 
@@ -111,7 +111,7 @@ First run in the TUI, three steps (the screen shows them too, and the bottom lin
 
 1. `A` adds a company: a short slug and a base folder such as `~/Code/acme/`.
 2. `a` adds a Git account (username, email) to that company. The form shows the remote the account will use (`https://<username>@github.com/…`) and the gitid ID it derives from the username. The username is your login on the platform (the part in `github.com/<login>`), not your email; the email only becomes the commit author and gitid does not verify it.
-3. `p` previews the files gitid will write, then `y` applies them (every file is backed up first). After that, every repo inside the base folder uses the right account: `c` clones a repo into it, `k` checks a repo. The first HTTPS clone or push makes git ask you to sign in (use a Personal Access Token if it asks for a password); gitid itself never signs in to or verifies anything with the platform.
+3. `p` previews the files gitid will write, then `y` applies them (every file is backed up first). After that, every repo inside the base folder uses the right account: `c` clones a repo into it, `k` checks a repo. The first HTTPS clone or push makes git ask you to sign in (use a Personal Access Token if it asks for a password); gitid itself never signs in for you. The one thing it does with the platform is the Online tab of the repo browser, which only reads a token you already have (see [Online tab and tokens](#online-tab-and-tokens)) and only when you open that tab.
 
 **Preview safely:**
 
@@ -227,7 +227,8 @@ gitid edits files in your home directory, so it is strict about it:
 - **Secrets in URLs:** a password or token pasted inside a URL is dropped and masked everywhere it would be shown.
 - **Injection-safe:** names, emails, hosts and usernames are validated and escaped before they reach git or ssh configuration; clone commands always use `git clone -- <url> <dir>`.
 - **Repo scan:** the Local tab of the repo browser only reads: it lists folders under your company base folders and runs one read-only `git config` in each repository it finds. It writes nothing; gitid itself opens no file inside a repository except the one-line `.git` file of a worktree or submodule (git reads the repository's configuration).
-- **Network:** none, except when you clone or press the opt-in `ssh -T` test. There is no telemetry.
+- **Network:** none, except in three places, each on demand: a clone, the opt-in `ssh -T` test, and the Online tab of the repo browser (and only when you open it), which sends read-only `GET` requests to the API of your own accounts' hosts. There is no telemetry.
+- **Tokens (Online tab):** read from an environment variable, the gitid Keychain item, `gh`/`glab` or git's credential helper; kept in memory only, never written to disk, never put in a command line, a URL, a log or an error, and sent only as the `Authorization` header to the account's own API host over https (no redirect or next-page link to another host is followed; certificate verification is never turned off). gitid writes no token anywhere and never changes what a credential helper stores.
 - **Uninstall:** delete all companies in the TUI and apply; your files return to their original bytes. Or restore by hand (below). To remove the gitid program itself, see [Uninstall the binary](#uninstall-the-binary).
 
 <details>
@@ -345,12 +346,12 @@ clone: ["c", "n"]   # two keys for one action
 | `apply` | `p` | list, detail, SSH key result |
 | `ssh_key` | `g` | list, detail |
 | `import` | `i` | list |
-| `reload` | `r` | list, repo browser (rescan) |
+| `reload` | `r` | list, repo browser (rescan; refetch on the Online tab) |
 | `yes` / `no` | `y` / `n` | apply review, confirmation dialogs (also the "discard what you typed?" question) |
 | `fix` | `f` | check, repo browser |
 | `retry` | `r` | apply, check, doctor |
-| `copy` | `c` | SSH key result, repo browser (copy the path) |
-| `open` | `o` | SSH key result |
+| `copy` | `c` | SSH key result, repo browser (copy the path, or the clone URL on the Online tab) |
+| `open` | `o` | SSH key result, repo browser (Online tab: open the repository's page) |
 | `ssh_test` | `s` | doctor |
 | `terminal` | `t` | clone |
 | `problems` | `!` | repo browser (show only repos with a problem) |
@@ -437,7 +438,44 @@ How the scan works: it looks up to 4 folders deep below each company folder, vis
 
 A company that has no folder yet says so ("does not exist yet — clone a repo to create it"); with no company the tab asks you to add one on the main list first.
 
-**Online tab.** Listing the repositories of your accounts is coming soon; the tab only says so for now.
+**Online tab.** Lists the repositories each account of your configuration can see on its platform (GitHub and GitHub Enterprise Server, GitLab and self-hosted GitLab; other platforms say "not available yet"). Only accounts that have a token are fetched, and nothing is looked up or sent until you open this tab. `left` and `right` switch account; the bar shows the account, its platform and where its token comes from (`token: env`, `keychain`, `gh`, `glab`, `git` or `none`). The token itself is never shown.
+
+```text
+◂ acme/alice · GitHub · token: gh ▸  (1/5)
+  Token of @alice · 5 repos
+▌✓ acme/api         priv  3d  +2 acc  ~/Code/acme/api
+ ! acme/x                 3d  +1 acc  ~/Code/acme/org/x
+   acme-org/tools   empty 3d  +1 acc
+```
+
+Each row shows `owner/name`, badges (`priv`, `arch`, `fork`, `empty`), how long ago it was updated, `+N acc` when another account of yours sees the same repository, and, when you already have it on this machine, where (`✓` fine, `!` the local clone has a problem). The block under the list shows the clone URL as the account would use it and the target folder.
+
+| Key | Action |
+| --- | ------ |
+| `enter` | not cloned: open the clone flow at the account pick, with this account chosen; cloned: open the Check screen for the existing clone |
+| `c` | copy the clone URL (rendered for the account, no token) |
+| `o` | open the repository's web page in the browser |
+| `/` | filter by `owner/name` |
+| `←` `→` | switch account |
+| `r` | forget the token of this account, look for it again and fetch again |
+| `esc` | stop a running fetch (the pages already fetched stay); a second `esc` leaves the screen |
+
+The clone URL is built from the host in your configuration and the repository path, then rendered like any URL you paste, so it uses the account's username or its ssh alias. The API token is never used for the clone: git signs in with its own credentials, as always. If `<base folder>/<repo>` already exists as something else, gitid clones into `<base folder>/<owner>-<repo>` and says so; if that exists too, enter does nothing and the block under the list says to use the URL tab with another folder. A repository is matched with a local clone by `host/owner/repo` (renamed or transferred repositories are not followed). Before a clone starts gitid checks that `config.yaml` has not changed since the screen loaded it; if it has, it reloads and asks you to check the account again.
+
+#### Online tab and tokens
+
+For each account gitid looks for a token in this order and stops at the first hit:
+
+1. **Environment variable** `GITID_TOKEN_<COMPANY>__<ACCOUNT>`: upper case, `-` written as `_`, two underscores between the two parts. For `acme/alice` it is `GITID_TOKEN_ACME__ALICE`. If two accounts map to the same name, the variable is ignored and the tab says so. gitid does not read `GITHUB_TOKEN`, `GH_TOKEN` or `GITLAB_TOKEN`: they cannot tell accounts apart. The `gh` program may read them itself when gitid asks it for a token (source 3), so unset them if you want the token of the account's own `gh` login. gitid also removes every `GITID_TOKEN_*` variable from the environment of the programs it starts.
+2. **gitid Keychain item** (macOS): service `gitid`, account `<host>/<username>` (for example `github.com/alice`), read with `security find-generic-password -w`. gitid only reads it in this version.
+3. **`gh` or `glab` login:** `gh auth token --hostname=<host> --user=<username>` (older `gh` without `--user` is asked without it), or `glab config get token --host=<host>`. `glab` keeps one token per host.
+4. **git's credential helper:** `git credential fill` for `https://<host>` and your username, the secret git already uses to push. gitid runs it only when you open the Online tab, with `GIT_TERMINAL_PROMPT=0`, no askpass program and `credential.interactive` set to `never` and `false` (the two values Git Credential Manager documents for "no prompts"), so it cannot ask you anything; it never runs `approve` or `reject`, so it never changes what the helper stores. The first read may still make macOS show its own "allow access to the Keychain" dialog, which gitid cannot suppress. What the helper stores may be a password rather than a token; GitHub then answers 401 and the tab says the stored credential looks like a password.
+
+The token is kept in memory for the session (so a Keychain dialog is not repeated) and is never written to disk by gitid. It is never put in a command line, a URL, a log or a message. If a source has nothing or fails, the next one is tried; after an API call fails there is no fallback, and the error names the source so you know which secret to fix (`r` looks again).
+
+Before anything is listed gitid asks the API who the token belongs to (`GET /user`). If that login is not the account's username (case does not matter), nothing is listed and the tab says "this token belongs to @x". Scopes needed: GitHub classic token `repo` (or `public_repo` for public repositories only), fine-grained token "Metadata: read"; GitLab `read_api`. gitid never asks for or creates a token.
+
+Requests are `GET` only, to `https://api.github.com` (GitHub.com), `https://<host>/api/v3` (GitHub Enterprise Server) or `https://<host>/api/v4` (GitLab), with a 30 s limit each, at most 3 accounts at the same time, at most 50 pages of 100 repositories per account (then the tab says it stopped) and at most 8 MiB per page. A redirect or "next page" link to another host, or to plain `http`, is refused, so the token never goes anywhere but the account's own host. `HTTPS_PROXY` and `NO_PROXY` are honoured; certificates are checked against the system roots plus the file named by `SSL_CERT_FILE` if set (verification is never turned off). A rate limit shorter than 10 s is waited out once; a longer one is reported with its reset time and the pages already fetched stay. Not supported: GitHub Enterprise with a path prefix, GitHub Enterprise Cloud with data residency (`*.ghe.com`), GitLab under a relative URL root, Gitea, Bitbucket and Azure DevOps (these accounts show "not available yet").
 
 ### Check and fix remote
 
@@ -458,7 +496,7 @@ Fix remote origin for account acme/alice
 
 ### Doctor
 
-`D` runs every diagnostic at the same time, each with its own spinner: git version, configuration validity, credential helper, the ssh `Include`, `gitid.conf`, keys and their permissions, pending changes, base folders, alias collisions and ambiguous patterns. Press `s` to also test `ssh -T` against each alias (this is the only step that uses the network, and only when you press it).
+`D` runs every diagnostic at the same time, each with its own spinner: git version, configuration validity, credential helper, the ssh `Include`, `gitid.conf`, keys and their permissions, pending changes, base folders, alias collisions and ambiguous patterns. Press `s` to also test `ssh -T` against each alias (one of the three things that use the network, and only when you press it).
 
 ```text
 ✓ git version        git 2.56.0

@@ -1,8 +1,13 @@
 package testutil
 
 import (
+	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/tinhnd1902/gitid/internal/env"
@@ -82,5 +87,59 @@ func TestTempEnvLookupEnvIsEmpty(t *testing.T) {
 	}
 	if _, ok := m.LookupEnv("PATH"); ok {
 		t.Fatal("MapEnv leaks PATH")
+	}
+}
+
+// recorder is a testing.TB that records Errorf instead of failing, so the
+// test of the failing transport itself passes.
+type recorder struct {
+	testing.TB
+	errs []string
+}
+
+func (r *recorder) Errorf(format string, args ...any) {
+	r.errs = append(r.errs, fmt.Sprintf(format, args...))
+}
+
+// ENV-3: a request through the HTTP transport of TempEnv fails the test.
+func TestTempEnvHTTPFailsTheTest(t *testing.T) {
+	rec := &recorder{TB: t}
+	e := TempEnv(rec)
+	if e.HTTP == nil {
+		t.Fatal("TempEnv has no HTTP transport")
+	}
+	req, _ := http.NewRequest(http.MethodGet, "https://api.github.com/user", nil)
+	_, err := e.HTTP.RoundTrip(req)
+	if !errors.Is(err, ErrNetworkInTest) {
+		t.Fatalf("err = %v", err)
+	}
+	if len(rec.errs) != 1 || !strings.Contains(rec.errs[0], "network in test") {
+		t.Fatalf("recorded %v", rec.errs)
+	}
+}
+
+// RedirectTransport sends any host to the server, keeps the host the code
+// asked for in r.Host and records it.
+func TestRedirectTransport(t *testing.T) {
+	var gotHost, gotPath string
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHost, gotPath = r.Host, r.URL.RequestURI()
+	}))
+	defer srv.Close()
+	rt := RedirectTransport(srv)
+	c := &http.Client{Transport: rt}
+	resp, err := c.Get("https://api.github.com/user?x=1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if gotHost != "api.github.com" || gotPath != "/user?x=1" {
+		t.Fatalf("server saw %q %q", gotHost, gotPath)
+	}
+	if h := rt.Hosts(); len(h) != 1 || h[0] != "api.github.com" {
+		t.Fatalf("hosts %v", h)
+	}
+	if r := rt.Requests(); len(r) != 1 || r[0] != "GET api.github.com/user?x=1" {
+		t.Fatalf("requests %v", r)
 	}
 }
