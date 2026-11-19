@@ -40,6 +40,12 @@ type Deps struct {
 	// StartTUI is called for `gitid` without arguments. When nil a short
 	// notice is printed.
 	StartTUI func(svc *app.Service) error
+	// ReadSecret reads a line from the terminal without echo (the prompt is
+	// printed by the caller). Used by `token set` when stdin is a terminal.
+	ReadSecret func() (string, error)
+	// Ctx is the context of the command (default: Background); tests inject
+	// a cancelled one.
+	Ctx context.Context
 	// Lang overrides the configured language (GITID_LANG).
 	Lang string
 }
@@ -113,7 +119,11 @@ func Execute(d Deps, args []string) int {
 	root.SetArgs(args)
 	root.SetOut(d.Stdout)
 	root.SetErr(d.Stderr)
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	parent := d.Ctx
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, stop := signal.NotifyContext(parent, os.Interrupt)
 	defer stop()
 	err := root.ExecuteContext(ctx)
 	if err == nil {
@@ -158,6 +168,6 @@ func (c *cli) root() *cobra.Command {
 			return c.d.StartTUI(c.svc)
 		},
 	}
-	root.AddCommand(c.listCmd(), c.checkCmd(), c.cloneCmd(), c.applyCmd(), c.doctorCmd(), c.fixRemoteCmd(), c.keyCmd(), c.keysCmd(), c.importCmd(), c.versionCmd())
+	root.AddCommand(c.listCmd(), c.checkCmd(), c.reposCmd(), c.tokenCmd(), c.cloneCmd(), c.applyCmd(), c.doctorCmd(), c.fixRemoteCmd(), c.keyCmd(), c.keysCmd(), c.importCmd(), c.versionCmd())
 	return root
 }

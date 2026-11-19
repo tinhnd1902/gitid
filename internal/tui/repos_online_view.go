@@ -125,9 +125,14 @@ func (s *reposScreen) stateLines(os *onlineState, iw int) []string {
 	case opFetching:
 		out = append(out, trunc(s.spin.View()+" "+st.Muted.Render(tr("tui.repos.online.fetching", a.Ref.String(), maxInt(os.pages, 1), groupDigits(len(os.repos)))), iw))
 	case opDone:
-		if len(os.repos) == 0 {
+		switch {
+		case len(os.repos) == 0 && os.login == "": // Azure DevOps names no user
+			out = append(out, trunc(st.Muted.Render(tr("tui.repos.online.empty_nologin")), iw))
+		case len(os.repos) == 0:
 			out = append(out, trunc(st.Muted.Render(tr("tui.repos.online.empty", os.login)), iw))
-		} else {
+		case os.login == "":
+			out = append(out, trunc(st.Faint.Render(tr("tui.repos.online.done_nologin", groupDigits(len(os.repos)))), iw))
+		default:
 			out = append(out, trunc(st.Faint.Render(tr("tui.repos.online.done", os.login, groupDigits(len(os.repos)))), iw))
 		}
 	case opCancelled:
@@ -142,7 +147,7 @@ func (s *reposScreen) stateLines(os *onlineState, iw int) []string {
 		}
 	}
 	for _, w := range os.warnings {
-		out = append(out, warn(tr("tui.repos.online.warn."+w))...)
+		out = append(out, warn(warnText(w))...)
 	}
 	if os.truncated {
 		out = append(out, warn(tr("tui.repos.online.truncated", os.pages, groupDigits(len(os.repos))))...)
@@ -157,11 +162,27 @@ func (s *reposScreen) noTokenText(a app.OnlineAccount, os *onlineState) string {
 	case online.NoteInvalidValue:
 		return tr("tui.repos.online.invalid_value")
 	}
-	k := "tui.repos.online.no_token.github"
-	if a.Ref.Account.Platform == platform.GitLab {
-		k = "tui.repos.online.no_token.gitlab"
+	switch a.Ref.Account.Platform {
+	case platform.GitLab:
+		return tr("tui.repos.online.no_token.gitlab", a.EnvName)
+	case platform.Gitea:
+		return tr("tui.repos.online.no_token.gitea", a.EnvName, a.Ref.String())
+	case platform.Bitbucket:
+		return tr("tui.repos.online.no_token.bitbucket", a.EnvName, a.Ref.String())
+	case platform.AzureDevOps:
+		return tr("tui.repos.online.no_token.azure", a.EnvName, a.Ref.String())
 	}
-	return tr(k, a.EnvName)
+	return tr("tui.repos.online.no_token.github", a.EnvName)
+}
+
+// warnText is the message of a warning of a listing that worked. A warning
+// may carry the name it is about after a colon ("org_failed:acme").
+func warnText(w string) string {
+	code, name := online.WarnParts(w)
+	if name == "" {
+		return tr("tui.repos.online.warn." + code)
+	}
+	return tr("tui.repos.online.warn."+code, name)
 }
 
 // errText is the message and the hint for a failed listing, in the language
@@ -197,6 +218,15 @@ func (s *reposScreen) errText(a app.OnlineAccount, os *onlineState) (msg, hint s
 		}
 		return ""
 	}
+	if a.Ref.Account.Platform == platform.AzureDevOps {
+		switch {
+		case oe.Kind == online.KindBadResponse && oe.Detail == online.AzureSignInHint:
+			return tr("tui.repos.online.err.auth"), tr("tui.repos.online.hint.azure_signin")
+		case len(a.Account.Orgs) == 0 && (oe.Kind == online.KindAuth || oe.Kind == online.KindScope || oe.Kind == online.KindBadResponse):
+			// the organizations could not be discovered with this token
+			return withDetail(tr("tui.repos.online.err.auth")), tr("tui.repos.online.hint.azure_orgs")
+		}
+	}
 	switch oe.Kind {
 	case online.KindAuth:
 		return withDetail(tr("tui.repos.online.err.auth")), authHint()
@@ -204,8 +234,15 @@ func (s *reposScreen) errText(a app.OnlineAccount, os *onlineState) (msg, hint s
 		return tr("tui.repos.online.err.otp"), tr("tui.repos.online.hint.otp", a.EnvName)
 	case online.KindScope:
 		k := "tui.repos.online.hint.scope.github"
-		if a.Ref.Account.Platform == platform.GitLab {
+		switch a.Ref.Account.Platform {
+		case platform.GitLab:
 			k = "tui.repos.online.hint.scope.gitlab"
+		case platform.Gitea:
+			k = "tui.repos.online.hint.scope.gitea"
+		case platform.Bitbucket:
+			k = "tui.repos.online.hint.scope.bitbucket"
+		case platform.AzureDevOps:
+			k = "tui.repos.online.hint.scope.azure"
 		}
 		return withDetail(tr("tui.repos.online.err.scope")), tr(k)
 	case online.KindSSO:

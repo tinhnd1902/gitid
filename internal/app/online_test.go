@@ -2,6 +2,7 @@ package app_test
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -110,8 +111,9 @@ func TestAO1OnlineAccounts(t *testing.T) {
 	if a := byRef["globex/dave"]; !a.Supported || a.Account.Host != "git.example.com" || a.Account.Platform != platform.GitLab {
 		t.Errorf("dave %+v", a)
 	}
+	// Phase C: Gitea, Bitbucket and Azure DevOps are listed too
 	for _, r := range []string{"az/dev", "bb/joe", "gt/sam"} {
-		if a := byRef[r]; a.Supported || a.Reason != app.OnlineUnsupportedPlatform {
+		if a := byRef[r]; !a.Supported || a.Reason != "" {
 			t.Errorf("%s: %+v", r, a)
 		}
 	}
@@ -165,12 +167,12 @@ func TestAO12NoTokenNoRequest(t *testing.T) {
 	if _, err := s.ListOnline(bg, fixtures.Basic(), "nobody/x", nil); err == nil {
 		t.Error("an unknown account was listed")
 	}
-	// an unsupported platform is refused before anything is asked
+	// a platform without a token fails like GitHub does (Phase C: Bitbucket
+	// is listed too, so there is no "unsupported platform" any more)
 	fake2 := execx.NewFake()
 	s2 := app.New(e, fake2)
 	_, err = s2.ListOnline(bg, fixtures.Full(), "bb/joe", nil)
-	var oe *online.Error
-	if !errors.As(err, &oe) || oe.Kind != online.KindUnsupported || len(fake2.Calls()) != 0 {
+	if !errors.Is(err, app.ErrNoToken) {
 		t.Errorf("%v %v", err, fake2.CallStrings())
 	}
 }
@@ -550,4 +552,112 @@ func TestSEC12AppOnlineWritesNothing(t *testing.T) {
 			t.Errorf("online.go uses %s", bad)
 		}
 	}
+}
+
+// fakeSecurity scripts `security` so that a write through `security -i` can be
+// read back by the lookup of the Online tab (what the real tool does).
+func fakeSecurity(t *testing.T, fake *execx.Fake) map[string]string {
+	t.Helper()
+	items := map[string]string{}
+	var mu sync.Mutex
+	fake.On("security -i", execx.Response{Do: func(c execx.Cmd) error {
+		fields := strings.Fields(c.Stdin)
+		var acct, hx string
+		for i, w := range fields {
+			switch w {
+			case "-a":
+				acct = strings.Trim(fields[i+1], `"`)
+			case "-X":
+				hx = fields[i+1]
+			}
+		}
+		b, err := hex.DecodeString(hx)
+		if err != nil {
+			return err
+		}
+		mu.Lock()
+		items[acct] = string(b)
+		mu.Unlock()
+		return nil
+	}})
+	return items
+}
+
+// KC-8: after SetToken, the Online lookup finds the keychain source; the
+// remembered "none" is dropped; RemoveToken makes it none again.
+func TestKC8SetTokenThenResolve(t *testing.T) {
+	fake := execx.NewFake()
+	items := fakeSecurity(t, fake)
+	e := testutil.TempEnv(t)
+	s := app.New(e, fake)
+	cfg := fixtures.Full()
+
+	// before: nothing (every source misses)
+	fake.On("security find-generic-password", execx.Response{ExitCode: 44})
+	fake.On("git -c credential.interactive=never", execx.Response{ExitCode: 128})
+	info, err := s.ResolveSource(bg, cfg, "gt/sam")
+	if err != nil || info.Source != online.SourceNone {
+		t.Fatalf("%+v %v", info, err)
+	}
+	if err := s.SetToken(bg, cfg, "gt/sam", tokSecret); err != nil {
+		t.Fatal(err)
+	}
+	if items["gitea.example.com/sam"] != tokSecret {
+		t.Fatalf("items %v", items)
+	}
+	// the read path now answers with what was written
+	fake.On("security find-generic-password -s gitid -a gitea.example.com/sam -w", execx.Response{Stdout: items["gitea.example.com/sam"] + "\n"})
+	info, err = s.ResolveSource(bg, cfg, "gt/sam")
+	if err != nil || info.Source != online.SourceKeychain {
+		t.Fatalf("after set: %+v %v", info, err)
+	}
+	// the token is in no argument, env or plain stdin of any call
+	noTokenAnywhere(t, fake, e)
+
+	if err := s.SetToken(bg, cfg, "gt/sam", "bad token"); !errors.Is(err, online.ErrBadToken) {
+		t.Errorf("%v", err)
+	}
+	if err := s.SetToken(bg, cfg, "nobody/x", "tok"); err == nil {
+		t.Error("an unknown account was accepted")
+	}
+	fake.On("security delete-generic-password -s gitid -a gitea.example.com/sam", execx.Response{})
+	if removed, err := s.RemoveToken(bg, cfg, "gt/sam"); err != nil || !removed {
+		t.Errorf("%v %v", removed, err)
+	}
+}
+
+// A Gitea account is listed end to end through the Service, with the clone
+// URL built from its configured host.
+func TestAOGiteaEndToEnd(t *testing.T) {
+	s, e, rt := onlineSvc(t, map[string]string{"GITID_TOKEN_GT__SAM": tokSecret}, nil, func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "token "+tokSecret {
+			t.Errorf("Authorization %q", got)
+		}
+		switch strings.TrimPrefix(r.URL.Path, "/api/v1") {
+		case "/user":
+			jsonOut(w, 200, map[string]any{"login": "sam"})
+		case "/user/repos":
+			jsonOut(w, 200, []map[string]any{{"name": "api", "owner": map[string]any{"login": "sam"}, "updated_at": "2026-11-10T10:00:00Z"}})
+		default:
+			jsonOut(w, 200, []any{})
+		}
+	})
+	var got []online.Repo
+	res, err := s.ListOnline(bg, fixtures.Full(), "gt/sam", func(p online.Page) { got = append(got, p.Repos...) })
+	if err != nil || res.Login != "sam" || res.Source != online.SourceEnv || len(got) != 1 {
+		t.Fatalf("%+v %v", res, err)
+	}
+	if got[0].CloneURL != "https://gitea.example.com/sam/api.git" {
+		t.Errorf("%q", got[0].CloneURL)
+	}
+	for _, h := range rt.Hosts() {
+		if h != "gitea.example.com" {
+			t.Errorf("request to %s", h)
+		}
+	}
+	url, err := s.OnlineCloneURL(fixtures.Full(), "gt/sam", got[0])
+	if err != nil || url != "https://sam@gitea.example.com/sam/api.git" {
+		t.Errorf("%q %v", url, err)
+	}
+	noTokenAnywhere(t, execx.NewFake(), e)
 }

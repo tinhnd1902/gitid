@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -138,14 +139,20 @@ func sleepCtx(ctx context.Context, d time.Duration) error {
 	}
 }
 
-// auth is the Authorization header of a request.
+// auth is the Authorization header of a request. scheme is "Bearer", "token"
+// (Gitea) or "Basic"; for Basic the header holds base64(user ":" token).
 type auth struct {
-	scheme string // "Bearer"
+	scheme string
+	user   string // Basic only; may be empty (Azure DevOps PAT)
 	tok    Secret
 }
 
 func (a auth) apply(req *http.Request) {
-	req.Header.Set("Authorization", a.scheme+" "+a.tok.reveal())
+	v := a.tok.reveal()
+	if a.scheme == "Basic" {
+		v = base64.StdEncoding.EncodeToString([]byte(a.user + ":" + v))
+	}
+	req.Header.Set("Authorization", a.scheme+" "+v)
 }
 
 // reply is a successful (200, JSON) answer.
@@ -369,6 +376,14 @@ func nextLink(h http.Header) string {
 // "next" link that is not https or not on the host of the first URL ends the
 // walk with an error: the token is never sent anywhere else.
 func (c *Client) pager(ctx context.Context, first, accept string, au auth, handle func(n int, r reply) *Error) (truncated bool, err *Error) {
+	return c.pagerNext(ctx, first, accept, au, nil, handle)
+}
+
+// pagerNext is pager for platforms whose "next" page is not (only) in a Link
+// header: when the answer has no rel="next" link, more is asked (after handle
+// ran for the page) and a non-empty result is the next URL. The same rules
+// apply to it: https, the host of the first URL, no credentials.
+func (c *Client) pagerNext(ctx context.Context, first, accept string, au auth, more func(n int, r reply) string, handle func(n int, r reply) *Error) (truncated bool, err *Error) {
 	fu, perr := url.Parse(first)
 	if perr != nil {
 		return false, newError(KindBadResponse, 0, "bad URL", au.tok)
@@ -384,6 +399,9 @@ func (c *Client) pager(ctx context.Context, first, accept string, au auth, handl
 			return false, e
 		}
 		link := nextLink(rep.header)
+		if link == "" && more != nil {
+			link = more(n, rep)
+		}
 		if link == "" {
 			return false, nil
 		}

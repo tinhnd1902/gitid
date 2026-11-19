@@ -437,14 +437,21 @@ func TestO27InsecureHost(t *testing.T) {
 			}
 		}
 	}
-	// other platforms have no listing yet
+	// Bitbucket and Azure DevOps have one cloud host each; another host is
+	// refused before any request
 	a := ghAccount()
 	a.Platform = platform.Bitbucket
 	if _, err := c.List(context.Background(), a, tokenOf(SourceGH), nil); kindOf(err) != KindUnsupported {
 		t.Errorf("bitbucket: %v", err)
 	}
-	if Supported(platform.Gitea) || !Supported(platform.GitHub) || !Supported(platform.GitLab) {
-		t.Error("Supported")
+	// every platform of gitid has a listing (Phase C)
+	for _, p := range platform.All() {
+		if !Supported(p) {
+			t.Errorf("Supported(%s)", p)
+		}
+	}
+	if Supported(platform.Platform("svn")) {
+		t.Error("Supported(svn)")
 	}
 }
 

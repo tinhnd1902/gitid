@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/tinhnd1902/gitid/internal/platform"
 )
@@ -42,10 +43,26 @@ type Result struct {
 const (
 	WarnNoRepoScope = "no_repo_scope" // the token has no repo scope: private repositories are hidden
 	WarnSSOPartial  = "sso_partial"   // organizations are hidden until the token is authorized for SSO
+	WarnNoOrgs      = "no_orgs"       // Azure DevOps: no organization was found for the account
+	// The next ones carry the name they are about after a colon
+	// ("org_failed:acme"); use WarnParts to split.
+	WarnOrgFailed = "org_failed"  // an organization (Gitea, Azure DevOps) could not be listed
+	WarnWsFailed  = "ws_failed"   // a Bitbucket workspace could not be listed
+	WarnOrgsList  = "orgs_failed" // Gitea: the organizations of the user could not be listed
 )
 
+// WarnParts splits a warning into its code and the name it is about (empty
+// for the plain ones).
+func WarnParts(w string) (code, name string) {
+	code, name, _ = strings.Cut(w, ":")
+	return code, name
+}
+
+// warnFor builds the warning "code:name"; name is cleaned first.
+func warnFor(code, name string, t Secret) string { return code + ":" + safeText(name, t) }
+
 // Supported reports whether the listing knows the platform.
-func Supported(p platform.Platform) bool { return p == platform.GitHub || p == platform.GitLab }
+func Supported(p platform.Platform) bool { return p.Valid() }
 
 // List fetches the repositories of a with t, page by page: onPage is called
 // for each page in order, so a caller can show them as they arrive and keep
@@ -64,6 +81,12 @@ func (c *Client) List(ctx context.Context, a Account, t Token, onPage func(Page)
 		res, e = c.listGitHub(ctx, a, t, onPage)
 	case platform.GitLab:
 		res, e = c.listGitLab(ctx, a, t, onPage)
+	case platform.Gitea:
+		res, e = c.listGitea(ctx, a, t, onPage)
+	case platform.Bitbucket:
+		res, e = c.listBitbucket(ctx, a, t, onPage)
+	case platform.AzureDevOps:
+		res, e = c.listAzure(ctx, a, t, onPage)
 	default:
 		e = newError(KindUnsupported, 0, string(a.Platform), t.Secret)
 	}
@@ -121,6 +144,19 @@ func urls(host, owner, name string) (clone, web string) {
 	}
 	u := url.URL{Scheme: "https", Host: host, Path: "/" + full}
 	return u.String() + ".git", u.String()
+}
+
+// plainSegment reports whether s can be one segment of a clone URL: it is not
+// empty, not "." / ".." / ".git", has no slash, backslash, control or format
+// character, no surrounding space and does not start with a dash.
+func plainSegment(s string) bool {
+	if s == "" || s == "." || s == ".." || strings.EqualFold(s, ".git") || s[0] == '-' || strings.TrimSpace(s) != s {
+		return false
+	}
+	if strings.ContainsAny(s, "/\\") || !utf8.ValidString(s) {
+		return false
+	}
+	return cleanText(s) == s
 }
 
 // addWarning appends w once.

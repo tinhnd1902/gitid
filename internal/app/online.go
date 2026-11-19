@@ -65,6 +65,9 @@ func (s *Service) onlineClient() (*online.Client, error) {
 		if o.client != nil && s.Version != "" {
 			o.client.Version = s.Version
 		}
+		if o.client != nil && s.OnlineMaxPages > 0 {
+			o.client.MaxPages = s.OnlineMaxPages
+		}
 	})
 	return o.client, o.clientErr
 }
@@ -332,4 +335,42 @@ func (s *Service) OnlineCloneRequest(cfg config.Config, ref string, repo online.
 		}
 	}
 	return out, nil
+}
+
+// ErrTokenInput is returned by SetToken for a token that cannot be stored
+// (empty, or not printable ASCII without spaces).
+var ErrTokenInput = online.ErrBadToken
+
+// SetToken stores token in the gitid Keychain item of the account (macOS).
+// The token goes to `security -i` on stdin only. The remembered token of the
+// account is dropped, so the next lookup finds the new one. Errors:
+// online.ErrKeychainUnsupported, online.ErrBadToken, online.ErrKeychainFailed.
+func (s *Service) SetToken(ctx context.Context, cfg config.Config, ref, token string) error {
+	cfg = config.Normalize(cfg, s.Env)
+	r, err := cfg.ParseRef(ref)
+	if err != nil {
+		return err
+	}
+	acc := toOnline(r)
+	if err := (online.Keychain{Env: s.Env, Run: s.Run}).Set(ctx, acc, token); err != nil {
+		return err
+	}
+	s.ForgetToken(acc.Key())
+	return nil
+}
+
+// RemoveToken deletes the gitid Keychain item of the account. removed is
+// false when there was none.
+func (s *Service) RemoveToken(ctx context.Context, cfg config.Config, ref string) (removed bool, err error) {
+	cfg = config.Normalize(cfg, s.Env)
+	r, err := cfg.ParseRef(ref)
+	if err != nil {
+		return false, err
+	}
+	acc := toOnline(r)
+	removed, err = (online.Keychain{Env: s.Env, Run: s.Run}).Remove(ctx, acc)
+	if err == nil {
+		s.ForgetToken(acc.Key())
+	}
+	return removed, err
 }

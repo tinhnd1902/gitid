@@ -65,7 +65,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tokens for the Online tab, found per account in this order (first hit wins):
   the environment variable `GITID_TOKEN_<COMPANY>__<ACCOUNT>` (for example
   `GITID_TOKEN_ACME__ALICE`); a gitid Keychain item (macOS; service `gitid`,
-  account `<host>/<username>`; read only for now); `gh auth token` or
+  account `<host>/<username>`; written by `gitid token set`); `gh auth token` or
   `glab config get token`; and git's credential helper (`git credential fill`,
   run only when the Online tab is opened, with every prompt suppressed, and
   without `approve`/`reject`; macOS may still show its own Keychain dialog).
@@ -94,6 +94,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   repo browser screen, they cannot share a key with each other there: for
   example `filter: "f"` is reported as a conflict with `fix` (the default key
   stays).
+- Online tab for Gitea, Bitbucket Cloud and Azure DevOps Services (they said
+  "not available yet"). Gitea (`https://HOST/api/v1`): `Authorization: token
+  <t>`, `/user/repos` plus `/orgs/<org>/repos` for each organization of
+  `/user/orgs`, 50 per page. Bitbucket Cloud (`bitbucket.org` only): an
+  Atlassian API token (app passwords stopped working on 2026-06-09) as Basic
+  auth with the account's email, then once as Bearer; the repositories of each
+  workspace of `/2.0/user/workspaces`; the `/2.0/user` nickname must match the
+  account's username. Azure DevOps (`dev.azure.com` only): a PAT in Basic auth
+  with an empty user (a Microsoft Entra JWT as Bearer), one
+  `/_apis/git/repositories?api-version=7.1` call per organization in the
+  account's `orgs`; without `orgs` the organizations are looked up on
+  `app.vssps.visualstudio.com`, which Microsoft may refuse for a PAT, and the
+  tab says to set `orgs`; a sign-in page (HTTP 203) is reported as a rejected
+  token. Same rules as GitHub and GitLab: https and same-host redirects and
+  next links only, page, size and organization caps, rate-limit handling, the
+  clone URL built from the configured host, hostile names get no URL. One
+  organization or workspace that fails is a warning, the others are listed.
+- `gitid repos [--company SLUG] [--depth N] [--problems] [--json]` prints the
+  local scan (grouped by company, at most 80 columns; exit 0, or 2 when
+  something needs attention, or 1 on an error). `gitid repos --online
+  [--account C/A] [--max-pages N] [--local] [--json]` lists what each account
+  can see with the same token chain as the Online tab, never printing a token,
+  with `local_paths` for repositories you have cloned; an account with no
+  token is shown as `token: none` (not a failure), a failed one gives exit 2.
+  Ctrl-C prints what there is and exits 1. The JSON schema is documented in the
+  README.
+- `gitid token set|rm|status <company/account>`: `set` reads a token from stdin
+  (hidden on a terminal) and stores it as the gitid Keychain item (macOS). The
+  token goes to `security -i` on stdin, hex encoded, and is in no command line.
+  `rm` deletes the item, `status [--json]` shows which source each account
+  would use and never a token. Elsewhere than macOS it says to use the
+  `GITID_TOKEN_*` variable.
 - README.md and README_VI.md: "Clone and the repo browser", "Online tab and tokens".
 - Test: the shortcut guard covers the repo browser states and its sentinel
   keys now run through `alt+a` to `alt+z` and then `alt+A` to `alt+Z`.

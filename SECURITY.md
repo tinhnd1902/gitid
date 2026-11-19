@@ -47,14 +47,21 @@ Examples that are in scope:
   shown instead of being dropped and masked.
 - A way to make `apply` overwrite content outside the managed blocks, or to
   skip the backup.
-- A token read for the Online tab (from an environment variable, the gitid
-  Keychain item, `gh`/`glab` or git's credential helper) that is shown,
-  logged, written to disk, put in a command line, a URL or an error message,
-  or sent anywhere other than the `Authorization` header of a request to the
-  API host of the account it belongs to (for example through a redirect or a
-  "next page" link to another host, or over plain `http`). The same goes for
-  certificate verification being skipped, or for gitid changing what a
-  credential helper stores.
+- A token read for the Online tab or `gitid repos --online` (from an
+  environment variable, the gitid Keychain item, `gh`/`glab` or git's
+  credential helper) that is shown, logged, written to disk, put in a command
+  line, a URL or an error message, or sent anywhere other than the
+  `Authorization` header of a request to the API host of the account it
+  belongs to (for example through a redirect or a "next page" link to another
+  host, or over plain `http`). The one documented second host is
+  `app.vssps.visualstudio.com`, asked only for an Azure DevOps account that
+  has no `orgs`. The same goes for certificate verification being skipped, or
+  for gitid changing what a credential helper stores.
+- `gitid token set` putting the token anywhere but the standard input of the
+  `security` tool (an argument, an environment variable, a file, a log), or
+  writing any Keychain item other than service `gitid`, account
+  `<host>/<username>`; `gitid token status` or `gitid repos --json` printing a
+  token.
 - Text from a hosting platform's API (a repository name, an error message)
   that reaches the terminal with its escape or control characters intact.
 

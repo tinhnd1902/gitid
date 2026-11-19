@@ -9,6 +9,7 @@ require (
 	github.com/charmbracelet/x/ansi v0.10.1
 	github.com/charmbracelet/x/exp/golden v0.0.0-20241011142426-46044092ad91
 	github.com/charmbracelet/x/exp/teatest v0.0.0-20261101151554-27ecf3e4d454
+	github.com/charmbracelet/x/term v0.2.1
 	github.com/muesli/termenv v0.16.0
 	github.com/pmezard/go-difflib v1.0.0
 	github.com/sahilm/fuzzy v0.1.1
@@ -24,7 +25,6 @@ require (
 	github.com/charmbracelet/colorprofile v0.3.2 // indirect
 	github.com/charmbracelet/harmonica v0.2.0 // indirect
 	github.com/charmbracelet/x/cellbuf v0.0.13 // indirect
-	github.com/charmbracelet/x/term v0.2.1 // indirect
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect

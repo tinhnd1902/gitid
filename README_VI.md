@@ -35,7 +35,7 @@ tồn tại, để trang không bao giờ hiện ảnh lỗi.
 - **An toàn mặc định:** mọi thay đổi đều hiện diff trước, tệp được sao lưu trước khi ghi, khối do gitid quản lý có tính idempotent, và `--dry-run` không ghi gì cả.
 - **SSH đỡ đau đầu:** mỗi tài khoản một key ed25519 và một alias `Host`, public key chép vào clipboard chỉ với một phím, còn private key không bao giờ bị đọc.
 - **Clone và sửa remote:** clone bằng đúng tài khoản với thanh tiến trình, kiểm tra repo đang dùng danh tính nào, và sửa remote sai.
-- **Trình duyệt repo:** một màn hình có tab Trên máy (mọi repo trong thư mục các công ty, tài khoản mà remote khớp và điều gì đang sai), tab URL (clone) và tab Online (repo mà từng tài khoản thấy trên GitHub hoặc GitLab, nếu bạn có token cho nó).
+- **Trình duyệt repo:** một màn hình có tab Trên máy (mọi repo trong thư mục các công ty, tài khoản mà remote khớp và điều gì đang sai), tab URL (clone) và tab Online (repo mà từng tài khoản thấy trên GitHub, GitLab, Gitea, Bitbucket Cloud hoặc Azure DevOps, nếu bạn có token cho nó).
 - **Chẩn đoán và nhập cấu hình:** kiểm tra toàn bộ thiết lập với tiến trình từng mục, và bắt đầu nhanh từ các `includeIf` bạn đã có.
 - **Hai ngôn ngữ:** tiếng Việt (mặc định) và tiếng Anh, đổi được cho từng lần chạy.
 
@@ -128,6 +128,14 @@ gitid list [--json]                      # danh sách công ty và tài khoản
 gitid check [path] [--json]              # repo này dùng tài khoản và email nào, vì sao
 gitid doctor [--ssh-test] [--json]       # chẩn đoán git, ssh, key và cấu hình gitid
 
+gitid repos [--company acme] [--depth 4] # mọi repo trong thư mục các công ty và điều gì đang sai
+      [--problems] [--json]              #   thoát với mã 2 khi có gì cần xử lý
+gitid repos --online [--account acme/alice] [--max-pages 50] [--local] [--json]
+                                         # những gì mỗi tài khoản thấy trên nền tảng (cần token)
+gitid token set acme/alice               # lưu token (đọc từ stdin) vào Keychain của macOS
+gitid token rm acme/alice                # xóa nó
+gitid token status [acme/alice] [--json] # token của từng tài khoản lấy từ đâu (không bao giờ in token)
+
 gitid clone <url> --account acme/alice   # clone bằng đúng tài khoản (viết lại URL)
       [--dir <thư-mục>] [--dry-run]      #   --dir: thư mục đích, mặc định <thư mục công ty>/<repo>
       [--interactive] [--force]          #   --interactive: cho phép nhập mật khẩu trên terminal
@@ -218,7 +226,7 @@ Hai chế độ xác thực trong thực tế:
 
 gitid sửa tệp trong thư mục home của bạn, nên nó rất chặt chẽ:
 
-- **Chạm vào những gì:** khối do gitid quản lý trong `~/.gitconfig`; khối do gitid quản lý (một dòng `Include config.d/*`) ở đầu `~/.ssh/config`; `~/.ssh/config.d/gitid.conf`; các key bạn yêu cầu tạo trong `~/.ssh/gitid/`; và thư mục riêng `$XDG_CONFIG_HOME/gitid/` (mặc định `~/.config/gitid/`) chứa `config.yaml`, các tệp `git/*.gitconfig` được sinh ra và `backups/`. Không có gì khác. gitid cũng đọc tệp `keys.yaml` tùy chọn ở đó (phím tắt của bạn) nhưng không bao giờ ghi vào nó.
+- **Chạm vào những gì:** khối do gitid quản lý trong `~/.gitconfig`; khối do gitid quản lý (một dòng `Include config.d/*`) ở đầu `~/.ssh/config`; `~/.ssh/config.d/gitid.conf`; các key bạn yêu cầu tạo trong `~/.ssh/gitid/`; và thư mục riêng `$XDG_CONFIG_HOME/gitid/` (mặc định `~/.config/gitid/`) chứa `config.yaml`, các tệp `git/*.gitconfig` được sinh ra và `backups/`. Không có gì khác, trừ một ngoại lệ do bạn chủ động chọn: `gitid token set` thêm một mục cho mỗi tài khoản vào Keychain của macOS (service `gitid`; xem [Tab Online và token](#tab-online-và-token)). gitid cũng đọc tệp `keys.yaml` tùy chọn ở đó (phím tắt của bạn) nhưng không bao giờ ghi vào nó.
 - **Khối được quản lý:** mọi thứ gitid ghi vào tệp của bạn nằm giữa `# >>> gitid managed block … >>>` và `# <<< gitid managed block <<<`. Phần nằm ngoài hai dấu đó không bao giờ bị đổi. Chạy `apply` lần thứ hai không đổi gì và không tạo bản sao lưu mới.
 - **Xem trước và xác nhận:** TUI luôn hiện diff và hỏi trước khi ghi. `gitid apply --dry-run` in cùng diff đó và không tạo gì, kể cả thư mục.
 - **Sao lưu:** trước mọi lần ghi, nội dung cũ của từng tệp bị ảnh hưởng được chép vào `~/.config/gitid/backups/<mốc-thời-gian>/` (thư mục `0700`, tệp `0600`) cùng `manifest.json` ghi đường dẫn gốc, quyền và SHA-256. 30 bản sao lưu mới nhất được giữ lại.
@@ -227,8 +235,8 @@ gitid sửa tệp trong thư mục home của bạn, nên nó rất chặt chẽ
 - **Bí mật trong URL:** mật khẩu hoặc token dán trong URL bị loại bỏ và che đi ở mọi nơi có thể hiển thị.
 - **Chống chèn lệnh:** tên, email, host và username được kiểm tra và escape trước khi vào cấu hình git hay ssh; lệnh clone luôn dùng `git clone -- <url> <thư mục>`.
 - **Quét repo:** tab Trên máy của trình duyệt repo chỉ đọc: nó liệt kê thư mục trong các thư mục gốc của công ty và chạy một lệnh `git config` chỉ đọc trong mỗi repo tìm được. Nó không ghi gì; bản thân gitid không mở tệp nào bên trong repo, trừ tệp `.git` một dòng của worktree hay submodule (git tự đọc cấu hình của repo).
-- **Mạng:** không dùng, trừ ba chỗ, mỗi chỗ chỉ khi bạn yêu cầu: clone, bài thử `ssh -T` tùy chọn, và tab Online của trình duyệt repo (chỉ khi bạn mở nó), nơi gửi các yêu cầu `GET` chỉ đọc tới API của host các tài khoản của bạn. Không có telemetry.
-- **Token (tab Online):** đọc từ biến môi trường, mục Keychain của gitid, `gh`/`glab` hoặc credential helper của git; chỉ giữ trong bộ nhớ, không bao giờ ghi ra đĩa, không bao giờ nằm trong dòng lệnh, URL, log hay lỗi, và chỉ được gửi dưới dạng header `Authorization` tới API của host chính tài khoản đó qua https (không theo chuyển hướng hay liên kết trang kế sang host khác; không bao giờ tắt kiểm tra chứng chỉ). gitid không ghi token ở đâu cả và không bao giờ đổi những gì credential helper lưu.
+- **Mạng:** không dùng, trừ ba chỗ, mỗi chỗ chỉ khi bạn yêu cầu: clone, bài thử `ssh -T` tùy chọn, và tab Online của trình duyệt repo hoặc `gitid repos --online` (chỉ khi bạn mở hoặc chạy nó), nơi gửi các yêu cầu `GET` chỉ đọc tới API của host các tài khoản của bạn. Với tài khoản Azure DevOps không có `orgs`, token đó còn được gửi tới `app.vssps.visualstudio.com`, dịch vụ của Microsoft liệt kê các organization của bạn. Không có telemetry.
+- **Token (tab Online):** đọc từ biến môi trường, mục Keychain của gitid, `gh`/`glab` hoặc credential helper của git; chỉ giữ trong bộ nhớ, không bao giờ ghi ra đĩa, không bao giờ nằm trong dòng lệnh, URL, log hay lỗi, và chỉ được gửi dưới dạng header `Authorization` tới API của host chính tài khoản đó qua https (không theo chuyển hướng hay liên kết trang kế sang host khác; không bao giờ tắt kiểm tra chứng chỉ). Chỗ duy nhất gitid ghi token là mục Keychain bạn yêu cầu bằng `gitid token set`: token được đọc từ stdin (gõ không hiện ký tự khi ở terminal) và đưa cho công cụ `security` của macOS qua đầu vào chuẩn của nó, không bao giờ qua dòng lệnh, nên không hiện trong `ps`. gitid không bao giờ đổi những gì credential helper lưu.
 - **Gỡ bỏ:** xóa hết công ty trong TUI rồi áp dụng; tệp của bạn trở về đúng từng byte ban đầu. Hoặc khôi phục thủ công (bên dưới). Để gỡ chính chương trình gitid, xem [Gỡ cài đặt chương trình](#gỡ-cài-đặt-chương-trình).
 
 <details>
@@ -438,7 +446,7 @@ Cách quét: tìm sâu tối đa 4 thư mục bên dưới mỗi thư mục côn
 
 Công ty chưa có thư mục sẽ được báo («chưa tồn tại, clone một repo để tạo»); chưa có công ty nào thì tab nhắc bạn thêm công ty ở danh sách chính trước.
 
-**Tab Online.** Liệt kê repo mà từng tài khoản trong cấu hình thấy được trên nền tảng của nó (GitHub và GitHub Enterprise Server, GitLab và GitLab tự dựng; nền tảng khác báo «chưa hỗ trợ»). Chỉ tài khoản có token mới được tải, và chưa có gì được tìm hay gửi đi cho đến khi bạn mở tab này. `←` `→` đổi tài khoản; thanh trên cùng hiện tài khoản, nền tảng và nguồn token (`token: env`, `keychain`, `gh`, `glab`, `git` hoặc `none`). Bản thân token không bao giờ được hiện.
+**Tab Online.** Liệt kê repo mà từng tài khoản trong cấu hình thấy được trên nền tảng của nó (GitHub và GitHub Enterprise Server, GitLab và GitLab tự dựng, Gitea, Bitbucket Cloud và Azure DevOps Services). Chỉ tài khoản có token mới được tải, và chưa có gì được tìm hay gửi đi cho đến khi bạn mở tab này. `←` `→` đổi tài khoản; thanh trên cùng hiện tài khoản, nền tảng và nguồn token (`token: env`, `keychain`, `gh`, `glab`, `git` hoặc `none`). Bản thân token không bao giờ được hiện.
 
 ```text
 ◂ acme/alice · GitHub · token: gh ▸  (1/5)
@@ -462,20 +470,43 @@ Mỗi dòng hiện `chủ/tên`, nhãn (`riêng`, `lưu`, `fork`, `rỗng`), c�
 
 URL clone được dựng từ host trong cấu hình của bạn và đường dẫn repo, rồi viết lại như mọi URL bạn dán, nên dùng username hoặc ssh alias của tài khoản. Token của API không bao giờ dùng để clone: git đăng nhập bằng thông tin riêng của nó như mọi khi. Nếu `<thư mục gốc>/<repo>` đã tồn tại và là thứ khác, gitid clone vào `<thư mục gốc>/<chủ>-<repo>` và báo cho bạn; nếu thư mục đó cũng có rồi thì `enter` không làm gì và khối dưới danh sách nhắc dùng tab URL với thư mục khác. Repo online được ghép với bản clone trên máy theo `host/chủ/repo` (repo đổi tên hay chuyển chủ thì không theo được). Trước khi clone, gitid kiểm tra `config.yaml` chưa đổi kể từ lúc màn hình nạp nó; nếu đã đổi, nó nạp lại và nhắc bạn kiểm tra lại tài khoản.
 
+#### `gitid repos`
+
+`gitid repos` in cùng kết quả quét như tab Trên máy, nhóm theo công ty (mỗi repo một dòng, dấu `!` ở đầu dòng của repo cần xử lý, mỗi dòng rộng tối đa 80 cột). `--company acme` chỉ lấy một công ty, `--depth N` (từ 1 trở lên, mặc định 4) chỉ tìm N cấp thư mục dưới thư mục gốc của công ty, `--problems` chỉ lấy repo cần xử lý. `--json` in lược đồ ổn định bên dưới. Mã thoát: `0` đã liệt kê, không có gì sai; `2` có gì cần xử lý (vấn đề ở máy, hoặc một tài khoản online bị lỗi); `1` lỗi (cờ sai, cấu hình không hợp lệ, công ty hoặc tài khoản không có, hoặc Ctrl-C, sau khi in phần đã có).
+
+`gitid repos --online` liệt kê những gì mỗi tài khoản thấy, dùng đúng chuỗi tìm token của tab Online (không bao giờ in token). Tài khoản chưa có token hiện `token: không có` kèm gợi ý; đó không phải thất bại (mã thoát `0`). `--account acme/alice` chỉ liệt kê một tài khoản (và chỉ tìm token của nó), `--max-pages N` (1 đến 500) giới hạn số trang mỗi tài khoản (khi đó `truncated` là true), `--local` thêm kết quả quét trên máy vào đầu ra (lúc nào cũng quét để điền `local_paths`).
+
+```json
+{"local": {"companies": [{"slug": "acme", "base_dir": "~/Code/acme/", "state": "ok", "truncated": false, "denied": 0,
+   "repos": [{"path": "/abs/path", "kind": "repo", "remote": "...", "key": "github.com/acme/api", "account": "acme/alice",
+              "reason": "username", "effective_email": "...", "email_origin": "...", "expected_email": "...",
+              "status": "ok", "flags": [], "belongs_to": "", "duplicates": [], "fix_to": ""}]}]},
+ "online": {"accounts": [{"account": "acme/alice", "platform": "github", "host": "github.com", "token_source": "gh",
+   "login": "alice", "state": "ok", "error": "", "error_kind": "", "truncated": false, "warnings": [],
+   "repos": [{"full_name": "acme/api", "owner": "acme", "name": "api", "private": true, "archived": false, "fork": false,
+              "empty": false, "updated_at": "2026-11-10T10:00:00Z", "web_url": "...", "clone_url": "...", "local_paths": []}]}]}}
+```
+
+`state` của tài khoản online là `ok`, `no_token`, `error` hoặc `cancelled`; `error` là thông báo theo ngôn ngữ đang dùng, `error_kind` là mã ổn định. `local` bị bỏ khi có `--online` trừ khi thêm `--local`; `online` bị bỏ khi không có `--online`.
+
 #### Tab Online và token
 
 Với mỗi tài khoản, gitid tìm token theo thứ tự này và dừng ở nguồn đầu tiên có:
 
 1. **Biến môi trường** `GITID_TOKEN_<CÔNG-TY>__<TÀI-KHOẢN>`: viết hoa, `-` thành `_`, hai dấu gạch dưới giữa hai phần. Với `acme/alice` là `GITID_TOKEN_ACME__ALICE`. Nếu hai tài khoản cho cùng một tên, biến bị bỏ qua và tab báo như vậy. gitid không đọc `GITHUB_TOKEN`, `GH_TOKEN` hay `GITLAB_TOKEN` vì chúng không phân biệt được tài khoản. Riêng chương trình `gh` có thể tự đọc chúng khi gitid nhờ nó lấy token (nguồn 3), nên hãy bỏ đặt các biến này nếu bạn muốn dùng token của chính đăng nhập `gh` của tài khoản. gitid cũng gỡ mọi biến `GITID_TOKEN_*` khỏi môi trường của các chương trình nó chạy.
-2. **Mục Keychain của gitid** (macOS): service `gitid`, account `<host>/<username>` (ví dụ `github.com/alice`), đọc bằng `security find-generic-password -w`. Bản này gitid chỉ đọc mục đó.
+2. **Mục Keychain của gitid** (macOS): service `gitid`, account `<host>/<username>` (ví dụ `github.com/alice`), đọc bằng `security find-generic-password -w`. Tạo nó bằng `gitid token set <công-ty>/<tài-khoản>` (bên dưới) hoặc tự dùng `security`.
 3. **Đăng nhập `gh` hoặc `glab`:** `gh auth token --hostname=<host> --user=<username>` (`gh` cũ không có `--user` thì được hỏi lại không có cờ đó), hoặc `glab config get token --host=<host>`. `glab` chỉ giữ một token cho mỗi host.
 4. **Credential helper của git:** `git credential fill` cho `https://<host>` và username của bạn, tức là bí mật git vẫn dùng để push. gitid chỉ chạy nó khi bạn mở tab Online, với `GIT_TERMINAL_PROMPT=0`, không chương trình askpass và `credential.interactive` đặt là `never` và `false` (hai giá trị Git Credential Manager ghi là «không hỏi»), nên nó không thể hỏi bạn gì; nó không bao giờ chạy `approve` hay `reject`, nên không đổi gì trong nơi helper lưu. Lần đọc đầu tiên vẫn có thể làm macOS hiện hộp thoại «cho phép truy cập Keychain» của chính nó, gitid không tắt được. Thứ helper lưu có thể là mật khẩu chứ không phải token; khi đó GitHub trả 401 và tab báo thông tin đã lưu giống một mật khẩu.
 
 Token được giữ trong bộ nhớ suốt phiên (nên hộp thoại Keychain không lặp lại) và gitid không bao giờ ghi nó ra đĩa. Nó không bao giờ nằm trong dòng lệnh, URL, log hay thông báo. Nguồn nào không có hoặc lỗi thì thử nguồn kế tiếp; sau khi một lần gọi API thất bại thì không có phương án dự phòng, và lỗi nêu tên nguồn để bạn biết sửa bí mật nào (`r` tìm lại).
 
-Trước khi liệt kê gì, gitid hỏi API token thuộc về ai (`GET /user`). Nếu login đó khác username của tài khoản (không phân biệt hoa thường) thì không liệt kê gì và tab báo «token này thuộc về @x». Quyền cần có: token classic của GitHub cần `repo` (hoặc `public_repo` nếu chỉ repo công khai), token fine-grained cần «Metadata: read»; GitLab cần `read_api`. gitid không bao giờ yêu cầu hay tạo token.
+**Lưu token.** `gitid token set acme/alice` đọc token từ stdin: dùng đường ống (`pbpaste | gitid token set acme/alice`) hoặc gõ khi được hỏi (không hiện ký tự). Chỉ nhận ASCII in được, không có khoảng trắng, dài 1 đến 4096 ký tự. gitid chạy `security -i` và gửi cho nó `add-generic-password -U -s gitid -a "<host>/<username>" -X <hex của token>` qua **stdin**, nên token không nằm trong dòng lệnh nào (`security add-generic-password -w <token>` sẽ hiện nó trong `ps`, còn `-w` đặt cuối thì hỏi trên terminal chứ không đọc từ ống). Mục đã có sẽ được thay. `gitid token rm acme/alice` xóa mục (không có gì để xóa không phải là lỗi). `gitid token status` cho biết với từng tài khoản nguồn nào sẽ được dùng (`env`, `keychain`, `gh`, `glab`, `git` hoặc `none`) và tên biến cần đặt; nó không bao giờ in token. Vì chạy cùng cách tìm như tab Online, credential helper của git có thể hiện hộp thoại Keychain riêng của nó. Trên hệ điều hành khác, `token set` và `token rm` báo không hỗ trợ và nêu tên biến cần đặt thay thế.
 
-Yêu cầu chỉ là `GET`, tới `https://api.github.com` (GitHub.com), `https://<host>/api/v3` (GitHub Enterprise Server) hoặc `https://<host>/api/v4` (GitLab), mỗi yêu cầu tối đa 30 giây, tối đa 3 tài khoản cùng lúc, tối đa 50 trang 100 repo mỗi tài khoản (quá thì tab báo đã dừng) và tối đa 8 MiB mỗi trang. Chuyển hướng hoặc liên kết «trang kế» tới host khác, hoặc tới `http` thường, đều bị từ chối, nên token không bao giờ đi đâu ngoài host của chính tài khoản. `HTTPS_PROXY` và `NO_PROXY` được tôn trọng; chứng chỉ được kiểm tra theo gốc tin cậy của hệ thống cộng với tệp `SSL_CERT_FILE` nếu có (không bao giờ tắt kiểm tra). Giới hạn truy cập ngắn hơn 10 giây thì được chờ một lần; dài hơn thì báo kèm giờ được đặt lại và các trang đã tải vẫn còn. Chưa hỗ trợ: GitHub Enterprise có tiền tố đường dẫn, GitHub Enterprise Cloud lưu dữ liệu theo vùng (`*.ghe.com`), GitLab dưới relative URL root, Gitea, Bitbucket và Azure DevOps (các tài khoản này báo «chưa hỗ trợ»).
+Trước khi liệt kê gì, gitid hỏi API token thuộc về ai (`GET /user`). Nếu login đó khác username của tài khoản (không phân biệt hoa thường) thì không liệt kê gì và tab báo «token này thuộc về @x». Quyền cần có: token classic của GitHub cần `repo` (hoặc `public_repo` nếu chỉ repo công khai), token fine-grained cần «Metadata: read»; GitLab cần `read_api`; Gitea cần `read:repository` và `read:organization`; API token của Bitbucket Cloud cần `read:repository:bitbucket` và `read:workspace:bitbucket` (chưa xác nhận được: Atlassian không liệt kê quyền của các lệnh gọi này); PAT của Azure DevOps cần `Code (Read)`. gitid không bao giờ yêu cầu hay tạo token.
+
+Theo từng nền tảng: **Gitea** (host của bạn, `https://<host>/api/v1`) gửi `Authorization: token <t>` và liệt kê `/user/repos` cùng `/orgs/<org>/repos` cho từng mục của `/user/orgs`. **Bitbucket Cloud** (chỉ `bitbucket.org`, `https://api.bitbucket.org/2.0`) dùng API token của Atlassian (app password đã ngừng hoạt động từ 9/6/2026): nếu tài khoản có `email` thì thử Basic với email, rồi header Bearer; nếu không có thì thử header Bearer, rồi Basic với username của tài khoản; liệt kê `/user/workspaces` và `/repositories/<workspace>?role=member` cho từng workspace. `username` của tài khoản phải khớp nickname trên Bitbucket. **Azure DevOps Services** (chỉ `dev.azure.com`) dùng PAT với Basic và tên người dùng để trống (hoặc token Microsoft Entra dạng Bearer) và liệt kê `https://dev.azure.com/<org>/_apis/git/repositories?api-version=7.1` cho từng organization trong `orgs` của tài khoản; nếu không có `orgs`, gitid thử tự tìm (`app.vssps.visualstudio.com`), nơi Microsoft có thể từ chối PAT, rồi báo hãy đặt `orgs`. Azure không cho biết PAT thuộc về ai hay repo đổi lần cuối khi nào nên hai thông tin đó không được hiện.
+
+Yêu cầu chỉ là `GET`, tới `https://api.github.com` (GitHub.com), `https://<host>/api/v3` (GitHub Enterprise Server) hoặc `https://<host>/api/v4` (GitLab), mỗi yêu cầu tối đa 30 giây, tối đa 3 tài khoản cùng lúc, tối đa 50 trang 100 repo mỗi tài khoản (Gitea: 50 mỗi trang, tối đa 100 organization hoặc workspace; quá thì tab báo đã dừng) và tối đa 8 MiB mỗi trang. Chuyển hướng hoặc liên kết «trang kế» tới host khác, hoặc tới `http` thường, đều bị từ chối, nên token không bao giờ đi đâu ngoài host của chính tài khoản. `HTTPS_PROXY` và `NO_PROXY` được tôn trọng; chứng chỉ được kiểm tra theo gốc tin cậy của hệ thống cộng với tệp `SSL_CERT_FILE` nếu có (không bao giờ tắt kiểm tra). Giới hạn truy cập ngắn hơn 10 giây thì được chờ một lần; dài hơn thì báo kèm giờ được đặt lại và các trang đã tải vẫn còn. Chưa hỗ trợ: GitHub Enterprise có tiền tố đường dẫn, GitHub Enterprise Cloud lưu dữ liệu theo vùng (`*.ghe.com`), GitLab dưới relative URL root, Bitbucket Data Center và Azure DevOps Server (tài khoản ở host khác `bitbucket.org` hay `dev.azure.com` được báo là chưa hỗ trợ: không gửi yêu cầu nào và không tính là lỗi).
 
 ### Kiểm tra và sửa remote
 

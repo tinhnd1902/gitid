@@ -49,6 +49,14 @@ func (s Secret) hasAnyPrefix(prefixes ...string) bool {
 	return false
 }
 
+// looksLikeJWT reports whether the token has the form of a JSON Web Token
+// ("eyJ..." in three dot-separated parts), as a Microsoft Entra access token
+// does. It answers without handing the token to the caller.
+func (s Secret) looksLikeJWT() bool {
+	v := s.reveal()
+	return strings.HasPrefix(v, "eyJ") && strings.Count(v, ".") == 2
+}
+
 // String implements fmt.Stringer.
 func (Secret) String() string { return masked }
 

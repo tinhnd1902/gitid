@@ -22,6 +22,9 @@ type Service struct {
 	// Version is gitid's version, sent in the User-Agent of the Online
 	// listing ("gitid/<version>").
 	Version string
+	// OnlineMaxPages caps the pages fetched per account (0: the default).
+	// Set it before the first listing.
+	OnlineMaxPages int
 
 	// onl is the state of the Online tab: the token cache and the HTTP client
 	// (see online.go). It is created on first use.

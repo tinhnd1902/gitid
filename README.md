@@ -35,7 +35,7 @@ page never shows a broken image.
 - **Safe by default:** every change is shown as a diff first, files are backed up before they are written, managed blocks are idempotent, and `--dry-run` writes nothing at all.
 - **SSH without the pain:** one ed25519 key and one `Host` alias per account, the public key one keypress from your clipboard, and private keys are never read.
 - **Clone and repair:** clone with the right account and a live progress bar, check which identity a repository really uses, and rewrite a wrong remote.
-- **Repo browser:** one screen with a Local tab (every repository under your company folders, the account its remote maps to, and what is wrong), a URL tab (clone) and an Online tab (the repositories each of your accounts can see on GitHub or GitLab, if you have a token for it).
+- **Repo browser:** one screen with a Local tab (every repository under your company folders, the account its remote maps to, and what is wrong), a URL tab (clone) and an Online tab (the repositories each of your accounts can see on GitHub, GitLab, Gitea, Bitbucket Cloud or Azure DevOps, if you have a token for it).
 - **Doctor and import:** diagnose the whole setup with per-check progress, and bootstrap from the `includeIf` entries you already have.
 - **Two languages:** Vietnamese (default) and English, switchable per run.
 
@@ -128,6 +128,14 @@ gitid list [--json]                      # companies and accounts
 gitid check [path] [--json]              # which account and email does this repo use, and why
 gitid doctor [--ssh-test] [--json]       # diagnose git, ssh, keys and the gitid configuration
 
+gitid repos [--company acme] [--depth 4] # every repo under your company folders and what is wrong with it
+      [--problems] [--json]              #   exit 2 when something needs attention
+gitid repos --online [--account acme/alice] [--max-pages 50] [--local] [--json]
+                                         # what each account can see on its platform (needs a token)
+gitid token set acme/alice               # store a token (read from stdin) in the macOS Keychain
+gitid token rm acme/alice                # remove it
+gitid token status [acme/alice] [--json] # where each account's token comes from (never the token)
+
 gitid clone <url> --account acme/alice   # clone with the right account (rewrites the URL)
       [--dir <dir>] [--dry-run]          #   --dir: target directory, default <company dir>/<repo>
       [--interactive] [--force]          #   --interactive: allow password prompts on the terminal
@@ -218,7 +226,7 @@ How the two authentication modes look in practice:
 
 gitid edits files in your home directory, so it is strict about it:
 
-- **What it touches:** the managed block in `~/.gitconfig`; the managed block (a single `Include config.d/*` line) at the top of `~/.ssh/config`; `~/.ssh/config.d/gitid.conf`; keys you ask it to create under `~/.ssh/gitid/`; and its own folder `$XDG_CONFIG_HOME/gitid/` (default `~/.config/gitid/`) holding `config.yaml`, the generated `git/*.gitconfig` files and `backups/`. Nothing else. It also reads an optional `keys.yaml` there (your key bindings) but never writes it.
+- **What it touches:** the managed block in `~/.gitconfig`; the managed block (a single `Include config.d/*` line) at the top of `~/.ssh/config`; `~/.ssh/config.d/gitid.conf`; keys you ask it to create under `~/.ssh/gitid/`; and its own folder `$XDG_CONFIG_HOME/gitid/` (default `~/.config/gitid/`) holding `config.yaml`, the generated `git/*.gitconfig` files and `backups/`. Nothing else, with one opt-in exception: `gitid token set` adds one item per account to the macOS Keychain (service `gitid`; see [Online tab and tokens](#online-tab-and-tokens)). It also reads an optional `keys.yaml` there (your key bindings) but never writes it.
 - **Managed blocks:** everything gitid writes into your files sits between `# >>> gitid managed block … >>>` and `# <<< gitid managed block <<<`. Bytes outside the markers are never changed. Running `apply` twice changes nothing the second time, and writes no new backup.
 - **Preview and confirm:** the TUI always shows the diff and asks before writing. `gitid apply --dry-run` prints the same diff and creates nothing, not even directories.
 - **Backups:** before any write, the old bytes of every affected file are copied to `~/.config/gitid/backups/<timestamp>/` (directory `0700`, files `0600`) together with a `manifest.json` that lists each original path, mode and SHA-256. The newest 30 backups are kept.
@@ -227,8 +235,8 @@ gitid edits files in your home directory, so it is strict about it:
 - **Secrets in URLs:** a password or token pasted inside a URL is dropped and masked everywhere it would be shown.
 - **Injection-safe:** names, emails, hosts and usernames are validated and escaped before they reach git or ssh configuration; clone commands always use `git clone -- <url> <dir>`.
 - **Repo scan:** the Local tab of the repo browser only reads: it lists folders under your company base folders and runs one read-only `git config` in each repository it finds. It writes nothing; gitid itself opens no file inside a repository except the one-line `.git` file of a worktree or submodule (git reads the repository's configuration).
-- **Network:** none, except in three places, each on demand: a clone, the opt-in `ssh -T` test, and the Online tab of the repo browser (and only when you open it), which sends read-only `GET` requests to the API of your own accounts' hosts. There is no telemetry.
-- **Tokens (Online tab):** read from an environment variable, the gitid Keychain item, `gh`/`glab` or git's credential helper; kept in memory only, never written to disk, never put in a command line, a URL, a log or an error, and sent only as the `Authorization` header to the account's own API host over https (no redirect or next-page link to another host is followed; certificate verification is never turned off). gitid writes no token anywhere and never changes what a credential helper stores.
+- **Network:** none, except in three places, each on demand: a clone, the opt-in `ssh -T` test, and the Online tab of the repo browser or `gitid repos --online` (only when you open it or run it), which send read-only `GET` requests to the API of your own accounts' hosts. For an Azure DevOps account with no `orgs`, the same token is also sent to `app.vssps.visualstudio.com`, Microsoft's service that lists your organizations. There is no telemetry.
+- **Tokens (Online tab):** read from an environment variable, the gitid Keychain item, `gh`/`glab` or git's credential helper; kept in memory only, never written to disk, never put in a command line, a URL, a log or an error, and sent only as the `Authorization` header to the account's own API host over https (no redirect or next-page link to another host is followed; certificate verification is never turned off). The only place gitid writes a token is the Keychain item you ask for with `gitid token set`: the token is read from stdin (typed without echo on a terminal) and handed to the macOS `security` tool through its standard input, never through its command line, so it does not show in `ps`. gitid never changes what a credential helper stores.
 - **Uninstall:** delete all companies in the TUI and apply; your files return to their original bytes. Or restore by hand (below). To remove the gitid program itself, see [Uninstall the binary](#uninstall-the-binary).
 
 <details>
@@ -438,7 +446,7 @@ How the scan works: it looks up to 4 folders deep below each company folder, vis
 
 A company that has no folder yet says so ("does not exist yet — clone a repo to create it"); with no company the tab asks you to add one on the main list first.
 
-**Online tab.** Lists the repositories each account of your configuration can see on its platform (GitHub and GitHub Enterprise Server, GitLab and self-hosted GitLab; other platforms say "not available yet"). Only accounts that have a token are fetched, and nothing is looked up or sent until you open this tab. `left` and `right` switch account; the bar shows the account, its platform and where its token comes from (`token: env`, `keychain`, `gh`, `glab`, `git` or `none`). The token itself is never shown.
+**Online tab.** Lists the repositories each account of your configuration can see on its platform (GitHub and GitHub Enterprise Server, GitLab and self-hosted GitLab, Gitea, Bitbucket Cloud and Azure DevOps Services). Only accounts that have a token are fetched, and nothing is looked up or sent until you open this tab. `left` and `right` switch account; the bar shows the account, its platform and where its token comes from (`token: env`, `keychain`, `gh`, `glab`, `git` or `none`). The token itself is never shown.
 
 ```text
 ◂ acme/alice · GitHub · token: gh ▸  (1/5)
@@ -462,20 +470,43 @@ Each row shows `owner/name`, badges (`priv`, `arch`, `fork`, `empty`), how long 
 
 The clone URL is built from the host in your configuration and the repository path, then rendered like any URL you paste, so it uses the account's username or its ssh alias. The API token is never used for the clone: git signs in with its own credentials, as always. If `<base folder>/<repo>` already exists as something else, gitid clones into `<base folder>/<owner>-<repo>` and says so; if that exists too, enter does nothing and the block under the list says to use the URL tab with another folder. A repository is matched with a local clone by `host/owner/repo` (renamed or transferred repositories are not followed). Before a clone starts gitid checks that `config.yaml` has not changed since the screen loaded it; if it has, it reloads and asks you to check the account again.
 
+#### `gitid repos`
+
+`gitid repos` prints the same scan as the Local tab, grouped by company (one line per repository, `!` in front of the ones that need attention, every line at most 80 columns). `--company acme` limits it to one company, `--depth N` (1 or more, default 4) to folders N levels below its base folder, `--problems` to the repositories that need attention. `--json` prints the stable schema below. Exit codes: `0` listed, nothing wrong; `2` something needs attention (a local problem, or an online account that failed); `1` an error (bad flag, invalid configuration, unknown company or account, or Ctrl-C, after printing what it had).
+
+`gitid repos --online` lists what each account can see, using the same token chain as the Online tab (it never prints a token). Accounts with no token show `token: none` and the hint; that is not a failure (exit `0`). `--account acme/alice` lists one account (and resolves only its token), `--max-pages N` (1 to 500) caps the pages per account (`truncated` is then true), `--local` adds the local scan to the output (it is always run to fill `local_paths`).
+
+```json
+{"local": {"companies": [{"slug": "acme", "base_dir": "~/Code/acme/", "state": "ok", "truncated": false, "denied": 0,
+   "repos": [{"path": "/abs/path", "kind": "repo", "remote": "...", "key": "github.com/acme/api", "account": "acme/alice",
+              "reason": "username", "effective_email": "...", "email_origin": "...", "expected_email": "...",
+              "status": "ok", "flags": [], "belongs_to": "", "duplicates": [], "fix_to": ""}]}]},
+ "online": {"accounts": [{"account": "acme/alice", "platform": "github", "host": "github.com", "token_source": "gh",
+   "login": "alice", "state": "ok", "error": "", "error_kind": "", "truncated": false, "warnings": [],
+   "repos": [{"full_name": "acme/api", "owner": "acme", "name": "api", "private": true, "archived": false, "fork": false,
+              "empty": false, "updated_at": "2026-11-10T10:00:00Z", "web_url": "...", "clone_url": "...", "local_paths": []}]}]}}
+```
+
+`state` of an online account is `ok`, `no_token`, `error` or `cancelled`; `error` holds the message in the active language and `error_kind` a stable code. `local` is left out with `--online` unless `--local` is given; `online` is left out without `--online`.
+
 #### Online tab and tokens
 
 For each account gitid looks for a token in this order and stops at the first hit:
 
 1. **Environment variable** `GITID_TOKEN_<COMPANY>__<ACCOUNT>`: upper case, `-` written as `_`, two underscores between the two parts. For `acme/alice` it is `GITID_TOKEN_ACME__ALICE`. If two accounts map to the same name, the variable is ignored and the tab says so. gitid does not read `GITHUB_TOKEN`, `GH_TOKEN` or `GITLAB_TOKEN`: they cannot tell accounts apart. The `gh` program may read them itself when gitid asks it for a token (source 3), so unset them if you want the token of the account's own `gh` login. gitid also removes every `GITID_TOKEN_*` variable from the environment of the programs it starts.
-2. **gitid Keychain item** (macOS): service `gitid`, account `<host>/<username>` (for example `github.com/alice`), read with `security find-generic-password -w`. gitid only reads it in this version.
+2. **gitid Keychain item** (macOS): service `gitid`, account `<host>/<username>` (for example `github.com/alice`), read with `security find-generic-password -w`. Create it with `gitid token set <company>/<account>` (below) or with `security` yourself.
 3. **`gh` or `glab` login:** `gh auth token --hostname=<host> --user=<username>` (older `gh` without `--user` is asked without it), or `glab config get token --host=<host>`. `glab` keeps one token per host.
 4. **git's credential helper:** `git credential fill` for `https://<host>` and your username, the secret git already uses to push. gitid runs it only when you open the Online tab, with `GIT_TERMINAL_PROMPT=0`, no askpass program and `credential.interactive` set to `never` and `false` (the two values Git Credential Manager documents for "no prompts"), so it cannot ask you anything; it never runs `approve` or `reject`, so it never changes what the helper stores. The first read may still make macOS show its own "allow access to the Keychain" dialog, which gitid cannot suppress. What the helper stores may be a password rather than a token; GitHub then answers 401 and the tab says the stored credential looks like a password.
 
 The token is kept in memory for the session (so a Keychain dialog is not repeated) and is never written to disk by gitid. It is never put in a command line, a URL, a log or a message. If a source has nothing or fails, the next one is tried; after an API call fails there is no fallback, and the error names the source so you know which secret to fix (`r` looks again).
 
-Before anything is listed gitid asks the API who the token belongs to (`GET /user`). If that login is not the account's username (case does not matter), nothing is listed and the tab says "this token belongs to @x". Scopes needed: GitHub classic token `repo` (or `public_repo` for public repositories only), fine-grained token "Metadata: read"; GitLab `read_api`. gitid never asks for or creates a token.
+**Storing a token.** `gitid token set acme/alice` reads the token from stdin: pipe it (`pbpaste | gitid token set acme/alice`) or type it when asked (nothing is echoed). Only printable ASCII without spaces, 1 to 4096 characters, is accepted. gitid runs `security -i` and sends it `add-generic-password -U -s gitid -a "<host>/<username>" -X <hex of the token>` on **stdin**, so the token is in no command line (`security add-generic-password -w <token>` would show it in `ps`, and `-w` at the end prompts on the terminal, not on a pipe). An existing item is replaced. `gitid token rm acme/alice` deletes the item (nothing to remove is not an error). `gitid token status` shows, for each account, which source would be used (`env`, `keychain`, `gh`, `glab`, `git` or `none`) and the variable name to set; it never prints a token. Because it runs the same lookup as the Online tab, git's credential helper may show its own Keychain dialog. On other systems `token set` and `token rm` say they are not supported and name the variable to set instead.
 
-Requests are `GET` only, to `https://api.github.com` (GitHub.com), `https://<host>/api/v3` (GitHub Enterprise Server) or `https://<host>/api/v4` (GitLab), with a 30 s limit each, at most 3 accounts at the same time, at most 50 pages of 100 repositories per account (then the tab says it stopped) and at most 8 MiB per page. A redirect or "next page" link to another host, or to plain `http`, is refused, so the token never goes anywhere but the account's own host. `HTTPS_PROXY` and `NO_PROXY` are honoured; certificates are checked against the system roots plus the file named by `SSL_CERT_FILE` if set (verification is never turned off). A rate limit shorter than 10 s is waited out once; a longer one is reported with its reset time and the pages already fetched stay. Not supported: GitHub Enterprise with a path prefix, GitHub Enterprise Cloud with data residency (`*.ghe.com`), GitLab under a relative URL root, Gitea, Bitbucket and Azure DevOps (these accounts show "not available yet").
+Before anything is listed gitid asks the API who the token belongs to (`GET /user`). If that login is not the account's username (case does not matter), nothing is listed and the tab says "this token belongs to @x". Scopes needed: GitHub classic token `repo` (or `public_repo` for public repositories only), fine-grained token "Metadata: read"; GitLab `read_api`; Gitea `read:repository` and `read:organization`; Bitbucket Cloud API token `read:repository:bitbucket` and `read:workspace:bitbucket` (not confirmed: Atlassian does not list the scopes of these calls); Azure DevOps PAT `Code (Read)`. gitid never asks for or creates a token.
+
+Per platform: **Gitea** (your host, `https://<host>/api/v1`) sends `Authorization: token <t>` and lists `/user/repos` plus `/orgs/<org>/repos` for each of `/user/orgs`. **Bitbucket Cloud** (only `bitbucket.org`, `https://api.bitbucket.org/2.0`) uses an Atlassian API token (app passwords stopped working on 9 June 2026): with an email set on the account, Basic auth with the email, then a Bearer header; without one, a Bearer header, then Basic auth with the account username; it lists `/user/workspaces` and `/repositories/<workspace>?role=member` for each. The account `username` must match the Bitbucket nickname. **Azure DevOps Services** (only `dev.azure.com`) uses a PAT in Basic auth with an empty user name (or a Microsoft Entra token as Bearer) and lists `https://dev.azure.com/<org>/_apis/git/repositories?api-version=7.1` for each organization in the account's `orgs`; without `orgs` gitid tries to find them (`app.vssps.visualstudio.com`), which Microsoft may refuse for a PAT, and then says to set `orgs`. Azure does not say who a PAT belongs to or when a repository changed, so those are not shown.
+
+Requests are `GET` only, to `https://api.github.com` (GitHub.com), `https://<host>/api/v3` (GitHub Enterprise Server) or `https://<host>/api/v4` (GitLab), with a 30 s limit each, at most 3 accounts at the same time, at most 50 pages of 100 repositories per account (50 per page on Gitea, at most 100 organizations or workspaces; then the tab says it stopped) and at most 8 MiB per page. A redirect or "next page" link to another host, or to plain `http`, is refused, so the token never goes anywhere but the account's own host. `HTTPS_PROXY` and `NO_PROXY` are honoured; certificates are checked against the system roots plus the file named by `SSL_CERT_FILE` if set (verification is never turned off). A rate limit shorter than 10 s is waited out once; a longer one is reported with its reset time and the pages already fetched stay. Not supported: GitHub Enterprise with a path prefix, GitHub Enterprise Cloud with data residency (`*.ghe.com`), GitLab under a relative URL root, Bitbucket Data Center and Azure DevOps Server (an account on another host than `bitbucket.org` or `dev.azure.com` is shown as unsupported: nothing is requested, and it is not an error).
 
 ### Check and fix remote
 

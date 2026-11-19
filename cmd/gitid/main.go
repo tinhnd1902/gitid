@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/charmbracelet/x/term"
+
 	"github.com/tinhnd1902/gitid/internal/app"
 	"github.com/tinhnd1902/gitid/internal/cli"
 	"github.com/tinhnd1902/gitid/internal/env"
@@ -37,6 +39,10 @@ func main() {
 		IsTTY:   func() bool { return isTerminal(os.Stdin) && isTerminal(os.Stdout) },
 		Cwd:     os.Getwd,
 		Version: version,
+		ReadSecret: func() (string, error) {
+			b, err := term.ReadPassword(os.Stdin.Fd())
+			return string(b), err
+		},
 		StartTUI: func(svc *app.Service) error {
 			if !isTerminal(os.Stdin) || !isTerminal(os.Stdout) {
 				return errors.New(i18n.T("cli.tui.needs_tty"))
