@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.10] - 2026-11-20
+
 ### Added
 
 - Settings screen: the start menu has an eighth row, Settings (`8`), with the
@@ -456,7 +458,8 @@ First public version.
 - Every value written to git or ssh configuration is validated and escaped;
   clone arguments are always passed after `--`.
 
-[Unreleased]: https://github.com/tinhnd1902/gitid/compare/v0.1.9...HEAD
+[Unreleased]: https://github.com/tinhnd1902/gitid/compare/v0.1.10...HEAD
+[0.1.10]: https://github.com/tinhnd1902/gitid/compare/v0.1.9...v0.1.10
 [0.1.9]: https://github.com/tinhnd1902/gitid/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/tinhnd1902/gitid/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/tinhnd1902/gitid/compare/v0.1.6...v0.1.7
