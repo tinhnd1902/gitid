@@ -3,6 +3,7 @@
 package tui
 
 import (
+	"context"
 	"slices"
 	"strings"
 	"time"
@@ -20,18 +21,29 @@ import (
 type Options struct {
 	Cwd     string // directory shown as the repo hint and used by check/clone
 	Version string
+	// CheckUpdates asks, once at start, whether a newer release exists (see
+	// internal/update for what is sent, and when nothing is). Only the real
+	// program sets it.
+	CheckUpdates bool
+
+	// startAccounts opens with the Accounts screen over the start menu (tests
+	// that exercise the screens below it).
+	startAccounts bool
 }
 
 const (
 	minWidth     = 40
 	minHeight    = 10
 	statusExpiry = 5 * time.Second
+	// updateTimeout bounds the update check, which runs behind the first frame.
+	updateTimeout = 5 * time.Second
 )
 
 // Model is the root Bubble Tea model: a stack of screens plus the header,
 // status bar and help bar that every screen shares.
 type Model struct {
 	sh       *shared
+	opts     Options
 	stack    []Screen
 	w, h     int
 	status   statusMsg
@@ -49,8 +61,11 @@ type Model struct {
 // New creates the root model. The configuration is loaded by Init.
 func New(svc *app.Service, opts Options) *Model {
 	sh := &shared{svc: svc, st: NewStyles(), km: NewKeyMap(keymap.Defaults()), cwd: opts.Cwd, version: opts.Version}
-	m := &Model{sh: sh, ov: helpOverlay{filter: newOverlayFilter(sh.st)}}
-	m.stack = []Screen{newListScreen(sh)}
+	m := &Model{sh: sh, opts: opts, ov: helpOverlay{filter: newOverlayFilter(sh.st)}}
+	m.stack = []Screen{newHomeScreen(sh)}
+	if opts.startAccounts {
+		m.stack = append(m.stack, newListScreen(sh))
+	}
 	return m
 }
 
@@ -70,11 +85,52 @@ func Run(svc *app.Service, opts Options) error {
 
 func (m *Model) top() Screen { return m.stack[len(m.stack)-1] }
 
+// onHome reports whether the start menu is the screen on top.
+func (m *Model) onHome() bool { _, ok := m.top().(*homeScreen); return ok }
+
 func (m *Model) bodySize() (int, int) { return m.w, maxInt(m.h-m.chromeRows(), 1) }
 
-// Init loads the configuration and initializes the home screen.
+// Init loads the configuration, initializes the screens on the stack and, when
+// asked, starts the update check. It does no I/O itself: the first frame never
+// waits for the check.
 func (m *Model) Init() tea.Cmd {
-	return tea.Batch(m.loadCmd(), m.stack[0].Init())
+	cmds := []tea.Cmd{m.loadCmd()}
+	for _, s := range m.stack {
+		cmds = append(cmds, s.Init())
+	}
+	if m.opts.CheckUpdates {
+		cmds = append(cmds, m.updateCmd())
+	}
+	return tea.Batch(cmds...)
+}
+
+// updateCmd asks the service for a newer release. Quitting does not wait for
+// it, and a panic in it is no notice.
+func (m *Model) updateCmd() tea.Cmd {
+	svc := m.sh.svc
+	return func() (msg tea.Msg) {
+		defer func() {
+			if recover() != nil {
+				msg = updateMsg{}
+			}
+		}()
+		ctx, cancel := context.WithTimeout(context.Background(), updateTimeout)
+		defer cancel()
+		n, ok := svc.CheckUpdate(ctx)
+		return updateMsg{notice: n, ok: ok}
+	}
+}
+
+// hubDepth is the number of screens that stay when a flow says "back to the
+// hub" (apply done, then enter): the start menu and, when the flow was started
+// from the Accounts screen, that screen.
+func (m *Model) hubDepth() int {
+	if len(m.stack) > 1 {
+		if _, ok := m.stack[1].(*listScreen); ok {
+			return 2
+		}
+	}
+	return 1
 }
 
 func (m *Model) loadCmd() tea.Cmd {
@@ -150,7 +206,7 @@ func (m *Model) applyNav() tea.Cmd {
 		case navPop:
 			cmds = append(cmds, m.doPop())
 		case navPopRoot:
-			cmds = append(cmds, m.truncate(1))
+			cmds = append(cmds, m.truncate(m.hubDepth()))
 		}
 	}
 	return tea.Batch(cmds...)
@@ -244,7 +300,10 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case popMsg:
 		return m, m.doPop()
 	case popRootMsg:
-		return m, m.truncate(1)
+		return m, m.truncate(m.hubDepth())
+	case updateMsg:
+		m.sh.update, m.sh.hasUpdate = msg.notice, msg.ok
+		return m, nil
 
 	case statusMsg:
 		return m, m.setStatus(msg)
@@ -348,9 +407,12 @@ func (m *Model) View() string {
 func (m *Model) headerView() string {
 	st := m.sh.st
 	left := st.Brand.Render("gitid")
+	// the start menu is not a crumb: the brand stands for it
 	var crumbs []string
 	for _, s := range m.stack {
-		crumbs = append(crumbs, s.Title())
+		if _, home := s.(*homeScreen); !home {
+			crumbs = append(crumbs, s.Title())
+		}
 	}
 	sep := st.CrumbSep.Render(" › ")
 	trail := ""
@@ -361,7 +423,9 @@ func (m *Model) headerView() string {
 			trail += st.Muted.Render(c) + sep
 		}
 	}
-	left += "  " + trail
+	if trail != "" {
+		left += "  " + trail
+	}
 	// the folder gitid was started in; the version lives in the "?" overlay
 	right := ""
 	if m.sh.cwd != "" {
@@ -385,11 +449,12 @@ const maxBadgeSlug = 16
 // next step. It shows the success mark only when there is nothing left to do
 // (no pending change and no company without an account). It is shown on the
 // screens that can act on the fact: the list, the detail, the repo browser and
-// the apply screen; a form or a dialog has its own question.
+// the apply screen and the start menu; a form or a dialog has its own
+// question.
 func (m *Model) syncBadge() string {
 	sh, st := m.sh, m.sh.st
 	switch m.top().(type) {
-	case *listScreen, *detailScreen, *reposScreen, *confirmScreen:
+	case *homeScreen, *listScreen, *detailScreen, *reposScreen, *confirmScreen:
 	default:
 		return ""
 	}
@@ -449,8 +514,11 @@ func (m *Model) statusView() string {
 // "?" overlay. Navigation keys only act where there is something to move.
 func (m *Model) globalHelp() []key.Binding {
 	km := m.sh.km
-	return []key.Binding{
-		withDesc(km.Back, "esc/"+strings.Join(km.keys.Keys(keymap.Back), "/"), tr("tui.key.back_global")),
+	var back []key.Binding
+	if len(m.stack) == 0 || !m.onHome() {
+		back = []key.Binding{withDesc(km.Back, "esc/"+strings.Join(km.keys.Keys(keymap.Back), "/"), tr("tui.key.back_global"))}
+	}
+	return append(back,
 		withDesc(km.Up, "↑/↓", tr("tui.key.move")),
 		// one row for both directions: the keys of PageUp and PageDown
 		key.NewBinding(
@@ -460,7 +528,7 @@ func (m *Model) globalHelp() []key.Binding {
 		km.Help,
 		km.Palette,
 		km.ForceQuit,
-	}
+	)
 }
 
 // imeLike reports whether a key message looks like input from an input

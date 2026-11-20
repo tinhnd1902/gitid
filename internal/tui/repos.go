@@ -241,6 +241,12 @@ type reposScreen struct {
 // newReposScreen opens the browser on the URL tab, the clone flow of old.
 // prefer (optional) is the account the pick step starts on.
 func newReposScreen(sh *shared, prefer *config.AccountRef) *reposScreen {
+	return newReposScreenAt(sh, prefer, tabURL)
+}
+
+// newReposScreenAt opens the browser on a given tab. Only the URL and the
+// Local tabs are meant to be opened directly (the start menu uses both).
+func newReposScreenAt(sh *shared, prefer *config.AccountRef, tab reposTab) *reposScreen {
 	u := newCloneScreen(sh, prefer)
 	u.embedded = true
 	fi := textinput.New()
@@ -251,7 +257,7 @@ func newReposScreen(sh *shared, prefer *config.AccountRef) *reposScreen {
 	of.Prompt = fi.Prompt
 	of.PromptStyle = sh.st.Accent
 	of.CharLimit = 64
-	return &reposScreen{sh: sh, id: sh.id(), tab: tabURL, url: u, spin: sh.st.Spinner, filter: fi, ofilter: of, sel: -1, prefer: prefer}
+	return &reposScreen{sh: sh, id: sh.id(), tab: tab, url: u, spin: sh.st.Spinner, filter: fi, ofilter: of, sel: -1, prefer: prefer}
 }
 
 func (s *reposScreen) Title() string { return tr("tui.repos.title") }
@@ -267,7 +273,11 @@ func (s *reposScreen) Resize(w, h int) {
 
 // Init starts the clone flow's input and, unless the cache is good, the scan.
 func (s *reposScreen) Init() tea.Cmd {
-	return tea.Batch(s.url.Init(), s.openLocal())
+	c := s.url.Init()
+	if s.tab != tabURL {
+		s.url.input.Blur() // the URL input takes the focus back when its tab is chosen
+	}
+	return tea.Batch(c, s.openLocal())
 }
 
 // Close stops the scan and a clone in progress: the screen is leaving.

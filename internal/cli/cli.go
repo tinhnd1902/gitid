@@ -37,6 +37,9 @@ type Deps struct {
 	IsTTY   func() bool // stdin and stdout are terminals
 	Cwd     func() (string, error)
 	Version string
+	// Executable returns the path of the running binary (os.Executable); nil
+	// is safe (the install method is then unknown).
+	Executable func() (string, error)
 	// StartTUI is called for `gitid` without arguments. When nil a short
 	// notice is printed.
 	StartTUI func(svc *app.Service) error
@@ -113,6 +116,7 @@ func Execute(d Deps, args []string) int {
 	}
 	svc := app.New(d.Env, d.Runner)
 	svc.Version = d.Version
+	svc.Executable = d.Executable
 	c := &cli{d: d, svc: svc, out: d.Stdout, err: d.Stderr}
 	c.setLanguage()
 	root := c.root()

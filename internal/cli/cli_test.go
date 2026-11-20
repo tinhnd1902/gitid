@@ -582,3 +582,22 @@ func TestRootAndHelpAndLanguage(t *testing.T) {
 		t.Fatal(c)
 	}
 }
+
+// A3: no command other than the TUI checks for updates. Version is a plain
+// release here, so a command that did would send a request, which the
+// transport of TempEnv turns into a failure; a nil Executable is safe.
+func TestA3NoCommandChecksForUpdates(t *testing.T) {
+	h := newHarness(t, nil)
+	h.seed()
+	for _, args := range [][]string{{"version"}, {"list"}, {"list", "--json"}, {"keys"}, {"doctor"}, {"check"}} {
+		var out, errb bytes.Buffer
+		cli.Execute(cli.Deps{
+			Env: h.e, Runner: h.f, Stdin: strings.NewReader(""), Stdout: &out, Stderr: &errb,
+			IsTTY: func() bool { return false }, Cwd: func() (string, error) { return h.e.Home, nil },
+			Version: "0.1.8", Lang: "vi", Executable: nil,
+		}, args)
+	}
+	if _, err := os.Lstat(h.e.Paths().UpdateCheckFile); err == nil {
+		t.Fatal("a command wrote the update cache")
+	}
+}

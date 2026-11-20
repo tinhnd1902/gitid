@@ -64,6 +64,15 @@ Examples that are in scope:
   token.
 - Text from a hosting platform's API (a repository name, an error message)
   that reaches the terminal with its escape or control characters intact.
+- The update check doing more than its documented request: gitid sends one
+  unauthenticated `GET https://github.com/tinhnd1902/gitid/releases/latest`
+  when the TUI starts, at most once every 24 hours, with no token, cookie,
+  query or body. It is a vulnerability if it sends anything else (a token, a
+  path, a username, configuration content), contacts another host, follows the
+  redirect, reads the response body, ignores `GITID_NO_UPDATE_CHECK` (any value
+  except empty, `0` or `false` turns the check off), runs outside the TUI start
+  or for a development build, or shows anything from the response other than a
+  version number that matched `X.Y.Z`.
 
 Out of scope: problems that need an attacker who already controls your user
 account or your configuration files, and issues in git, ssh or your terminal

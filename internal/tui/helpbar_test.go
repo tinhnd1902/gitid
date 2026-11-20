@@ -631,7 +631,7 @@ func TestLAY1AC1Spot(t *testing.T) {
 		if withA {
 			parts = append(parts, km.AddAccount.Help().Key+" "+tr("tui.key.add_account"))
 		}
-		parts = append(parts, "? "+tr("tui.key.all_keys"), "q "+tr("tui.key.quit"))
+		parts = append(parts, "? "+tr("tui.key.all_keys"), "esc "+tr("tui.key.back"))
 		return strings.Join(parts, "  ")
 	}
 	for _, sz := range [][2]int{{80, 24}, {100, 30}} {
@@ -643,7 +643,7 @@ func TestLAY1AC1Spot(t *testing.T) {
 		if !strings.HasPrefix(rows[0], "▸ p "+tr("tui.key.apply")) {
 			t.Errorf("%v: row 1 %q", sz, rows[0])
 		}
-		// the coordinator's rule: A, a, ? and q are all visible at 80 columns
+		// the coordinator's rule: A, a, ? and the way back are all visible at 80 columns
 		if rows[1] != row2(true) {
 			t.Errorf("%v: row 2 %q, want %q", sz, rows[1], row2(true))
 		}
@@ -660,7 +660,7 @@ func TestLAY1AC1Spot(t *testing.T) {
 	}
 }
 
-// The override of D3: on the list at 80x24 in vi, row 2 shows A, a, ? and q,
+// The override of D3: on the list at 80x24 in vi, row 2 shows A, a, ? and esc,
 // for every state of the list that offers them.
 func TestLAYRow2At80x24Vi(t *testing.T) {
 	i18n.SetLang("vi")
@@ -675,7 +675,7 @@ func TestLAYRow2At80x24Vi(t *testing.T) {
 		}
 		for _, want := range []string{
 			"A " + defKM.T("tui.key.add_company"), "a " + defKM.T("tui.key.add_account"),
-			"? " + tr("tui.key.all_keys"), "q " + tr("tui.key.quit"),
+			"? " + tr("tui.key.all_keys"), "esc " + tr("tui.key.back"),
 		} {
 			if !strings.Contains(rows[1], want) {
 				t.Errorf("%s: row 2 %q lacks %q", name, rows[1], want)
@@ -694,7 +694,7 @@ func TestLAYNoAccountCompanyShowsAOnce(t *testing.T) {
 	if !strings.HasPrefix(rows[0], "▸ "+want) || strings.Contains(rows[1], want) {
 		t.Errorf("rows %q", rows)
 	}
-	for _, w := range []string{"A " + defKM.T("tui.key.add_company"), "? " + tr("tui.key.all_keys"), "q " + tr("tui.key.quit")} {
+	for _, w := range []string{"A " + defKM.T("tui.key.add_company"), "? " + tr("tui.key.all_keys"), "esc " + tr("tui.key.back")} {
 		if !strings.Contains(rows[1], w) {
 			t.Errorf("row 2 %q lacks %q", rows[1], w)
 		}

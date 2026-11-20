@@ -105,6 +105,22 @@ func TestKeyBindingsFilePath(t *testing.T) {
 	}
 }
 
+func TestUpdateCheckFilePath(t *testing.T) {
+	for _, c := range []struct{ home, xdg, want string }{
+		{"/h", "", "/h/.config/gitid/update-check.json"},
+		{"/h", "/x/cfg", "/x/cfg/gitid/update-check.json"},
+		{"/h", "rel", "/h/.config/gitid/update-check.json"},
+	} {
+		p := New(c.home, c.xdg).Paths()
+		if p.UpdateCheckFile != c.want {
+			t.Errorf("xdg %q: UpdateCheckFile = %q, want %q", c.xdg, p.UpdateCheckFile, c.want)
+		}
+		if filepath.Dir(p.UpdateCheckFile) != p.ConfigDir {
+			t.Errorf("the cache is not in the config dir: %q", p.UpdateCheckFile)
+		}
+	}
+}
+
 // ENV-1: New fills LookupEnv (the process environment by default).
 func TestNewHasLookupEnv(t *testing.T) {
 	e := New("/h", "")

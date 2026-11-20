@@ -602,3 +602,22 @@ func TestSEC9NoInsecureSkipVerify(t *testing.T) {
 		t.Errorf("%s in %v", bad, hits)
 	}
 }
+
+// Transport is e.HTTP when a test set it, else the real transport with the TLS
+// floor.
+func TestTransportExport(t *testing.T) {
+	e := testutil.TempEnv(t)
+	rt, err := Transport(e)
+	if err != nil || rt != e.HTTP {
+		t.Fatalf("with e.HTTP set: %v, %v", rt, err)
+	}
+	e.HTTP = nil
+	rt, err = Transport(e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr, ok := rt.(*http.Transport)
+	if !ok || tr.TLSClientConfig == nil || tr.TLSClientConfig.MinVersion != tls.VersionTLS12 {
+		t.Fatalf("real transport %T", rt)
+	}
+}

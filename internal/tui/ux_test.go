@@ -108,8 +108,16 @@ func assertFits(t *testing.T, view string, w, hh int, label string) {
 	}
 }
 
-// listScreenOf returns the home screen (the bottom of the stack).
-func (h *harness) listScreen() *listScreen { return h.m.stack[0].(*listScreen) }
+// listScreen returns the Accounts screen (the one over the start menu).
+func (h *harness) listScreen() *listScreen {
+	for _, s := range h.m.stack {
+		if l, ok := s.(*listScreen); ok {
+			return l
+		}
+	}
+	h.t.Fatal("the Accounts screen is not on the stack")
+	return nil
+}
 
 // detail is the detail text of the selected row as the pane would show it.
 func (h *harness) detail() string {

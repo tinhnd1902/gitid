@@ -37,6 +37,7 @@ page never shows a broken image.
 - **Clone and repair:** clone with the right account and a live progress bar, check which identity a repository really uses, and rewrite a wrong remote.
 - **Repo browser:** one screen with a Local tab (every repository under your company folders, the account its remote maps to, and what is wrong), a URL tab (clone) and an Online tab (the repositories each of your accounts can see on GitHub, GitLab, Gitea, Bitbucket Cloud or Azure DevOps, if you have a token for it).
 - **Doctor and import:** diagnose the whole setup with per-check progress, and bootstrap from the `includeIf` entries you already have.
+- **Start menu:** `gitid` opens a numbered menu of the everyday tasks (accounts, clone, check a repo, browse repos, apply, doctor, import); press `1` to `7` to jump straight to one. It also tells you, in one line, when a newer release exists (see [Network](#safety)).
 - **Two languages:** Vietnamese (default) and English, switchable per run.
 
 ## Quick Start
@@ -104,10 +105,10 @@ install -m 0755 gitid /usr/local/bin/gitid   # or any directory on your PATH
 **Run:**
 
 ```bash
-gitid            # opens the TUI; press ? for the key map, q to quit
+gitid            # opens the start menu; press 1-7 to pick a task, ? for the key map, q to quit
 ```
 
-First run in the TUI, three steps (the screen shows them too, and the bottom line always marks the next key with `▸`):
+First run in the TUI: press `1` to open Accounts (the start menu says "Start here: add your first company"), then three steps (the screen shows them too, and the bottom line always marks the next key with `▸`):
 
 1. `A` adds a company: a short slug and a base folder such as `~/Code/acme/`.
 2. `a` adds a Git account (username, email) to that company. The form shows the remote the account will use (`https://<username>@github.com/…`) and the gitid ID it derives from the username. The username is your login on the platform (the part in `github.com/<login>`), not your email; the email only becomes the commit author and gitid does not verify it.
@@ -226,7 +227,7 @@ How the two authentication modes look in practice:
 
 gitid edits files in your home directory, so it is strict about it:
 
-- **What it touches:** the managed block in `~/.gitconfig`; the managed block (a single `Include config.d/*` line) at the top of `~/.ssh/config`; `~/.ssh/config.d/gitid.conf`; keys you ask it to create under `~/.ssh/gitid/`; and its own folder `$XDG_CONFIG_HOME/gitid/` (default `~/.config/gitid/`) holding `config.yaml`, the generated `git/*.gitconfig` files and `backups/`. Nothing else, with one opt-in exception: `gitid token set` adds one item per account to the macOS Keychain (service `gitid`; see [Online tab and tokens](#online-tab-and-tokens)). It also reads an optional `keys.yaml` there (your key bindings) but never writes it.
+- **What it touches:** the managed block in `~/.gitconfig`; the managed block (a single `Include config.d/*` line) at the top of `~/.ssh/config`; `~/.ssh/config.d/gitid.conf`; keys you ask it to create under `~/.ssh/gitid/`; and its own folder `$XDG_CONFIG_HOME/gitid/` (default `~/.config/gitid/`) holding `config.yaml`, the generated `git/*.gitconfig` files, `backups/` and, once the update check has run, `update-check.json` (the time of the last check and the newest version it saw; gitid never creates the folder just to write it). Nothing else, with one opt-in exception: `gitid token set` adds one item per account to the macOS Keychain (service `gitid`; see [Online tab and tokens](#online-tab-and-tokens)). It also reads an optional `keys.yaml` there (your key bindings) but never writes it.
 - **Managed blocks:** everything gitid writes into your files sits between `# >>> gitid managed block … >>>` and `# <<< gitid managed block <<<`. Bytes outside the markers are never changed. Running `apply` twice changes nothing the second time, and writes no new backup.
 - **Preview and confirm:** the TUI always shows the diff and asks before writing. `gitid apply --dry-run` prints the same diff and creates nothing, not even directories.
 - **Backups:** before any write, the old bytes of every affected file are copied to `~/.config/gitid/backups/<timestamp>/` (directory `0700`, files `0600`) together with a `manifest.json` that lists each original path, mode and SHA-256. The newest 30 backups are kept.
@@ -235,7 +236,7 @@ gitid edits files in your home directory, so it is strict about it:
 - **Secrets in URLs:** a password or token pasted inside a URL is dropped and masked everywhere it would be shown.
 - **Injection-safe:** names, emails, hosts and usernames are validated and escaped before they reach git or ssh configuration; clone commands always use `git clone -- <url> <dir>`.
 - **Repo scan:** the Local tab of the repo browser only reads: it lists folders under your company base folders and runs one read-only `git config` in each repository it finds. It writes nothing; gitid itself opens no file inside a repository except the one-line `.git` file of a worktree or submodule (git reads the repository's configuration).
-- **Network:** none, except in three places, each on demand: a clone, the opt-in `ssh -T` test, and the Online tab of the repo browser or `gitid repos --online` (only when you open it or run it), which send read-only `GET` requests to the API of your own accounts' hosts. For an Azure DevOps account with no `orgs`, the same token is also sent to `app.vssps.visualstudio.com`, Microsoft's service that lists your organizations. There is no telemetry.
+- **Network:** one automatic request, plus three places that are on demand. The automatic one is the **update check**: when the TUI starts, gitid sends a single unauthenticated `GET https://github.com/tinhnd1902/gitid/releases/latest` to see whether a newer release exists, at most once every 24 hours (the time of the last attempt and the newest version seen are kept in `~/.config/gitid/update-check.json`, so a failed attempt is not repeated for a day). The request has no token, cookie, query or body, and carries only `User-Agent: gitid/<version>`. gitid reads only the `Location` header of the reply, never follows the redirect and never reads the body, accepts it only when it points at `github.com/tinhnd1902/gitid/releases/tag/vX.Y.Z`, and shows nothing but the version number. It uses the same proxy and certificate settings as the Online tab, gives up after 5 seconds without delaying the first screen, and fails silently. It runs only when the TUI starts (never for `gitid list`, `apply` or any other command) and not for builds that are not a plain release (`dev`, snapshots, prereleases). To turn it off, set `GITID_NO_UPDATE_CHECK=1` (any value except empty, `0` and `false`): then gitid reads and writes nothing for it and makes no request. The on-demand ones are: a clone, the opt-in `ssh -T` test, and the Online tab of the repo browser or `gitid repos --online` (only when you open it or run it), which send read-only `GET` requests to the API of your own accounts' hosts. For an Azure DevOps account with no `orgs`, the same token is also sent to `app.vssps.visualstudio.com`, Microsoft's service that lists your organizations. There is no telemetry.
 - **Tokens (Online tab):** read from an environment variable, the gitid Keychain item, `gh`/`glab` or git's credential helper; kept in memory only, never written to disk, never put in a command line, a URL, a log or an error, and sent only as the `Authorization` header to the account's own API host over https (no redirect or next-page link to another host is followed; certificate verification is never turned off). The only place gitid writes a token is the Keychain item you ask for with `gitid token set`: the token is read from stdin (typed without echo on a terminal) and handed to the macOS `security` tool through its standard input, never through its command line, so it does not show in `ps`. gitid never changes what a credential helper stores.
 - **Uninstall:** delete all companies in the TUI and apply; your files return to their original bytes. Or restore by hand (below). To remove the gitid program itself, see [Uninstall the binary](#uninstall-the-binary).
 
@@ -340,20 +341,20 @@ clone: ["c", "n"]   # two keys for one action
 
 | Action | Default | Where it works |
 | ------ | ------- | -------------- |
-| `quit` | `q` | list |
-| `help` | `?` | every screen except forms |
-| `back` | `q` (`esc` always goes back too) | every screen except the list |
+| `quit` | `q` | start menu |
+| `help` | `?` | start menu, every screen except forms |
+| `back` | `q` (`esc` always goes back too) | every screen except the start menu (the Accounts list included: it goes back to the start menu) |
 | `filter` | `/` | list, repo browser |
 | `add_account` | `a` | list, detail |
 | `add_company` | `A` | list |
 | `edit` | `e` | list, detail |
 | `delete` | `d` | list, detail |
-| `clone` | `c` | list, detail, apply (done), check |
-| `check` | `k` | list, detail, apply (done), repo browser |
-| `doctor` | `D` | list, detail |
-| `apply` | `p` | list, detail, SSH key result |
+| `clone` | `c` | start menu, list, detail, apply (done), check |
+| `check` | `k` | start menu, list, detail, apply (done), repo browser |
+| `doctor` | `D` | start menu, list, detail |
+| `apply` | `p` | start menu, list, detail, SSH key result |
 | `ssh_key` | `g` | list, detail |
-| `import` | `i` | list |
+| `import` | `i` | start menu, list |
 | `reload` | `r` | list, repo browser (rescan; refetch on the Online tab) |
 | `yes` / `no` | `y` / `n` | apply review, confirmation dialogs (also the "discard what you typed?" question) |
 | `fix` | `f` | check, repo browser |
@@ -363,23 +364,39 @@ clone: ["c", "n"]   # two keys for one action
 | `ssh_test` | `s` | doctor |
 | `terminal` | `t` | clone |
 | `problems` | `!` | repo browser (show only repos with a problem) |
-| `palette` | `ctrl+k` | every screen except forms (opens the same overlay as `help`) |
+| `palette` | `ctrl+k` | start menu, every screen except forms (opens the same overlay as `help`) |
 
 A key is one printable ASCII character (`v`, `V`, `/`, `5`), `ctrl+<letter>`, `alt+<character>` or `f1` to `f12`. These are not valid: letters with accents (`â`, `đ`), words (`ab`), and named keys such as `enter`, `esc`, `tab`, the arrows or `space`. Quote the key when YAML would read it differently: `"?"`, `"#"`, `"&"`, `"*"`, `"!"`, `"|"`, `">"`, `"%"`, `"@"`, `` "`" ``.
 
-These keys cannot be changed: `ctrl+c`, `esc` (always goes back one step), `enter`, `tab` and `shift+tab`, the arrows, `pgup`/`pgdn`, `home`/`end`, `ctrl+p`/`ctrl+n`/`ctrl+b`/`ctrl+f`, `space`, `h` and `l` in two-button dialogs, the keys of choice fields in forms (`y n h l j k`) and any text you type into a field. Among the `ctrl+<letter>` keys, `ctrl+h`, `ctrl+i` and `ctrl+m` (backspace, tab and enter on many terminals) are refused too.
+These keys cannot be changed: `ctrl+c`, `esc` (always goes back one step), the digits `1` to `9` on the start menu, `enter`, `tab` and `shift+tab`, the arrows, `pgup`/`pgdn`, `home`/`end`, `ctrl+p`/`ctrl+n`/`ctrl+b`/`ctrl+f`, `space`, `h` and `l` in two-button dialogs, the keys of choice fields in forms (`y n h l j k`) and any text you type into a field. Among the `ctrl+<letter>` keys, `ctrl+h`, `ctrl+i` and `ctrl+m` (backspace, tab and enter on many terminals) are refused too.
 
-Two actions that are live on the same screen cannot share a key (the list for `check` and `clone`, for example), but a key may mean different things on screens that never show together. Swapping two keys is fine: `clone: "e"` with `edit: "c"`. A problem never stops gitid: the affected action keeps its default key and gitid says so, in the status bar when the TUI starts, at the bottom of the `?` overlay, in `gitid keys` (which exits with 2) and in `gitid doctor` (a warning). A file that cannot be read or parsed leaves every default in place. An unknown action name (for example one from a newer gitid) is reported and ignored.
+Two actions that are live on the same screen cannot share a key (the list for `check` and `clone`, for example), but a key may mean different things on screens that never show together. The start menu shares its letters with the Accounts screen (`c`, `k`, `p`, `D`, `i` open the same items), and a digit cannot be bound to any action that works on the start menu (`quit`, `help`, `palette`, `clone`, `check`, `apply`, `doctor`, `import`): that binding is reported and the action keeps its default. Swapping two keys is fine: `clone: "e"` with `edit: "c"`. A problem never stops gitid: the affected action keeps its default key and gitid says so, in the status bar when the TUI starts, at the bottom of the `?` overlay, in `gitid keys` (which exits with 2) and in `gitid doctor` (a warning). A file that cannot be read or parsed leaves every default in place. An unknown action name (for example one from a newer gitid) is reported and ignored.
 
 Press `r` on the list to reload `config.yaml` and `keys.yaml` without leaving the TUI. Shortcuts need a keyboard layout that sends plain letters: with a Vietnamese input method switched on (Telex, VNI) gitid cannot read `a`, `k` and the others, and says so in the status bar; switch to EN (ABC) first. The one exception is the filter of the `?` overlay, which is a text box: Vietnamese input works there. For the same reason keys with non-ASCII characters are not accepted in `keys.yaml`. If a `keys.yaml` written before `palette` existed binds `ctrl+k` to another action in a screen the palette shares, that binding is reported as a conflict and the action goes back to its default key; rebind `palette` to keep your key.
 
 ## Features in Detail
 
+### Start menu
+
+`gitid` opens a menu, not the list of accounts. It shows the wordmark, the tagline with the version, an update line when a newer release exists, and seven tasks, each with a number and a one-line description:
+
+```text
+  1  Accounts        Companies, accounts and SSH keys
+  2  Clone a repo    Into the right folder, with the right account
+  3  Check repo      Which account the repo in this folder uses
+  4  Browse repos    Repos on this machine and on your platforms
+  5  Apply           Preview, then write ~/.gitconfig and ~/.ssh
+  6  Doctor          Check git, SSH and the configuration
+  7  Import from git Read the includeIf rules already in ~/.gitconfig
+```
+
+Press `1` to `7` to open a task at once, or move the `▌` cursor with `↑`/`↓` (`home`/`end` and `pgup`/`pgdn` too; it stops at the ends) and press `enter`. The letters you used on the Accounts screen still work from the menu: `c` clone, `k` check, `p` apply, `D` doctor, `i` import. `q` quits, and `esc` does nothing here; on every other screen `esc` and `q` go back one step, so `esc` on Accounts returns to the menu (a filter you applied is cleared first). Digits are only shortcuts on the menu: in a form, a filter or the `?` overlay they are typed as text. After an apply finishes, `enter` returns to the screen the flow started from (the menu, or Accounts when you started it there). When a newer release exists, one line says so and names the command that fits how gitid was installed (`brew upgrade gitid` for Homebrew, `install.sh` for the install script, or the releases page otherwise); see [Network](#safety) for what the check sends and how to turn it off.
+
 ### List
 
-The home screen is a tree of companies and accounts with a platform tag (`GH`, `GL`, `BB`, `GT`, `AZ`), the auth mode, `★` for the company default and the email. Press `/` to filter by name, username, email, host or platform; matching is fuzzy inside each word and the tree order is kept. From 84 columns a detail pane sits next to the list; from 60 columns (and 24 rows) it sits below the list; on smaller terminals `enter` opens it. The pane explains what the selected company or account does ("What happens"); for an account it also shows the remote it produces, its folder and the next step. Two accounts of one company with the same platform, host and username are flagged with `!`. A company without an account is marked `no accounts yet`: gitid writes nothing for it until you add one with `a`.
+The Accounts screen is a tree of companies and accounts with a platform tag (`GH`, `GL`, `BB`, `GT`, `AZ`), the auth mode, `★` for the company default and the email. Press `/` to filter by name, username, email, host or platform; matching is fuzzy inside each word and the tree order is kept. From 84 columns a detail pane sits next to the list; from 60 columns (and 24 rows) it sits below the list; on smaller terminals `enter` opens it. The pane explains what the selected company or account does ("What happens"); for an account it also shows the remote it produces, its folder and the next step. Two accounts of one company with the same platform, host and username are flagged with `!`. A company without an account is marked `no accounts yet`: gitid writes nothing for it until you add one with `a`.
 
-The bottom of every screen has a two-row help bar (one row on terminals under 14 rows). Row 1 holds the keys of the selected row or of the current step, with `▸` on the next step to take; row 2 holds the keys that are always available (on the list: `↑↓` move, `A` add company, `a` add account), then `? all keys`, then the exit key (`q` quit on the list, `esc` elsewhere) last. Labels in front of the rows ("This row:", "Always:") show only while every key of the row fits with them. The list pane has a heavy border, which marks where the arrow keys act; the detail pane next to it or below it has a thin one. Press `?` or `ctrl+k` for the shortcuts overlay: it is searchable. Type to filter by description (accents and capitals do not matter: `cong ty` finds "thêm công ty") or by key, move with `↑`/`↓`, and press `enter` to run the selected row, exactly as if you had pressed its key. `esc` clears the filter, then closes; `?` and `ctrl+k` close at any time; `q` closes while the filter is empty. Rows that only move (`↑/↓`, paging) and the "every screen" rows are shown dimmed and cannot be run.
+The bottom of every screen has a two-row help bar (one row on terminals under 14 rows). Row 1 holds the keys of the selected row or of the current step, with `▸` on the next step to take; row 2 holds the keys that are always available (on the list: `↑↓` move, `A` add company, `a` add account), then `? all keys`, then the exit key (`q` quit on the start menu, `esc` back elsewhere) last. Labels in front of the rows ("This row:", "Always:") show only while every key of the row fits with them. The list pane has a heavy border, which marks where the arrow keys act; the detail pane next to it or below it has a thin one. Press `?` or `ctrl+k` for the shortcuts overlay: it is searchable. Type to filter by description (accents and capitals do not matter: `cong ty` finds "thêm công ty") or by key, move with `↑`/`↓`, and press `enter` to run the selected row, exactly as if you had pressed its key. `esc` clears the filter, then closes; `?` and `ctrl+k` close at any time; `q` closes while the filter is empty. Rows that only move (`↑/↓`, paging) and the "every screen" rows are shown dimmed and cannot be run.
 
 ```text
 ▌ acme  ACME Corp                   ~/Code/acme/  2 accounts
@@ -389,12 +406,12 @@ The bottom of every screen has a two-row help bar (one row on terminals under 14
  └─ ★ dave       GL ssh                  dave@globex.example
 
                           ● 6 unapplied change(s) — press p
- ▸ p preview & apply  a add account  e edit  d delete  q quit  ? all keys
+ ▸ p preview & apply  a add account  e edit  d delete  esc back  ? all keys
 ```
 
 The right side of the status bar always says what is left to do: unapplied changes (highlighted), a company that has no account yet, or `✓ Applied, nothing pending`. The help bar shows only the keys that matter now; the next step comes first, marked `▸`, and `?` lists every key.
 
-`q` quits on the list and goes back one step on every other screen, like `esc` (inside a text field `q` is typed as a letter). `r` reloads `config.yaml` and `keys.yaml` from disk, for example after editing them by hand. On the welcome screen `enter` adds the first company. Every key above can be changed, see [Custom key bindings](#custom-key-bindings).
+`q` quits on the start menu and goes back one step on every other screen, like `esc` (inside a text field `q` is typed as a letter). `r` reloads `config.yaml` and `keys.yaml` from disk, for example after editing them by hand. On the welcome screen `enter` adds the first company. Every key above can be changed, see [Custom key bindings](#custom-key-bindings).
 
 ### Add and edit accounts
 

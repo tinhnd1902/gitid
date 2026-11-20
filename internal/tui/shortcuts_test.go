@@ -214,11 +214,16 @@ func TestIME13DeleteKeyPromptTakesText(t *testing.T) {
 
 // ---- q goes back ----
 
-func TestQB1QQuitsOnTheList(t *testing.T) {
+// q quits on the start menu only; on the Accounts screen it goes back to it.
+func TestQB1QQuitsOnTheStartMenu(t *testing.T) {
 	h := newHarness(t, basicCfg())
 	h.key("q")
+	if h.quit() || h.depth() != 0 {
+		t.Fatalf("q on the list: quit %v depth %d", h.quit(), h.depth())
+	}
+	h.key("q")
 	if !h.quit() {
-		t.Fatal("q must quit on the list")
+		t.Fatal("q must quit on the start menu")
 	}
 }
 

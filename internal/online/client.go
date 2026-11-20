@@ -60,13 +60,9 @@ type Client struct {
 // macOS ignores that variable, so it is read here. Certificate verification
 // is never turned off.
 func NewClient(e env.Env) (*Client, error) {
-	rt := e.HTTP
-	if rt == nil {
-		t, err := newTransport(e)
-		if err != nil {
-			return nil, err
-		}
-		rt = t
+	rt, err := Transport(e)
+	if err != nil {
+		return nil, err
 	}
 	now := e.Now
 	if now == nil {
@@ -79,6 +75,20 @@ func NewClient(e env.Env) (*Client, error) {
 		Now:      now,
 		Sleep:    sleepCtx,
 	}, nil
+}
+
+// Transport is the round tripper gitid uses for every request it makes: e.HTTP
+// when set (tests), otherwise the transport described at NewClient (proxy,
+// TLS 1.2 or newer, SSL_CERT_FILE).
+func Transport(e env.Env) (http.RoundTripper, error) {
+	if e.HTTP != nil {
+		return e.HTTP, nil
+	}
+	t, err := newTransport(e)
+	if err != nil {
+		return nil, err
+	}
+	return t, nil
 }
 
 func newTransport(e env.Env) (*http.Transport, error) {

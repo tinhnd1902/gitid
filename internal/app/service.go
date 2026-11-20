@@ -25,6 +25,10 @@ type Service struct {
 	// OnlineMaxPages caps the pages fetched per account (0: the default).
 	// Set it before the first listing.
 	OnlineMaxPages int
+	// Executable returns the path of the running binary (os.Executable). The
+	// update notice uses it to name the command that upgrades this install;
+	// nil means the install method is unknown.
+	Executable func() (string, error)
 
 	// onl is the state of the Online tab: the token cache and the HTTP client
 	// (see online.go). It is created on first use.

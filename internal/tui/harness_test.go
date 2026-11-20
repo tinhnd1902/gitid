@@ -80,6 +80,25 @@ func buildHarness(t *testing.T, cfg *config.Config, before func(e env.Env)) *har
 // transport there).
 func buildHarnessEnv(t *testing.T, cfg *config.Config, mutate func(*env.Env), before func(e env.Env)) *harness {
 	t.Helper()
+	return buildHarnessOpts(t, cfg, mutate, before, Options{startAccounts: true}, nil)
+}
+
+// newHomeHarness is newHarness over the real start: the start menu alone, as
+// gitid opens. keysYAML (optional) is written as keys.yaml first.
+func newHomeHarness(t *testing.T, cfg *config.Config, keysYAML ...string) *harness {
+	t.Helper()
+	var before func(e env.Env)
+	if len(keysYAML) > 0 && keysYAML[0] != "" {
+		before = func(e env.Env) { testutil.WriteFile(t, e.Paths().KeyBindingsFile, keysYAML[0], 0o644) }
+	}
+	return buildHarnessOpts(t, cfg, nil, before, Options{}, nil)
+}
+
+// buildHarnessOpts is the common builder: opts are the TUI options (Cwd and
+// Version are filled in when empty); tune (optional) changes the service
+// before the model starts.
+func buildHarnessOpts(t *testing.T, cfg *config.Config, mutate func(*env.Env), before func(e env.Env), opts Options, tune func(*app.Service)) *harness {
+	t.Helper()
 	e := testutil.TempEnv(t)
 	if mutate != nil {
 		mutate(&e)
@@ -94,8 +113,17 @@ func buildHarnessEnv(t *testing.T, cfg *config.Config, mutate func(*env.Env), be
 	if before != nil {
 		before(e)
 	}
+	if tune != nil {
+		tune(svc)
+	}
 	h := &harness{t: t, e: e, fake: fake, svc: svc, msgs: make(chan tea.Msg, 256), inflight: map[int]time.Time{}, idle: defaultIdle}
-	h.m = New(svc, Options{Cwd: e.Home, Version: "test"})
+	if opts.Cwd == "" {
+		opts.Cwd = e.Home
+	}
+	if opts.Version == "" {
+		opts.Version = "test"
+	}
+	h.m = New(svc, opts)
 	h.send(tea.WindowSizeMsg{Width: 100, Height: 30})
 	h.run(h.m.Init())
 	h.drain()
@@ -333,7 +361,9 @@ func (h *harness) waitFor(what string, pred func() bool) {
 
 func (h *harness) top() Screen { return h.m.top() }
 
-func (h *harness) depth() int { return len(h.m.stack) }
+// depth is the number of screens above the start menu: 1 for the Accounts
+// screen, 2 for a form on it.
+func (h *harness) depth() int { return len(h.m.stack) - 1 }
 
 // defKM is the key map with the default keys. Messages that name keys take
 // them as arguments, so a test that asserts their text builds it with

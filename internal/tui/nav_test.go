@@ -92,8 +92,8 @@ func TestRACE4EscThenA(t *testing.T) {
 func TestRACE5NavigationIsSynchronous(t *testing.T) {
 	h := newHarness(t, basicCfg())
 	h.m.Update(keyMsg("a"))
-	if len(h.m.stack) != 2 {
-		t.Fatalf("stack %d, want 2 right after Update", len(h.m.stack))
+	if h.depth() != 2 {
+		t.Fatalf("depth %d, want 2 right after Update", h.depth())
 	}
 }
 
@@ -394,11 +394,18 @@ func TestFOC3FocusAfterEdit(t *testing.T) {
 // ---- negative ----
 
 func TestNEG1PopAtRootIsHarmless(t *testing.T) {
-	h := newHarness(t, basicCfg())
+	// the start menu is the root: nothing is below it to go back to
+	h := newHomeHarness(t, basicCfg())
 	h.send(popMsg{})
 	h.send(popRootMsg{})
-	if h.depth() != 1 {
-		t.Fatalf("depth %d", h.depth())
+	if _, ok := h.top().(*homeScreen); !ok || h.depth() != 0 {
+		t.Fatalf("top %T depth %d", h.top(), h.depth())
+	}
+	// with the Accounts screen on top, "back to the hub" is that screen
+	h = newHarness(t, basicCfg())
+	h.send(popRootMsg{})
+	if _, ok := h.top().(*listScreen); !ok || h.depth() != 1 {
+		t.Fatalf("top %T depth %d", h.top(), h.depth())
 	}
 }
 

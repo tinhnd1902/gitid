@@ -308,8 +308,8 @@ func joinEnds(left, right string, width int) string {
 	return left + spaces(width-lw-rw) + right
 }
 
-// listScreen is the home screen: the company / account tree with a detail
-// pane.
+// listScreen is the Accounts screen, opened from the start menu: the company /
+// account tree with a detail pane.
 //
 // Filtering is done here, synchronously, instead of by the list component:
 // the bubbles list filters in a command whose results can arrive out of order
@@ -364,7 +364,15 @@ func newListScreen(sh *shared) *listScreen {
 }
 
 func (s *listScreen) Title() string { return tr("tui.list.title") }
-func (s *listScreen) Init() tea.Cmd { return nil }
+
+// Init builds the rows when the configuration is already loaded (the screen is
+// opened from the start menu, after the load).
+func (s *listScreen) Init() tea.Cmd {
+	if s.sh.loaded {
+		return s.rebuild()
+	}
+	return nil
+}
 
 func (s *listScreen) Capturing() bool { return s.mode == filterTyping }
 
@@ -372,9 +380,9 @@ func (s *listScreen) Help() []key.Binding {
 	km := s.sh.km
 	if _, has := s.selected(); !has {
 		// nothing to edit, delete or open (the welcome guide)
-		return []key.Binding{km.Filter, km.AddAccount, km.AddCompany, km.Apply, km.Clone, km.Check, km.Doctor, km.GenKey, km.Import, km.Reload, km.Quit}
+		return []key.Binding{km.Filter, km.AddAccount, km.AddCompany, km.Apply, km.Clone, km.Check, km.Doctor, km.GenKey, km.Import, km.Reload}
 	}
-	return []key.Binding{km.Filter, km.AddAccount, km.AddCompany, km.Edit, km.Delete, km.Apply, km.Clone, km.Check, km.Doctor, km.GenKey, km.Import, km.Detail, km.Reload, km.Quit}
+	return []key.Binding{km.Filter, km.AddAccount, km.AddCompany, km.Edit, km.Delete, km.Apply, km.Clone, km.Check, km.Doctor, km.GenKey, km.Import, km.Detail, km.Reload}
 }
 
 // ContextHelp picks the few keys that matter in the current state. The first
@@ -436,11 +444,21 @@ func (s *listScreen) ContextHelp() []helpItem {
 	return out
 }
 
+// StepBack: esc (or the back key) first clears an applied filter; the next one
+// leaves the screen for the start menu. false lets the root leave.
+func (s *listScreen) StepBack() bool {
+	if s.mode != filterApplied {
+		return false
+	}
+	s.setFilter(filterOff, true)
+	return true
+}
+
 // AlwaysHelp is row 2 of the help bar: the keys that work in every state of
-// the list, then the quit key (the exit, drawn last).
+// the list, then the way back to the start menu (the exit, drawn last).
 func (s *listScreen) AlwaysHelp() []helpItem {
 	km := s.sh.km
-	exit := helpItem{b: km.Quit, role: roleExit}
+	exit := helpItem{b: withDesc(km.Back, "esc", tr("tui.key.back")), role: roleExit}
 	switch {
 	case !s.sh.loaded:
 		return []helpItem{exit}
@@ -456,6 +474,11 @@ func (s *listScreen) AlwaysHelp() []helpItem {
 	out = append(out, helpItem{b: km.AddCompany, prio: 3})
 	if _, has := s.selected(); has {
 		out = append(out, helpItem{b: km.AddAccount, prio: 1})
+	}
+	if s.mode == filterApplied {
+		// esc clears the filter before it goes back: row 1 says so, and its
+		// item is the exit of the bar
+		return out
 	}
 	return append(out, exit)
 }
@@ -699,8 +722,6 @@ func (s *listScreen) action(msg tea.KeyMsg, km *KeyMap) (tea.Cmd, bool) {
 	sh := s.sh
 	r, has := s.selected()
 	switch {
-	case key.Matches(msg, km.Quit):
-		return tea.Quit, true
 	case key.Matches(msg, km.AddCompany):
 		return sh.pushNow(newCompanyForm(sh, nil)), true
 	case key.Matches(msg, km.AddAccount):

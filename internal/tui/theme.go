@@ -40,6 +40,7 @@ type Styles struct {
 	Muted          lipgloss.Style
 	Faint          lipgloss.Style // alias of Muted: there is one grey
 	Accent         lipgloss.Style
+	Logo           lipgloss.Style // the wordmark of the start menu: accent colour only
 	Bold           lipgloss.Style
 	OK             lipgloss.Style
 	Warn           lipgloss.Style
@@ -93,6 +94,7 @@ func NewStyles() *Styles {
 	s.Muted = lipgloss.NewStyle().Foreground(colMuted)
 	s.Faint = s.Muted
 	s.Accent = lipgloss.NewStyle().Foreground(colAccent)
+	s.Logo = lipgloss.NewStyle().Foreground(colAccent)
 	s.Bold = lipgloss.NewStyle().Bold(true).Foreground(colText)
 	s.OK = lipgloss.NewStyle().Foreground(colOK)
 	s.Warn = lipgloss.NewStyle().Foreground(colWarn)

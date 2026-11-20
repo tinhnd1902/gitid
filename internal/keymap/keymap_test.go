@@ -1005,3 +1005,110 @@ func TestPK7PaletteTranslated(t *testing.T) {
 		}
 	}
 }
+
+// ---- KM-H: the home scope ----
+
+func defOf(t *testing.T, a keymap.Action) keymap.Def {
+	t.Helper()
+	for _, d := range keymap.Defs() {
+		if d.Action == a {
+			return d
+		}
+	}
+	t.Fatalf("no def for %s", a)
+	return keymap.Def{}
+}
+
+// KM-H1: home is the last scope and reserves the digits.
+func TestKMH1HomeScope(t *testing.T) {
+	sc := keymap.Scopes()
+	if sc[len(sc)-1] != keymap.ScopeHome || string(keymap.ScopeHome) != "home" {
+		t.Fatalf("scopes %v", sc)
+	}
+	if keymap.Reserved(keymap.ScopeHome) != "123456789" {
+		t.Fatalf("reserved %q", keymap.Reserved(keymap.ScopeHome))
+	}
+}
+
+// KM-H2: the scopes of the actions that live on the start menu.
+func TestKMH2HomeScopes(t *testing.T) {
+	if got := defOf(t, keymap.Quit).Scopes; !slices.Equal(got, []keymap.Scope{keymap.ScopeHome}) {
+		t.Errorf("quit scopes %v", got)
+	}
+	back := defOf(t, keymap.Back)
+	if !slices.Contains(back.Scopes, keymap.ScopeList) || slices.Contains(back.Scopes, keymap.ScopeHome) {
+		t.Errorf("back scopes %v", back.Scopes)
+	}
+	for _, a := range []keymap.Action{keymap.Help, keymap.Palette, keymap.Clone, keymap.Check, keymap.Apply, keymap.Doctor, keymap.Import} {
+		if !slices.Contains(defOf(t, a).Scopes, keymap.ScopeHome) {
+			t.Errorf("%s is not live on home", a)
+		}
+	}
+	if n := len(keymap.Defs()); n != 25 {
+		t.Errorf("%d actions", n)
+	}
+}
+
+// KM-H3: a digit can not be bound to an action that is live on home.
+func TestKMH3DigitsReserved(t *testing.T) {
+	for _, tc := range []struct{ yaml, act string }{
+		{"check: \"1\"\n", "check"},
+		{"quit: \"5\"\n", "quit"},
+		{"clone: [\"c\", \"9\"]\n", "clone"},
+	} {
+		m, is := parse(t, tc.yaml)
+		assertDefaults(t, m)
+		if len(is) != 1 || is[0].Code != keymap.ErrReserved || is[0].Scope != keymap.ScopeHome || is[0].Action != tc.act {
+			t.Errorf("%q: %+v", tc.yaml, is)
+		}
+	}
+}
+
+// KM-H4: a digit is fine for an action that is not live on home.
+func TestKMH4DigitsOutsideHome(t *testing.T) {
+	m, is := parse(t, "edit: \"1\"\nfilter: \"2\"\nback: \"3\"\n")
+	if len(is) != 0 || keysOf(m, keymap.Edit) != "1" || keysOf(m, keymap.Filter) != "2" || keysOf(m, keymap.Back) != "3" {
+		t.Fatalf("%+v edit %v filter %v back %v", is, m.Keys(keymap.Edit), m.Keys(keymap.Filter), m.Keys(keymap.Back))
+	}
+}
+
+// KM-H5: quit conflicts with the letter aliases of the menu.
+func TestKMH5QuitConflictsWithClone(t *testing.T) {
+	m, is := parse(t, "quit: c\n")
+	if keysOf(m, keymap.Quit) != "q" || m.Custom(keymap.Quit) {
+		t.Fatalf("quit %v", m.Keys(keymap.Quit))
+	}
+	want := keymap.Issue{Code: keymap.ErrConflict, Action: "quit", Key: "c", Other: "clone", Scope: keymap.ScopeHome, Default: "q"}
+	if len(is) != 1 || is[0] != want {
+		t.Fatalf("%+v\nwant %+v", is, want)
+	}
+}
+
+// KM-H6: back now shares the list scope with the list actions; quit and back
+// share no scope, so they may use the same key.
+func TestKMH6BackOnTheList(t *testing.T) {
+	m, is := parse(t, "back: A\n")
+	if keysOf(m, keymap.Back) != "q" || len(is) != 1 || is[0].Code != keymap.ErrConflict || is[0].Other != "add_company" || is[0].Scope != keymap.ScopeList {
+		t.Fatalf("back %v %+v", m.Keys(keymap.Back), is)
+	}
+	m, is = parse(t, "back: x\nquit: x\n")
+	if len(is) != 0 || keysOf(m, keymap.Back) != "x" || keysOf(m, keymap.Quit) != "x" {
+		t.Fatalf("%+v back %v quit %v", is, m.Keys(keymap.Back), m.Keys(keymap.Quit))
+	}
+}
+
+// KM-H7: the example still parses and names the home scope.
+func TestKMH7ExampleNamesHome(t *testing.T) {
+	ex := keymap.Example("~/x/keys.yaml")
+	if _, is := keymap.Parse([]byte(ex)); len(is) != 0 {
+		t.Fatalf("%+v", is)
+	}
+	if !strings.Contains(ex, "home") {
+		t.Fatalf("the example does not name the home scope:\n%s", ex)
+	}
+	for _, l := range strings.Split(ex, "\n") {
+		if n := len([]rune(l)); n > 80 {
+			t.Errorf("%d columns: %q", n, l)
+		}
+	}
+}

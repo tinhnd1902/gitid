@@ -25,10 +25,16 @@ func TestT13GoldenListScreen(t *testing.T) {
 		t.Fatal(err)
 	}
 	tm := teatest.NewTestModel(t, New(svc, Options{Cwd: e.Home, Version: "v0.0.0-test"}), teatest.WithInitialTermSize(100, 30))
+	// the program opens on the start menu: 1 opens the Accounts screen, and
+	// ctrl+c (q goes back to the menu there) ends the run on that screen
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		return bytes.Contains(b, []byte("alice@beta.io")) && bytes.Contains(b, []byte("thay đổi chưa áp dụng"))
+		return bytes.Contains(b, []byte("Duyệt repo")) && bytes.Contains(b, []byte("thay đổi chưa áp dụng"))
 	}, teatest.WithDuration(5*time.Second), teatest.WithCheckInterval(20*time.Millisecond))
-	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'1'}})
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		return bytes.Contains(b, []byte("alice@beta.io"))
+	}, teatest.WithDuration(5*time.Second), teatest.WithCheckInterval(20*time.Millisecond))
+	tm.Send(tea.KeyMsg{Type: tea.KeyCtrlC})
 	tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
 	fm := tm.FinalModel(t, teatest.WithFinalTimeout(5*time.Second))
 	golden.RequireEqual(t, []byte(fm.View()))

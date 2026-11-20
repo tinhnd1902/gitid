@@ -102,6 +102,9 @@ type shared struct {
 	km      *KeyMap
 	// keyIssues are the problems of keys.yaml found by the last load.
 	keyIssues []keymap.Issue
+	// update is the newer release the check found (hasUpdate: there is one).
+	update    app.UpdateNotice
+	hasUpdate bool
 	cwd       string
 	version   string
 	nextID    int

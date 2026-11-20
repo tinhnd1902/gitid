@@ -55,7 +55,12 @@ type (
 	reloadMsg struct{}
 	// refreshPlanMsg asks the root to recompute the pending-changes badge.
 	refreshPlanMsg struct{}
-	planBuiltMsg   struct {
+	// updateMsg is the answer of the update check (see Model.updateCmd).
+	updateMsg struct {
+		notice app.UpdateNotice
+		ok     bool
+	}
+	planBuiltMsg struct {
 		seq  int
 		plan plan.Plan
 		err  error

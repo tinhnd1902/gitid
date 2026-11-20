@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Start menu: `gitid` now opens a home screen with the gitid wordmark, a
+  tagline with the version, and seven numbered tasks (Accounts, Clone a repo,
+  Check repo, Browse repos, Apply, Doctor, Import from git). `1` to `7` open a
+  task at once; `↑`/`↓`, `home`/`end`, `pgup`/`pgdn` and `enter` work too. The
+  letters `c`, `k`, `p`, `D` and `i` (as bound in your `keys.yaml`) open
+  clone, check, apply, doctor and import from the menu, as they did on the
+  Accounts screen. The menu adapts to the terminal: logo from 80x24, a
+  one-line header on shorter terminals, the menu alone at 40x10.
+- Update notice: when the TUI starts, gitid sends one unauthenticated
+  `GET https://github.com/tinhnd1902/gitid/releases/latest` (at most once every
+  24 hours, never for development builds, snapshots or prereleases) and, when a
+  newer release exists, shows one line on the start menu with the command that
+  fits the install (`brew upgrade gitid`, `install.sh`, or the releases page).
+  The request carries no token, cookie, query or body; the redirect is not
+  followed, the body is not read, and only a validated version number is ever
+  shown. The time of the last attempt and the newest version seen are kept in
+  `~/.config/gitid/update-check.json` (only when that folder already exists).
+  Set `GITID_NO_UPDATE_CHECK=1` to turn it off entirely: no file is read or
+  written and no request is made.
+- Key scope `home` (the start menu): `gitid keys` and `keys --example` list it.
+  The digits `1` to `9` are reserved there.
+
+### Changed
+
+- `q` (and `esc`) on the Accounts screen now go back to the start menu instead
+  of quitting; with a filter applied, the first press clears the filter. `q`
+  quits on the start menu only (`ctrl+c` still quits everywhere). The `quit`
+  action now works on the start menu, and `back` works on every screen except
+  it, the Accounts list included. A `keys.yaml` that customised `quit` keeps
+  working on the start menu.
+- `keys.yaml` edge cases from the new scopes: `back` now shares the Accounts
+  screen with `add_company` and the other list actions, so `back: "A"` (or any
+  key those use, such as `i` or `c`) is reported as a conflict and `back` goes
+  back to its default; and a digit bound to `quit`, `help`, `palette`, `clone`,
+  `check`, `apply`, `doctor` or `import` is reported (the digits belong to the
+  start menu) and that action keeps its default. As always, a problem is shown
+  in the status bar, the `?` overlay, `gitid keys` and `gitid doctor`, and
+  never stops gitid.
+- The start menu is called "Home" ("Trang chủ"); the list is still "Accounts"
+  ("Tài khoản"). The header shows no crumb for the start menu. After an apply
+  finishes, `enter` returns to the screen the flow started from (the start
+  menu, or Accounts when it started there).
+- README, README_VI and SECURITY.md: the network section now names the update
+  check and its opt-out.
+
 ## [0.1.8] - 2026-11-19
 
 ### Changed

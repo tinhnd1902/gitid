@@ -37,6 +37,7 @@ tồn tại, để trang không bao giờ hiện ảnh lỗi.
 - **Clone và sửa remote:** clone bằng đúng tài khoản với thanh tiến trình, kiểm tra repo đang dùng danh tính nào, và sửa remote sai.
 - **Trình duyệt repo:** một màn hình có tab Trên máy (mọi repo trong thư mục các công ty, tài khoản mà remote khớp và điều gì đang sai), tab URL (clone) và tab Online (repo mà từng tài khoản thấy trên GitHub, GitLab, Gitea, Bitbucket Cloud hoặc Azure DevOps, nếu bạn có token cho nó).
 - **Chẩn đoán và nhập cấu hình:** kiểm tra toàn bộ thiết lập với tiến trình từng mục, và bắt đầu nhanh từ các `includeIf` bạn đã có.
+- **Trang chủ:** `gitid` mở một menu đánh số các việc hằng ngày (tài khoản, clone, kiểm tra repo, duyệt repo, áp dụng, chẩn đoán, nhập từ git); bấm `1` đến `7` để vào thẳng một việc. Menu cũng báo bằng một dòng khi có bản mới (xem [Mạng](#an-toàn)).
 - **Hai ngôn ngữ:** tiếng Việt (mặc định) và tiếng Anh, đổi được cho từng lần chạy.
 
 ## Bắt đầu nhanh
@@ -104,10 +105,10 @@ install -m 0755 gitid /usr/local/bin/gitid   # hoặc thư mục bất kỳ tron
 **Chạy:**
 
 ```bash
-gitid            # mở TUI; nhấn ? để xem phím tắt, q để thoát
+gitid            # mở trang chủ; bấm 1-7 để chọn việc, ? để xem phím tắt, q để thoát
 ```
 
-Lần đầu dùng TUI, làm ba bước (màn hình cũng hiện sẵn các bước, và dòng dưới cùng luôn đánh dấu phím tiếp theo bằng `▸`):
+Lần đầu dùng TUI: bấm `1` để mở Tài khoản (trang chủ ghi «Bắt đầu ở đây: thêm công ty đầu tiên»), rồi làm ba bước (màn hình cũng hiện sẵn các bước, và dòng dưới cùng luôn đánh dấu phím tiếp theo bằng `▸`):
 
 1. `A` thêm công ty: một slug ngắn và một thư mục gốc như `~/Code/acme/`.
 2. `a` thêm tài khoản Git (username, email) cho công ty đó. Form hiện sẵn remote tài khoản sẽ dùng (`https://<username>@github.com/…`) và ID gitid tự đặt theo username. Username là tên đăng nhập của bạn trên nền tảng (phần trong `github.com/<login>`), không phải email; email chỉ để ghi tác giả commit và gitid không xác minh nó.
@@ -226,7 +227,7 @@ Hai chế độ xác thực trong thực tế:
 
 gitid sửa tệp trong thư mục home của bạn, nên nó rất chặt chẽ:
 
-- **Chạm vào những gì:** khối do gitid quản lý trong `~/.gitconfig`; khối do gitid quản lý (một dòng `Include config.d/*`) ở đầu `~/.ssh/config`; `~/.ssh/config.d/gitid.conf`; các key bạn yêu cầu tạo trong `~/.ssh/gitid/`; và thư mục riêng `$XDG_CONFIG_HOME/gitid/` (mặc định `~/.config/gitid/`) chứa `config.yaml`, các tệp `git/*.gitconfig` được sinh ra và `backups/`. Không có gì khác, trừ một ngoại lệ do bạn chủ động chọn: `gitid token set` thêm một mục cho mỗi tài khoản vào Keychain của macOS (service `gitid`; xem [Tab Online và token](#tab-online-và-token)). gitid cũng đọc tệp `keys.yaml` tùy chọn ở đó (phím tắt của bạn) nhưng không bao giờ ghi vào nó.
+- **Chạm vào những gì:** khối do gitid quản lý trong `~/.gitconfig`; khối do gitid quản lý (một dòng `Include config.d/*`) ở đầu `~/.ssh/config`; `~/.ssh/config.d/gitid.conf`; các key bạn yêu cầu tạo trong `~/.ssh/gitid/`; và thư mục riêng `$XDG_CONFIG_HOME/gitid/` (mặc định `~/.config/gitid/`) chứa `config.yaml`, các tệp `git/*.gitconfig` được sinh ra, `backups/` và, sau khi kiểm tra bản mới chạy, `update-check.json` (thời điểm kiểm tra gần nhất và phiên bản mới nhất nó thấy; gitid không bao giờ tạo thư mục chỉ để ghi tệp này). Không có gì khác, trừ một ngoại lệ do bạn chủ động chọn: `gitid token set` thêm một mục cho mỗi tài khoản vào Keychain của macOS (service `gitid`; xem [Tab Online và token](#tab-online-và-token)). gitid cũng đọc tệp `keys.yaml` tùy chọn ở đó (phím tắt của bạn) nhưng không bao giờ ghi vào nó.
 - **Khối được quản lý:** mọi thứ gitid ghi vào tệp của bạn nằm giữa `# >>> gitid managed block … >>>` và `# <<< gitid managed block <<<`. Phần nằm ngoài hai dấu đó không bao giờ bị đổi. Chạy `apply` lần thứ hai không đổi gì và không tạo bản sao lưu mới.
 - **Xem trước và xác nhận:** TUI luôn hiện diff và hỏi trước khi ghi. `gitid apply --dry-run` in cùng diff đó và không tạo gì, kể cả thư mục.
 - **Sao lưu:** trước mọi lần ghi, nội dung cũ của từng tệp bị ảnh hưởng được chép vào `~/.config/gitid/backups/<mốc-thời-gian>/` (thư mục `0700`, tệp `0600`) cùng `manifest.json` ghi đường dẫn gốc, quyền và SHA-256. 30 bản sao lưu mới nhất được giữ lại.
@@ -235,7 +236,7 @@ gitid sửa tệp trong thư mục home của bạn, nên nó rất chặt chẽ
 - **Bí mật trong URL:** mật khẩu hoặc token dán trong URL bị loại bỏ và che đi ở mọi nơi có thể hiển thị.
 - **Chống chèn lệnh:** tên, email, host và username được kiểm tra và escape trước khi vào cấu hình git hay ssh; lệnh clone luôn dùng `git clone -- <url> <thư mục>`.
 - **Quét repo:** tab Trên máy của trình duyệt repo chỉ đọc: nó liệt kê thư mục trong các thư mục gốc của công ty và chạy một lệnh `git config` chỉ đọc trong mỗi repo tìm được. Nó không ghi gì; bản thân gitid không mở tệp nào bên trong repo, trừ tệp `.git` một dòng của worktree hay submodule (git tự đọc cấu hình của repo).
-- **Mạng:** không dùng, trừ ba chỗ, mỗi chỗ chỉ khi bạn yêu cầu: clone, bài thử `ssh -T` tùy chọn, và tab Online của trình duyệt repo hoặc `gitid repos --online` (chỉ khi bạn mở hoặc chạy nó), nơi gửi các yêu cầu `GET` chỉ đọc tới API của host các tài khoản của bạn. Với tài khoản Azure DevOps không có `orgs`, token đó còn được gửi tới `app.vssps.visualstudio.com`, dịch vụ của Microsoft liệt kê các organization của bạn. Không có telemetry.
+- **Mạng:** một yêu cầu tự động, cộng ba chỗ chỉ chạy khi bạn yêu cầu. Yêu cầu tự động là **kiểm tra bản mới**: khi TUI mở, gitid gửi đúng một yêu cầu `GET https://github.com/tinhnd1902/gitid/releases/latest` không xác thực để xem có bản mới không, nhiều nhất mỗi 24 giờ (thời điểm lần thử gần nhất và phiên bản mới nhất đã thấy được giữ trong `~/.config/gitid/update-check.json`, nên lần thử lỗi cũng không lặp lại trong một ngày). Yêu cầu không có token, cookie, query hay body, chỉ mang `User-Agent: gitid/<phiên bản>`. gitid chỉ đọc header `Location` của phản hồi, không theo chuyển hướng, không đọc body, chỉ chấp nhận khi nó trỏ tới `github.com/tinhnd1902/gitid/releases/tag/vX.Y.Z`, và chỉ hiển thị số phiên bản. Nó dùng cùng cài đặt proxy và chứng chỉ với tab Online, bỏ cuộc sau 5 giây mà không làm chậm màn hình đầu tiên, và lỗi thì im lặng. Nó chỉ chạy khi TUI mở (không bao giờ với `gitid list`, `apply` hay lệnh khác) và không chạy với bản không phải phát hành thường (`dev`, snapshot, bản thử). Để tắt, đặt `GITID_NO_UPDATE_CHECK=1` (mọi giá trị trừ rỗng, `0` và `false`): khi đó gitid không đọc, không ghi gì cho việc này và không gửi yêu cầu nào. Ba chỗ chạy khi bạn yêu cầu là: clone, bài thử `ssh -T` tùy chọn, và tab Online của trình duyệt repo hoặc `gitid repos --online` (chỉ khi bạn mở hoặc chạy nó), nơi gửi các yêu cầu `GET` chỉ đọc tới API của host các tài khoản của bạn. Với tài khoản Azure DevOps không có `orgs`, token đó còn được gửi tới `app.vssps.visualstudio.com`, dịch vụ của Microsoft liệt kê các organization của bạn. Không có telemetry.
 - **Token (tab Online):** đọc từ biến môi trường, mục Keychain của gitid, `gh`/`glab` hoặc credential helper của git; chỉ giữ trong bộ nhớ, không bao giờ ghi ra đĩa, không bao giờ nằm trong dòng lệnh, URL, log hay lỗi, và chỉ được gửi dưới dạng header `Authorization` tới API của host chính tài khoản đó qua https (không theo chuyển hướng hay liên kết trang kế sang host khác; không bao giờ tắt kiểm tra chứng chỉ). Chỗ duy nhất gitid ghi token là mục Keychain bạn yêu cầu bằng `gitid token set`: token được đọc từ stdin (gõ không hiện ký tự khi ở terminal) và đưa cho công cụ `security` của macOS qua đầu vào chuẩn của nó, không bao giờ qua dòng lệnh, nên không hiện trong `ps`. gitid không bao giờ đổi những gì credential helper lưu.
 - **Gỡ bỏ:** xóa hết công ty trong TUI rồi áp dụng; tệp của bạn trở về đúng từng byte ban đầu. Hoặc khôi phục thủ công (bên dưới). Để gỡ chính chương trình gitid, xem [Gỡ cài đặt chương trình](#gỡ-cài-đặt-chương-trình).
 
@@ -340,20 +341,20 @@ clone: ["c", "n"]   # hai phím cho một hành động
 
 | Hành động | Mặc định | Dùng ở |
 | --------- | -------- | ------ |
-| `quit` | `q` | danh sách |
-| `help` | `?` | mọi màn hình trừ biểu mẫu |
-| `back` | `q` (`esc` luôn quay lại) | mọi màn hình trừ danh sách |
+| `quit` | `q` | trang chủ |
+| `help` | `?` | trang chủ, mọi màn hình trừ biểu mẫu |
+| `back` | `q` (`esc` luôn quay lại) | mọi màn hình trừ trang chủ (kể cả danh sách Tài khoản: nó quay về trang chủ) |
 | `filter` | `/` | danh sách, trình duyệt repo |
 | `add_account` | `a` | danh sách, chi tiết |
 | `add_company` | `A` | danh sách |
 | `edit` | `e` | danh sách, chi tiết |
 | `delete` | `d` | danh sách, chi tiết |
-| `clone` | `c` | danh sách, chi tiết, áp dụng (xong), kiểm tra |
-| `check` | `k` | danh sách, chi tiết, áp dụng (xong), trình duyệt repo |
-| `doctor` | `D` | danh sách, chi tiết |
-| `apply` | `p` | danh sách, chi tiết, kết quả SSH key |
+| `clone` | `c` | trang chủ, danh sách, chi tiết, áp dụng (xong), kiểm tra |
+| `check` | `k` | trang chủ, danh sách, chi tiết, áp dụng (xong), trình duyệt repo |
+| `doctor` | `D` | trang chủ, danh sách, chi tiết |
+| `apply` | `p` | trang chủ, danh sách, chi tiết, kết quả SSH key |
 | `ssh_key` | `g` | danh sách, chi tiết |
-| `import` | `i` | danh sách |
+| `import` | `i` | trang chủ, danh sách |
 | `reload` | `r` | danh sách, trình duyệt repo (quét lại; tải lại ở tab Online) |
 | `yes` / `no` | `y` / `n` | màn hình xem trước, hộp xác nhận (cả câu hỏi «bỏ những gì đã nhập?») |
 | `fix` | `f` | kiểm tra, trình duyệt repo |
@@ -363,23 +364,39 @@ clone: ["c", "n"]   # hai phím cho một hành động
 | `ssh_test` | `s` | chẩn đoán |
 | `terminal` | `t` | clone |
 | `problems` | `!` | trình duyệt repo (chỉ hiện repo có vấn đề) |
-| `palette` | `ctrl+k` | mọi màn hình trừ form (mở cùng bảng với `help`) |
+| `palette` | `ctrl+k` | trang chủ, mọi màn hình trừ form (mở cùng bảng với `help`) |
 
 Một phím là một ký tự ASCII in được (`v`, `V`, `/`, `5`), `ctrl+<chữ>`, `alt+<ký tự>` hoặc `f1` đến `f12`. Không hợp lệ: chữ có dấu (`â`, `đ`), từ (`ab`) và phím có tên như `enter`, `esc`, `tab`, mũi tên hay `space`. Đặt phím trong dấu nháy khi YAML sẽ hiểu khác đi: `"?"`, `"#"`, `"&"`, `"*"`, `"!"`, `"|"`, `">"`, `"%"`, `"@"`, `` "`" ``.
 
-Các phím sau không đổi được: `ctrl+c`, `esc` (luôn quay lại một bước), `enter`, `tab` và `shift+tab`, mũi tên, `pgup`/`pgdn`, `home`/`end`, `ctrl+p`/`ctrl+n`/`ctrl+b`/`ctrl+f`, `space`, `h` và `l` trong hộp hai nút, phím của ô chọn trong biểu mẫu (`y n h l j k`) và mọi chữ bạn gõ vào ô nhập. Trong các phím `ctrl+<chữ>`, `ctrl+h`, `ctrl+i` và `ctrl+m` (backspace, tab, enter ở nhiều terminal) cũng bị từ chối.
+Các phím sau không đổi được: `ctrl+c`, `esc` (luôn quay lại một bước), các số `1` đến `9` ở trang chủ, `enter`, `tab` và `shift+tab`, mũi tên, `pgup`/`pgdn`, `home`/`end`, `ctrl+p`/`ctrl+n`/`ctrl+b`/`ctrl+f`, `space`, `h` và `l` trong hộp hai nút, phím của ô chọn trong biểu mẫu (`y n h l j k`) và mọi chữ bạn gõ vào ô nhập. Trong các phím `ctrl+<chữ>`, `ctrl+h`, `ctrl+i` và `ctrl+m` (backspace, tab, enter ở nhiều terminal) cũng bị từ chối.
 
-Hai hành động cùng hoạt động trên một màn hình không được dùng chung phím (ví dụ `check` và `clone` ở danh sách), nhưng một phím có thể có nghĩa khác ở những màn hình không bao giờ hiện cùng lúc. Hoán đổi hai phím thì được: `clone: "e"` cùng `edit: "c"`. Một vấn đề không bao giờ làm gitid dừng: hành động bị ảnh hưởng giữ phím mặc định và gitid báo cho bạn, trên thanh trạng thái khi mở TUI, ở cuối bảng `?`, trong `gitid keys` (thoát với mã 2) và trong `gitid doctor` (cảnh báo). Tệp không đọc được hoặc sai cú pháp thì mọi phím về mặc định. Tên hành động không có (ví dụ từ gitid bản mới hơn) được báo và bỏ qua.
+Hai hành động cùng hoạt động trên một màn hình không được dùng chung phím (ví dụ `check` và `clone` ở danh sách), nhưng một phím có thể có nghĩa khác ở những màn hình không bao giờ hiện cùng lúc. Trang chủ dùng chung các chữ với màn hình Tài khoản (`c`, `k`, `p`, `D`, `i` mở cùng các mục), và không gán được một chữ số cho hành động nào hoạt động ở trang chủ (`quit`, `help`, `palette`, `clone`, `check`, `apply`, `doctor`, `import`): phép gán đó bị báo và hành động giữ phím mặc định. Hoán đổi hai phím thì được: `clone: "e"` cùng `edit: "c"`. Một vấn đề không bao giờ làm gitid dừng: hành động bị ảnh hưởng giữ phím mặc định và gitid báo cho bạn, trên thanh trạng thái khi mở TUI, ở cuối bảng `?`, trong `gitid keys` (thoát với mã 2) và trong `gitid doctor` (cảnh báo). Tệp không đọc được hoặc sai cú pháp thì mọi phím về mặc định. Tên hành động không có (ví dụ từ gitid bản mới hơn) được báo và bỏ qua.
 
 Bấm `r` ở danh sách để tải lại `config.yaml` và `keys.yaml` mà không thoát TUI. Phím tắt cần bàn phím gửi chữ thường thuần: khi bộ gõ tiếng Việt (Telex, VNI) đang bật, gitid không đọc được `a`, `k`… và báo trên thanh trạng thái; hãy chuyển sang EN (ABC) trước. Ngoại lệ duy nhất là ô lọc của bảng `?`, vì đó là ô nhập chữ: gõ tiếng Việt ở đó được. Vì lý do đó `keys.yaml` cũng không nhận phím có ký tự ngoài ASCII. Nếu một `keys.yaml` viết trước khi có `palette` gán `ctrl+k` cho hành động khác trong màn hình mà palette dùng chung, phím đó bị báo là xung đột và hành động quay về phím mặc định; hãy gán lại `palette` để giữ phím của bạn.
 
 ## Tính năng chi tiết
 
+### Trang chủ
+
+`gitid` mở một menu, không phải danh sách tài khoản. Nó hiện chữ gitid, câu giới thiệu kèm phiên bản, một dòng báo khi có bản mới, và bảy việc, mỗi việc có số và một dòng mô tả:
+
+```text
+  1  Tài khoản      Công ty, tài khoản và SSH key
+  2  Clone repo     Vào đúng thư mục, với đúng tài khoản
+  3  Kiểm tra repo  Repo ở thư mục này dùng tài khoản nào
+  4  Duyệt repo     Repo trên máy và trên các nền tảng
+  5  Áp dụng        Xem trước rồi ghi vào ~/.gitconfig và ~/.ssh
+  6  Chẩn đoán      Kiểm tra git, SSH và cấu hình
+  7  Nhập từ git    Đọc includeIf có sẵn trong ~/.gitconfig
+```
+
+Bấm `1` đến `7` để mở ngay một việc, hoặc di chuyển con trỏ `▌` bằng `↑`/`↓` (cả `home`/`end` và `pgup`/`pgdn`; con trỏ dừng ở hai đầu) rồi bấm `enter`. Các chữ bạn quen dùng ở màn hình Tài khoản vẫn chạy từ trang chủ: `c` clone, `k` kiểm tra, `p` áp dụng, `D` chẩn đoán, `i` nhập từ git. `q` thoát, còn `esc` không làm gì ở đây; ở mọi màn hình khác `esc` và `q` quay lại một bước, nên `esc` ở Tài khoản đưa về trang chủ (bộ lọc đang áp dụng được xóa trước). Chữ số chỉ là phím tắt ở trang chủ: trong biểu mẫu, ô lọc hay bảng `?` chúng được gõ như chữ. Sau khi áp dụng xong, `enter` quay về màn hình đã bắt đầu luồng đó (trang chủ, hoặc Tài khoản nếu bạn bắt đầu từ đó). Khi có bản mới, một dòng báo và nêu lệnh hợp với cách bạn cài gitid (`brew upgrade gitid` với Homebrew, `install.sh` với script cài, hoặc trang releases nếu không rõ); xem [Mạng](#an-toàn) để biết việc kiểm tra gửi gì và cách tắt.
+
 ### Danh sách
 
-Màn hình chính là cây công ty và tài khoản với thẻ nền tảng (`GH`, `GL`, `BB`, `GT`, `AZ`), kiểu xác thực, `★` cho tài khoản mặc định của công ty và email. Nhấn `/` để lọc theo tên, username, email, host hoặc nền tảng; việc so khớp là mờ trong từng từ và giữ nguyên thứ tự của cây. Từ 84 cột, khung chi tiết nằm cạnh danh sách; từ 60 cột (và 24 dòng) nó nằm dưới danh sách; terminal nhỏ hơn thì nhấn `enter` để mở. Khung này giải thích công ty hoặc tài khoản đang chọn sẽ làm gì ("Điều gì sẽ xảy ra"); với tài khoản, nó còn hiện remote được tạo ra, thư mục và bước tiếp theo. Hai tài khoản cùng công ty có cùng nền tảng, host và username được đánh dấu `!`. Công ty chưa có tài khoản được đánh dấu `chưa có tài khoản`: gitid chưa ghi gì cho nó cho tới khi bạn thêm tài khoản bằng `a`.
+Màn hình Tài khoản là cây công ty và tài khoản với thẻ nền tảng (`GH`, `GL`, `BB`, `GT`, `AZ`), kiểu xác thực, `★` cho tài khoản mặc định của công ty và email. Nhấn `/` để lọc theo tên, username, email, host hoặc nền tảng; việc so khớp là mờ trong từng từ và giữ nguyên thứ tự của cây. Từ 84 cột, khung chi tiết nằm cạnh danh sách; từ 60 cột (và 24 dòng) nó nằm dưới danh sách; terminal nhỏ hơn thì nhấn `enter` để mở. Khung này giải thích công ty hoặc tài khoản đang chọn sẽ làm gì ("Điều gì sẽ xảy ra"); với tài khoản, nó còn hiện remote được tạo ra, thư mục và bước tiếp theo. Hai tài khoản cùng công ty có cùng nền tảng, host và username được đánh dấu `!`. Công ty chưa có tài khoản được đánh dấu `chưa có tài khoản`: gitid chưa ghi gì cho nó cho tới khi bạn thêm tài khoản bằng `a`.
 
-Cuối mỗi màn hình có thanh trợ giúp hai dòng (một dòng khi terminal dưới 14 dòng). Dòng 1 là phím của dòng đang chọn hoặc của bước hiện tại, `▸` đánh dấu bước nên làm tiếp; dòng 2 là các phím luôn dùng được (ở danh sách: `↑↓` di chuyển, `A` thêm công ty, `a` thêm tài khoản), rồi `? tất cả phím`, và phím thoát (`q` thoát ở danh sách, `esc` ở nơi khác) đứng cuối. Nhãn đứng trước mỗi dòng ("Dòng này:", "Luôn có:") chỉ hiện khi mọi phím của dòng đều vừa chỗ cùng nhãn. Khung danh sách có viền đậm, cho biết phím mũi tên đang tác động vào đâu; khung chi tiết bên cạnh hoặc bên dưới có viền mảnh. Nhấn `?` hoặc `ctrl+k` để mở bảng phím tắt: bảng này tìm kiếm được. Gõ để lọc theo mô tả (không phân biệt dấu và chữ hoa: `cong ty` tìm ra "thêm công ty") hoặc theo phím, di chuyển bằng `↑`/`↓`, nhấn `enter` để chạy dòng đang chọn, đúng như khi bạn bấm phím của nó. `esc` xóa bộ lọc rồi mới đóng; `?` và `ctrl+k` đóng bất cứ lúc nào; `q` đóng khi ô lọc còn trống. Dòng chỉ để di chuyển (`↑/↓`, cuộn trang) và các dòng "mọi màn hình" hiện mờ và không chạy được.
+Cuối mỗi màn hình có thanh trợ giúp hai dòng (một dòng khi terminal dưới 14 dòng). Dòng 1 là phím của dòng đang chọn hoặc của bước hiện tại, `▸` đánh dấu bước nên làm tiếp; dòng 2 là các phím luôn dùng được (ở danh sách: `↑↓` di chuyển, `A` thêm công ty, `a` thêm tài khoản), rồi `? tất cả phím`, và phím thoát (`q` thoát ở trang chủ, `esc` quay lại ở nơi khác) đứng cuối. Nhãn đứng trước mỗi dòng ("Dòng này:", "Luôn có:") chỉ hiện khi mọi phím của dòng đều vừa chỗ cùng nhãn. Khung danh sách có viền đậm, cho biết phím mũi tên đang tác động vào đâu; khung chi tiết bên cạnh hoặc bên dưới có viền mảnh. Nhấn `?` hoặc `ctrl+k` để mở bảng phím tắt: bảng này tìm kiếm được. Gõ để lọc theo mô tả (không phân biệt dấu và chữ hoa: `cong ty` tìm ra "thêm công ty") hoặc theo phím, di chuyển bằng `↑`/`↓`, nhấn `enter` để chạy dòng đang chọn, đúng như khi bạn bấm phím của nó. `esc` xóa bộ lọc rồi mới đóng; `?` và `ctrl+k` đóng bất cứ lúc nào; `q` đóng khi ô lọc còn trống. Dòng chỉ để di chuyển (`↑/↓`, cuộn trang) và các dòng "mọi màn hình" hiện mờ và không chạy được.
 
 ```text
 ▌ acme  ACME Corp                 ~/Code/acme/  2 tài khoản
@@ -389,12 +406,12 @@ Cuối mỗi màn hình có thanh trợ giúp hai dòng (một dòng khi termina
  └─ ★ dave       GL ssh                  dave@globex.example
 
                           ● 6 thay đổi chưa áp dụng — bấm p
- ▸ p xem trước & áp dụng  a thêm tài khoản  e sửa  d xóa  q thoát  ? tất cả phím
+ ▸ p xem trước & áp dụng  a thêm tài khoản  e sửa  d xóa  esc quay lại  ? tất cả phím
 ```
 
 Bên phải thanh trạng thái luôn cho biết còn việc gì: thay đổi chưa áp dụng (được tô nổi), công ty chưa có tài khoản, hoặc `✓ Đã áp dụng, không còn thay đổi`. Thanh phím chỉ hiện các phím đang cần; bước tiếp theo đứng đầu và có dấu `▸`, còn `?` liệt kê mọi phím.
 
-`q` thoát ở danh sách và quay lại một bước ở mọi màn hình khác, giống `esc` (trong ô nhập chữ, `q` được gõ như một chữ cái). `r` tải lại `config.yaml` và `keys.yaml` từ đĩa, ví dụ sau khi bạn sửa tay. Ở màn hình chào, `enter` thêm công ty đầu tiên. Mọi phím ở trên đều đổi được, xem [Tùy chỉnh phím tắt](#tùy-chỉnh-phím-tắt).
+`q` thoát ở trang chủ và quay lại một bước ở mọi màn hình khác, giống `esc` (trong ô nhập chữ, `q` được gõ như một chữ cái). `r` tải lại `config.yaml` và `keys.yaml` từ đĩa, ví dụ sau khi bạn sửa tay. Ở màn hình chào, `enter` thêm công ty đầu tiên. Mọi phím ở trên đều đổi được, xem [Tùy chỉnh phím tắt](#tùy-chỉnh-phím-tắt).
 
 ### Thêm và sửa tài khoản
 

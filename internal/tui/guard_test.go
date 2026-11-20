@@ -81,7 +81,7 @@ func importTwo(t *testing.T, keysYAML ...string) *harness {
 // grdOverlay are the states whose "?" overlay list is checked too; one state
 // per screen is enough, the help bar of every state is always checked.
 var grdOverlay = map[string]bool{
-	"list welcome": true, "list account applied": true, "list pending": true, "detail ssh account": true,
+	"home": true, "list welcome": true, "list account applied": true, "list pending": true, "detail ssh account": true,
 	"confirm ready": true, "confirm done": true, "check result": true, "clone pick": true,
 	"key result": true, "doctor": true, "import proposals": true, "delete step 0": true, "keygen mode": true,
 	"repos local list": true, "repos online list": true,
@@ -92,7 +92,21 @@ var grdOverlay = map[string]bool{
 func grdStates() []grdState {
 	hk := harnessFor
 	wide := func(h *harness) *harness { h.resize(100, 30); return h }
+	home := func(t *testing.T, y string) *harness {
+		if y == "" {
+			return newHomeHarness(t, basicCfg())
+		}
+		return newHomeHarness(t, basicCfg(), y)
+	}
 	return []grdState{
+		{"home", func(t *testing.T, y string) *harness { return home(t, y) }},
+		{"home compact", func(t *testing.T, y string) *harness { h := home(t, y); h.resize(80, 16); return h }},
+		{"home minimal", func(t *testing.T, y string) *harness { h := home(t, y); h.resize(40, 10); return h }},
+		{"home with update", func(t *testing.T, y string) *harness {
+			h := home(t, y)
+			h.send(updateMsg{notice: app.UpdateNotice{Latest: "0.1.9", Method: app.UpdateViaBrew}, ok: true})
+			return h
+		}},
 		{"list welcome", func(t *testing.T, y string) *harness { return hk(t, nil, []string{y}) }},
 		{"list company without accounts", func(t *testing.T, y string) *harness { return hk(t, emptyCompanyCfg("personal"), []string{y}) }},
 		{"list account applied", func(t *testing.T, y string) *harness {

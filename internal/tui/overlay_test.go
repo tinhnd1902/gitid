@@ -487,6 +487,14 @@ func TestOV19BackAndQuitRowsRun(t *testing.T) {
 	if _, ok := h.top().(*listScreen); !ok {
 		t.Fatalf("top is %T", h.top())
 	}
+	if h.quit() {
+		t.Fatal("back quit the program")
+	}
+	// the quit row lives on the start menu; the Accounts screen has none
+	h.key("esc")
+	if _, ok := h.top().(*homeScreen); !ok {
+		t.Fatalf("top is %T", h.top())
+	}
 	viaOverlay(t, h, "thoat", defKM.keys.Label(keymap.Quit))
 	if !h.quit() {
 		t.Fatal("the quit row did not quit")

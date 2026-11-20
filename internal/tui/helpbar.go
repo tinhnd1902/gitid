@@ -423,7 +423,17 @@ func oneRowBar(st *Styles, b helpBarItems, w int) string {
 	}
 	all := assemble(dropped)
 	if 1+entsWidth(all) > w {
-		// even the mandatory items do not fit: cut the first description
+		// even the mandatory items do not fit. The first description is cut
+		// (below) as far as one cell; when even that is too wide, "?" and the
+		// exit key outrank the next step: it goes and "…" says so
+		if len(ents) > 0 && ents[0].it.primary {
+			shortest := entsWidth(all) - lipgloss.Width(all[0].it.b.Help().Desc) + 1
+			if lean := append([]barEnt{{ell: true}}, tail...); 1+shortest > w && 1+entsWidth(lean) <= w {
+				all = lean
+			}
+		}
+	}
+	if 1+entsWidth(all) > w {
 		if cutFirst(all, w-1) {
 			all = slices.DeleteFunc(all, func(e barEnt) bool { return e.ell })
 		}

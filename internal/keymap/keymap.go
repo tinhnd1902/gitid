@@ -65,6 +65,9 @@ const (
 	ScopeDoctor    Scope = "doctor"
 	ScopeImport    Scope = "import"
 	ScopeForm      Scope = "form"
+	// ScopeHome is the start menu. Its numbers are fixed keys, like the
+	// arrows.
+	ScopeHome Scope = "home"
 )
 
 const (
@@ -74,6 +77,8 @@ const (
 	// Letters handled by the dialogs and by the form itself.
 	reservedInDialog = "hl"
 	reservedInForm   = "yYnNhljk"
+	// Digits of the start menu: they jump to an item.
+	reservedInHome = "123456789"
 )
 
 // MaxFileSize is the largest keys.yaml that is read.
@@ -81,7 +86,7 @@ const MaxFileSize = maxKeyFileBytes
 
 var scopeOrder = []Scope{
 	ScopeList, ScopeDetail, ScopeApply, ScopeApplyDone, ScopeCheck, ScopeDialog,
-	ScopeClone, ScopeRepos, ScopeKeyResult, ScopeDoctor, ScopeImport, ScopeForm,
+	ScopeClone, ScopeRepos, ScopeKeyResult, ScopeDoctor, ScopeImport, ScopeForm, ScopeHome,
 }
 
 // reserved are the letters a scope uses itself (they are handled inside
@@ -89,6 +94,7 @@ var scopeOrder = []Scope{
 var reserved = map[Scope]string{
 	ScopeDialog: reservedInDialog,
 	ScopeForm:   reservedInForm,
+	ScopeHome:   reservedInHome,
 }
 
 // Def describes one rebindable action.
@@ -107,20 +113,20 @@ func scopes(s ...Scope) []Scope { return s }
 
 // defs is the registry, in display order.
 var defs = []Def{
-	{Quit, []string{"q"}, scopes(ScopeList), "tui.key.quit"},
-	{Help, []string{"?"}, append(scopes(ScopeList), allScopesButForm...), "tui.key.help"},
-	{Back, []string{"q"}, append(slices.Clone(allScopesButForm), ScopeForm), "tui.key.back"},
+	{Quit, []string{"q"}, scopes(ScopeHome), "tui.key.quit"},
+	{Help, []string{"?"}, append(scopes(ScopeList, ScopeHome), allScopesButForm...), "tui.key.help"},
+	{Back, []string{"q"}, append(append(scopes(ScopeList), allScopesButForm...), ScopeForm), "tui.key.back"},
 	{Filter, []string{"/"}, scopes(ScopeList, ScopeRepos), "tui.key.filter"},
 	{AddAccount, []string{"a"}, scopes(ScopeList, ScopeDetail), "tui.key.add_account"},
 	{AddCompany, []string{"A"}, scopes(ScopeList), "tui.key.add_company"},
 	{Edit, []string{"e"}, scopes(ScopeList, ScopeDetail), "tui.key.edit"},
 	{Delete, []string{"d"}, scopes(ScopeList, ScopeDetail), "tui.key.delete"},
-	{Clone, []string{"c"}, scopes(ScopeList, ScopeDetail, ScopeApplyDone, ScopeCheck), "tui.key.clone"},
-	{Check, []string{"k"}, scopes(ScopeList, ScopeDetail, ScopeApplyDone, ScopeRepos), "tui.key.check"},
-	{Doctor, []string{"D"}, scopes(ScopeList, ScopeDetail), "tui.key.doctor"},
-	{Apply, []string{"p"}, scopes(ScopeList, ScopeDetail, ScopeKeyResult), "tui.key.apply"},
+	{Clone, []string{"c"}, scopes(ScopeList, ScopeDetail, ScopeApplyDone, ScopeCheck, ScopeHome), "tui.key.clone"},
+	{Check, []string{"k"}, scopes(ScopeList, ScopeDetail, ScopeApplyDone, ScopeRepos, ScopeHome), "tui.key.check"},
+	{Doctor, []string{"D"}, scopes(ScopeList, ScopeDetail, ScopeHome), "tui.key.doctor"},
+	{Apply, []string{"p"}, scopes(ScopeList, ScopeDetail, ScopeKeyResult, ScopeHome), "tui.key.apply"},
 	{SSHKey, []string{"g"}, scopes(ScopeList, ScopeDetail), "tui.key.genkey"},
-	{Import, []string{"i"}, scopes(ScopeList), "tui.key.import"},
+	{Import, []string{"i"}, scopes(ScopeList, ScopeHome), "tui.key.import"},
 	{Reload, []string{"r"}, scopes(ScopeList, ScopeRepos), "tui.key.reload"},
 	{Yes, []string{"y"}, scopes(ScopeApply, ScopeDialog), "tui.key.yes"},
 	{No, []string{"n"}, scopes(ScopeApply, ScopeDialog), "tui.key.no"},
@@ -134,7 +140,7 @@ var defs = []Def{
 	// Palette opens the same overlay as Help (an alias that works without a
 	// shifted key). Appended last so the sentinel labels of the actions above
 	// do not move.
-	{Palette, []string{"ctrl+k"}, append(scopes(ScopeList), allScopesButForm...), "tui.key.palette"},
+	{Palette, []string{"ctrl+k"}, append(scopes(ScopeList, ScopeHome), allScopesButForm...), "tui.key.palette"},
 }
 
 var defIndex = func() map[Action]int {

@@ -243,6 +243,14 @@ func TestTK11BackKey(t *testing.T) {
 
 func TestTK12QuitKey(t *testing.T) {
 	h := newHarnessKeys(t, basicCfg(), "quit: Q\n")
+	h.key("Q")
+	if h.quit() {
+		t.Fatal("Q quit from the Accounts screen: quit lives on the start menu")
+	}
+	h.key("q") // the back key: Accounts goes back to the start menu
+	if _, ok := h.top().(*homeScreen); !ok || h.quit() {
+		t.Fatalf("q: top %T quit %v", h.top(), h.quit())
+	}
 	h.key("q")
 	if h.quit() {
 		t.Fatal("q still quits")

@@ -57,6 +57,7 @@ type Paths struct {
 	ConfigDir       string // $XDG_CONFIG_HOME/gitid
 	ConfigFile      string // ConfigDir/config.yaml
 	KeyBindingsFile string // ConfigDir/keys.yaml (optional; gitid only reads it)
+	UpdateCheckFile string // ConfigDir/update-check.json (the cache of the update check)
 	GitDir          string // ConfigDir/git (generated gitconfig files)
 	BackupsDir      string // ConfigDir/backups
 	LockFile        string // ConfigDir/.lock
@@ -85,6 +86,7 @@ func (e Env) Paths() Paths {
 		ConfigDir:       cfg,
 		ConfigFile:      filepath.Join(cfg, "config.yaml"),
 		KeyBindingsFile: filepath.Join(cfg, "keys.yaml"),
+		UpdateCheckFile: filepath.Join(cfg, "update-check.json"),
 		GitDir:          filepath.Join(cfg, "git"),
 		BackupsDir:      filepath.Join(cfg, "backups"),
 		LockFile:        filepath.Join(cfg, ".lock"),

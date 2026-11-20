@@ -782,9 +782,14 @@ func TestQuitKeyAndHelpOverlay(t *testing.T) {
 	}
 	h.key("?")
 	h.mustNotContain(tr("tui.help.title"))
+	// q goes back from the Accounts screen to the start menu, where it quits
+	h.key("q")
+	if _, ok := h.top().(*homeScreen); !ok || h.quit() {
+		t.Fatalf("q on the list: top %T quit %v", h.top(), h.quit())
+	}
 	_, cmd := h.m.Update(keyMsg("q"))
 	if cmd == nil {
-		t.Fatal("q must quit on the list")
+		t.Fatal("q must quit on the start menu")
 	}
 	if _, ok := cmd().(tea.QuitMsg); !ok {
 		t.Fatal("q must return tea.Quit")

@@ -39,6 +39,8 @@ func main() {
 		IsTTY:   func() bool { return isTerminal(os.Stdin) && isTerminal(os.Stdout) },
 		Cwd:     os.Getwd,
 		Version: version,
+		// the TUI names the command that upgrades this install
+		Executable: os.Executable,
 		ReadSecret: func() (string, error) {
 			b, err := term.ReadPassword(os.Stdin.Fd())
 			return string(b), err
@@ -48,7 +50,7 @@ func main() {
 				return errors.New(i18n.T("cli.tui.needs_tty"))
 			}
 			cwd, _ := os.Getwd()
-			return tui.Run(svc, tui.Options{Cwd: cwd, Version: version})
+			return tui.Run(svc, tui.Options{Cwd: cwd, Version: version, CheckUpdates: true})
 		},
 		Lang: os.Getenv("GITID_LANG"),
 	}, os.Args[1:])

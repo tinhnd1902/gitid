@@ -1,0 +1,24 @@
+  gitid                                                                        ~
+                                                                                
+          _  _    _      _                                                      
+    __ _ (_)| |_ (_)  __| |                                                     
+   / _` || ||  _|| | / _` |                                                     
+   \__, ||_| \__||_| \__,_|                                                     
+   |___/                                                                        
+  The right Git account for every repo.  v0.1.8                                 
+                                                                                
+▌ 1  Accounts         Companies, accounts and SSH keys                          
+  2  Clone a repo     Into the right folder, with the right account             
+  3  Check repo       Which account the repo in this folder uses                
+  4  Browse repos     Repos on this machine and on your platforms               
+  5  Apply            Preview, then write ~/.gitconfig and ~/.ssh               
+  6  Doctor           Check git, SSH and the configuration                      
+  7  Import from git  Read the includeIf rules already in ~/.gitconfig          
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                         ● 11 unapplied changes 
+ This step: ▸ enter open                                                        
+ Always:    1-7 jump  ↑↓ move  ? all keys  q quit                               
