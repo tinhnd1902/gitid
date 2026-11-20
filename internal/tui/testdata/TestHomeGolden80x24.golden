@@ -1,10 +1,11 @@
   gitid                                                                        ~
                                                                                 
-          _  _    _      _                                                      
-    __ _ (_)| |_ (_)  __| |                                                     
-   / _` || ||  _|| | / _` |                                                     
-   \__, ||_| \__||_| \__,_|                                                     
-   |___/                                                                        
+   ██████╗ ██╗████████╗██╗██████╗                                               
+  ██╔════╝ ██║╚══██╔══╝██║██╔══██╗                                              
+  ██║  ███╗██║   ██║   ██║██║  ██║                                              
+  ██║   ██║██║   ██║   ██║██║  ██║                                              
+  ╚██████╔╝██║   ██║   ██║██████╔╝                                              
+   ╚═════╝ ╚═╝   ╚═╝   ╚═╝╚═════╝                                               
   Đúng tài khoản Git cho từng repo.  v0.1.8                                     
                                                                                 
 ▌ 1  Tài khoản      Công ty, tài khoản và SSH key                               
@@ -14,7 +15,6 @@
   5  Áp dụng        Xem trước rồi ghi vào ~/.gitconfig và ~/.ssh                
   6  Chẩn đoán      Kiểm tra git, SSH và cấu hình                               
   7  Nhập từ git    Đọc includeIf có sẵn trong ~/.gitconfig                     
-                                                                                
                                                                                 
                                                                                 
                                                                                 

@@ -2,15 +2,17 @@ package tui
 
 import "github.com/charmbracelet/lipgloss"
 
-// logoLines is the wordmark of the start menu: five rows of printable ASCII
-// (no glyph of ambiguous width, so the columns never shift). The backticks and
-// backslashes are why these are interpreted strings.
+// logoLines is the wordmark of the start menu: six rows of block letters drawn
+// with the full block and box-drawing runes. Those runes have an ambiguous East
+// Asian width, so the full layout checks the measured width (logoWidth) before
+// drawing it and falls back to the one-line wordmark when it does not fit.
 var logoLines = []string{
-	"        _  _    _      _",
-	"  __ _ (_)| |_ (_)  __| |",
-	" / _` || ||  _|| | / _` |",
-	" \\__, ||_| \\__||_| \\__,_|",
-	" |___/",
+	" ██████╗ ██╗████████╗██╗██████╗ ",
+	"██╔════╝ ██║╚══██╔══╝██║██╔══██╗",
+	"██║  ███╗██║   ██║   ██║██║  ██║",
+	"██║   ██║██║   ██║   ██║██║  ██║",
+	"╚██████╔╝██║   ██║   ██║██████╔╝",
+	" ╚═════╝ ╚═╝   ╚═╝   ╚═╝╚═════╝ ",
 }
 
 // logoWidth is the width of the widest logo row.

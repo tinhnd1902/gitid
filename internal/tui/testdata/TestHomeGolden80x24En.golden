@@ -1,10 +1,11 @@
   gitid                                                                        ~
                                                                                 
-          _  _    _      _                                                      
-    __ _ (_)| |_ (_)  __| |                                                     
-   / _` || ||  _|| | / _` |                                                     
-   \__, ||_| \__||_| \__,_|                                                     
-   |___/                                                                        
+   ██████╗ ██╗████████╗██╗██████╗                                               
+  ██╔════╝ ██║╚══██╔══╝██║██╔══██╗                                              
+  ██║  ███╗██║   ██║   ██║██║  ██║                                              
+  ██║   ██║██║   ██║   ██║██║  ██║                                              
+  ╚██████╔╝██║   ██║   ██║██████╔╝                                              
+   ╚═════╝ ╚═╝   ╚═╝   ╚═╝╚═════╝                                               
   The right Git account for every repo.  v0.1.8                                 
                                                                                 
 ▌ 1  Accounts         Companies, accounts and SSH keys                          
@@ -14,7 +15,6 @@
   5  Apply            Preview, then write ~/.gitconfig and ~/.ssh               
   6  Doctor           Check git, SSH and the configuration                      
   7  Import from git  Read the includeIf rules already in ~/.gitconfig          
-                                                                                
                                                                                 
                                                                                 
                                                                                 

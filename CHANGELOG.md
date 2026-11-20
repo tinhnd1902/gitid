@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Start menu: the logo is now a six-row block wordmark. It is drawn only when
+  it fits whole; otherwise the one-line wordmark is shown.
+
 ## [0.1.9] - 2026-11-20
 
 ### Added

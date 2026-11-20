@@ -374,7 +374,7 @@ func TestH11Sizes(t *testing.T) {
 				u = 1
 			}
 			_, bh := h.m.bodySize()
-			wantLogo := bh >= 9+n+u && tc.w >= 30
+			wantLogo := bh >= 10+n+u && tc.w >= homeFullMinW()
 			if got := strings.Contains(v, strings.TrimRight(logoLines[1], " ")); got != wantLogo {
 				t.Errorf("%s %dx%d update=%v: logo shown %v, want %v", lang, tc.w, tc.h, tc.update, got, wantLogo)
 			}
@@ -686,18 +686,18 @@ func TestH22IMEInput(t *testing.T) {
 	h.mustContain(tr("tui.status.ime"))
 }
 
-// The logo: five rows of printable ASCII, at most 26 wide, accent colour only.
+// The logo: six rows of block letters, 30 to 34 wide, accent colour only.
 func TestLogoShape(t *testing.T) {
-	if len(logoLines) != 5 {
+	if len(logoLines) != 6 {
 		t.Fatalf("%d rows", len(logoLines))
 	}
-	if w := logoWidth(); w > 26 || w < 20 {
+	if w := logoWidth(); w > 34 || w < 30 {
 		t.Fatalf("width %d", w)
 	}
 	for _, l := range logoLines {
 		for _, r := range l {
-			if r < ' ' || r > '~' {
-				t.Errorf("%q has the non-ASCII or control rune %q", l, r)
+			if !strings.ContainsRune(" █═║╔╗╚╝", r) {
+				t.Errorf("%q has the unexpected rune %q", l, r)
 			}
 		}
 	}

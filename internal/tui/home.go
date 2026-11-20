@@ -50,10 +50,12 @@ func homeJump() key.Binding {
 const (
 	homeMargin     = 2  // left margin of every line
 	homeMinDesc    = 12 // a description narrower than this is not shown
-	homeFullMinW   = 30 // narrower than this the logo is not drawn
-	homeFullFixed  = 9  // rows of the full layout around the menu (see frame)
+	homeFullFixed  = 10 // rows of the full layout around the menu (see frame)
 	homeCompactFix = 2  // rows of the compact layout around the menu
 )
+
+// homeFullMinW is the narrowest body that draws the logo whole: never cut.
+func homeFullMinW() int { return homeMargin + logoWidth() }
 
 type homeScreen struct {
 	sh   *shared
@@ -165,7 +167,7 @@ func (s *homeScreen) update() (app.UpdateNotice, bool) {
 // menu rows fit below them. The layouts, by the room they need (n menu rows,
 // u the update line):
 //
-//	full     logo, tagline: 9+n+u rows and 30 columns
+//	full     logo, tagline: 10+n+u rows and homeFullMinW() columns
 //	compact  one line with the name and the tagline: 2+n+u rows
 //	minimal  the menu alone (and the update line when it fits)
 func (s *homeScreen) frame() (lines []string, rows int) {
@@ -189,10 +191,10 @@ func (s *homeScreen) frame() (lines []string, rows int) {
 		return margin + s.updateText(notice, inner)
 	}
 	switch {
-	case s.h >= homeFullFixed+n+u && s.w >= homeFullMinW:
+	case s.h >= homeFullFixed+n+u && s.w >= homeFullMinW():
 		lines = append(lines, "")
 		for _, l := range logoLines {
-			lines = append(lines, margin+st.Logo.Render(trunc(l, inner)))
+			lines = append(lines, margin+st.Logo.Render(strings.TrimRight(l, " ")))
 		}
 		lines = append(lines, margin+s.tagline(ver, inner), "")
 		if hasUpdate {
