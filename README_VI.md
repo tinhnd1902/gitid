@@ -37,8 +37,8 @@ tồn tại, để trang không bao giờ hiện ảnh lỗi.
 - **Clone và sửa remote:** clone bằng đúng tài khoản với thanh tiến trình, kiểm tra repo đang dùng danh tính nào, và sửa remote sai.
 - **Trình duyệt repo:** một màn hình có tab Trên máy (mọi repo trong thư mục các công ty, tài khoản mà remote khớp và điều gì đang sai), tab URL (clone) và tab Online (repo mà từng tài khoản thấy trên GitHub, GitLab, Gitea, Bitbucket Cloud hoặc Azure DevOps, nếu bạn có token cho nó).
 - **Chẩn đoán và nhập cấu hình:** kiểm tra toàn bộ thiết lập với tiến trình từng mục, và bắt đầu nhanh từ các `includeIf` bạn đã có.
-- **Trang chủ:** `gitid` mở một menu đánh số các việc hằng ngày (tài khoản, clone, kiểm tra repo, duyệt repo, áp dụng, chẩn đoán, nhập từ git); bấm `1` đến `7` để vào thẳng một việc. Menu cũng báo bằng một dòng khi có bản mới (xem [Mạng](#an-toàn)).
-- **Hai ngôn ngữ:** tiếng Việt (mặc định) và tiếng Anh, đổi được cho từng lần chạy.
+- **Trang chủ:** `gitid` mở một menu đánh số các việc hằng ngày (tài khoản, clone, kiểm tra repo, duyệt repo, áp dụng, chẩn đoán, nhập từ git, cài đặt); bấm `1` đến `8` để vào thẳng một việc. Menu cũng báo bằng một dòng khi có bản mới (xem [Mạng](#an-toàn)).
+- **Hai ngôn ngữ:** tiếng Việt (mặc định) và tiếng Anh. Đổi trong Cài đặt (trang chủ, bấm `8`): đổi có hiệu lực ngay và được lưu vào `settings.language`. `GITID_LANG` vẫn được ưu tiên khi gitid khởi động.
 
 ## Bắt đầu nhanh
 
@@ -105,7 +105,7 @@ install -m 0755 gitid /usr/local/bin/gitid   # hoặc thư mục bất kỳ tron
 **Chạy:**
 
 ```bash
-gitid            # mở trang chủ; bấm 1-7 để chọn việc, ? để xem phím tắt, q để thoát
+gitid            # mở trang chủ; bấm 1-8 để chọn việc, ? để xem phím tắt, q để thoát
 ```
 
 Lần đầu dùng TUI: bấm `1` để mở Tài khoản (trang chủ ghi «Bắt đầu ở đây: thêm công ty đầu tiên»), rồi làm ba bước (màn hình cũng hiện sẵn các bước, và dòng dưới cùng luôn đánh dấu phím tiếp theo bằng `▸`):
@@ -274,7 +274,7 @@ gitid đọc và ghi một tệp cấu hình, và đọc thêm một tệp phím
 | Tệp git được sinh ra  | `<thư mục cấu hình>/git/`                                                    |
 | Sao lưu               | `<thư mục cấu hình>/backups/`                                                |
 
-Biến môi trường: `XDG_CONFIG_HOME` (vị trí cấu hình, mặc định `~/.config`) và `GITID_LANG` (`vi` hoặc `en`; ưu tiên hơn `settings.language`).
+Biến môi trường: `XDG_CONFIG_HOME` (vị trí cấu hình, mặc định `~/.config`) và `GITID_LANG` (`vi` hoặc `en`; ưu tiên hơn `settings.language` mỗi lần gitid khởi động). Màn hình Cài đặt (trang chủ, bấm `8`) đổi `settings.language` giúp bạn; nếu `GITID_LANG` đang được đặt, màn hình nói rõ và lần mở sau gitid dùng lại biến đó.
 
 ```yaml
 version: 1
@@ -378,7 +378,7 @@ Bấm `r` ở danh sách để tải lại `config.yaml` và `keys.yaml` mà kh�
 
 ### Trang chủ
 
-`gitid` mở một menu, không phải danh sách tài khoản. Nó hiện chữ gitid, câu giới thiệu kèm phiên bản, một dòng báo khi có bản mới, và bảy việc, mỗi việc có số và một dòng mô tả:
+`gitid` mở một menu, không phải danh sách tài khoản. Nó hiện chữ gitid, câu giới thiệu kèm phiên bản, một dòng báo khi có bản mới, và tám việc, mỗi việc có số và một dòng mô tả:
 
 ```text
   1  Tài khoản      Công ty, tài khoản và SSH key
@@ -388,9 +388,14 @@ Bấm `r` ở danh sách để tải lại `config.yaml` và `keys.yaml` mà kh�
   5  Áp dụng        Xem trước rồi ghi vào ~/.gitconfig và ~/.ssh
   6  Chẩn đoán      Kiểm tra git, SSH và cấu hình
   7  Nhập từ git    Đọc includeIf có sẵn trong ~/.gitconfig
+  8  Cài đặt        Ngôn ngữ giao diện
 ```
 
-Bấm `1` đến `7` để mở ngay một việc, hoặc di chuyển con trỏ `▌` bằng `↑`/`↓` (cả `home`/`end` và `pgup`/`pgdn`; con trỏ dừng ở hai đầu) rồi bấm `enter`. Các chữ bạn quen dùng ở màn hình Tài khoản vẫn chạy từ trang chủ: `c` clone, `k` kiểm tra, `p` áp dụng, `D` chẩn đoán, `i` nhập từ git. `q` thoát, còn `esc` không làm gì ở đây; ở mọi màn hình khác `esc` và `q` quay lại một bước, nên `esc` ở Tài khoản đưa về trang chủ (bộ lọc đang áp dụng được xóa trước). Chữ số chỉ là phím tắt ở trang chủ: trong biểu mẫu, ô lọc hay bảng `?` chúng được gõ như chữ. Sau khi áp dụng xong, `enter` quay về màn hình đã bắt đầu luồng đó (trang chủ, hoặc Tài khoản nếu bạn bắt đầu từ đó). Khi có bản mới, một dòng báo và nêu lệnh hợp với cách bạn cài gitid (`brew upgrade gitid` với Homebrew, `install.sh` với script cài, hoặc trang releases nếu không rõ); xem [Mạng](#an-toàn) để biết việc kiểm tra gửi gì và cách tắt.
+Bấm `1` đến `8` để mở ngay một việc, hoặc di chuyển con trỏ `▌` bằng `↑`/`↓` (cả `home`/`end` và `pgup`/`pgdn`; con trỏ dừng ở hai đầu) rồi bấm `enter`. Các chữ bạn quen dùng ở màn hình Tài khoản vẫn chạy từ trang chủ: `c` clone, `k` kiểm tra, `p` áp dụng, `D` chẩn đoán, `i` nhập từ git (Cài đặt không có chữ: dùng `8` hoặc `enter`). `q` thoát, còn `esc` không làm gì ở đây; ở mọi màn hình khác `esc` và `q` quay lại một bước, nên `esc` ở Tài khoản đưa về trang chủ (bộ lọc đang áp dụng được xóa trước). Chữ số chỉ là phím tắt ở trang chủ: trong biểu mẫu, ô lọc hay bảng `?` chúng được gõ như chữ. Sau khi áp dụng xong, `enter` quay về màn hình đã bắt đầu luồng đó (trang chủ, hoặc Tài khoản nếu bạn bắt đầu từ đó). Khi có bản mới, một dòng báo và nêu lệnh hợp với cách bạn cài gitid (`brew upgrade gitid` với Homebrew, `install.sh` với script cài, hoặc trang releases nếu không rõ); xem [Mạng](#an-toàn) để biết việc kiểm tra gửi gì và cách tắt.
+
+### Cài đặt
+
+`8` ở trang chủ mở Cài đặt. Hiện có một mục, ngôn ngữ giao diện, hiện dưới dạng lựa chọn: `◉ Tiếng Việt  ○ English`. `←`, `→` và `enter` chuyển sang ngôn ngữ còn lại. Thay đổi có hiệu lực ngay ở mọi màn hình (thanh trợ giúp, bảng `?`, trang chủ), và gitid lưu vào `settings.language` trong `config.yaml` ở nền, kèm bản sao lưu của tệp cũ như mọi lần lưu khác. Đây không phải thay đổi chờ áp dụng: `apply` không có gì để ghi cho nó. Nếu không đọc được `config.yaml` hoặc tệp không hợp lệ, ngôn ngữ vẫn đổi trong lần chạy này và thanh trạng thái báo không lưu được; tệp giữ nguyên. Nếu biến môi trường `GITID_LANG` đang được đặt, màn hình nói rõ: lựa chọn của bạn vẫn được lưu, nhưng lần mở sau gitid dùng lại biến đó. `esc` quay về trang chủ.
 
 ### Danh sách
 

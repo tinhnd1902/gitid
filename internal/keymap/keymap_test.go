@@ -1112,3 +1112,29 @@ func TestKMH7ExampleNamesHome(t *testing.T) {
 		}
 	}
 }
+
+// KM-S1: the Settings screen is a scope with the help, palette and back keys
+// only, and the start menu stays the last scope.
+func TestKMS1SettingsScope(t *testing.T) {
+	if string(keymap.ScopeSettings) != "settings" || !slices.Contains(keymap.Scopes(), keymap.ScopeSettings) {
+		t.Fatalf("scopes %v", keymap.Scopes())
+	}
+	var live []keymap.Action
+	for _, d := range keymap.Defs() {
+		if slices.Contains(d.Scopes, keymap.ScopeSettings) {
+			live = append(live, d.Action)
+		}
+	}
+	want := []keymap.Action{keymap.Help, keymap.Back, keymap.Palette}
+	if !slices.Equal(live, want) {
+		t.Fatalf("actions live on settings: %v, want %v", live, want)
+	}
+	if keymap.Reserved(keymap.ScopeSettings) != "" {
+		t.Errorf("reserved %q", keymap.Reserved(keymap.ScopeSettings))
+	}
+	// a custom key that clashes inside the scope is still refused
+	m, issues := keymap.Parse([]byte("help: \"x\"\nback: \"x\"\n"))
+	if len(issues) == 0 {
+		t.Errorf("no issue for help and back on one key: %v", m.Keys(keymap.Help))
+	}
+}

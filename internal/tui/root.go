@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/tinhnd1902/gitid/internal/app"
+	"github.com/tinhnd1902/gitid/internal/i18n"
 	"github.com/tinhnd1902/gitid/internal/keymap"
 )
 
@@ -56,6 +57,13 @@ type Model struct {
 	// keyShown are the keys.yaml problems the status bar already announced,
 	// so the same set is not announced again after every reload.
 	keyShown []keymap.Issue
+	// langWant is the language chosen last in Settings; langSaving is set
+	// while a save of it runs. There is one save at a time: when the choice
+	// changed meanwhile, the next one starts when the first returns, so the
+	// file always ends with the last choice. A program that quits during a
+	// save may lose the last choice (the write itself is atomic).
+	langWant   string
+	langSaving bool
 }
 
 // New creates the root model. The configuration is loaded by Init.
@@ -142,6 +150,65 @@ func (m *Model) loadCmd() tea.Cmd {
 		keys, issues := keymap.Load(svc.Env)
 		return cfgLoadedMsg{cfg: cfg, err: err, keys: keys, keyIssues: issues}
 	}
+}
+
+// setLang switches the language of the whole interface at once. Every screen
+// draws its text when it renders, and the key descriptions (built once) are
+// rebuilt in place, so the next frame is in the new language. The choice is
+// saved in the background.
+func (m *Model) setLang(msg setLangMsg) tea.Cmd {
+	if msg.code == i18n.Lang() {
+		return nil
+	}
+	i18n.SetLang(msg.code)
+	if i18n.Lang() != msg.code {
+		return nil // not a language gitid has
+	}
+	m.langWant = msg.code
+	*m.sh.km = *NewKeyMap(m.sh.km.keys)
+	cmds := []tea.Cmd{m.broadcast(msg)}
+	if !m.langSaving {
+		m.langSaving = true
+		cmds = append(cmds, m.saveLangCmd(msg.code))
+	}
+	return tea.Batch(cmds...)
+}
+
+// saveLangCmd writes settings.language. It changes that one field of the
+// file as it is on disk, so what another window saved in the meantime is kept.
+func (m *Model) saveLangCmd(code string) tea.Cmd {
+	svc := m.sh.svc
+	return func() tea.Msg {
+		cfg, err := svc.Load()
+		if err != nil {
+			return langSavedMsg{code: code, err: err}
+		}
+		cfg.Settings.Language = code
+		cfg, _, err = svc.Commit(cfg)
+		return langSavedMsg{code: code, cfg: cfg, err: err}
+	}
+}
+
+// langSaved handles the end of a save: the saved configuration becomes the
+// shared one (so the pending badge follows), and a newer choice is saved next.
+func (m *Model) langSaved(msg langSavedMsg) tea.Cmd {
+	m.langSaving = false
+	var cmds []tea.Cmd
+	if msg.err != nil {
+		// the language stays switched for this run
+		cmds = append(cmds, m.setStatus(statusMsg{level: levelErr, text: tr("tui.settings.lang.save_failed", errText(msg.err))}))
+	} else {
+		m.sh.cfg, m.sh.loaded = msg.cfg, true
+		cmds = append(cmds, m.broadcast(cfgChangedMsg{msg.cfg}), m.planCmd())
+		if m.langWant == msg.code {
+			cmds = append(cmds, m.setStatus(statusMsg{level: levelOK, text: tr("tui.settings.lang.saved", tr("tui.settings.lang."+msg.code))}))
+		}
+	}
+	if m.langWant != "" && m.langWant != msg.code {
+		m.langSaving = true
+		cmds = append(cmds, m.saveLangCmd(m.langWant))
+	}
+	return tea.Batch(cmds...)
 }
 
 func (m *Model) planCmd() tea.Cmd {
@@ -347,6 +414,10 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case cfgChangedMsg:
 		m.sh.cfg, m.sh.loaded = msg.cfg, true
 		return m, tea.Batch(m.broadcast(msg), m.planCmd())
+	case setLangMsg:
+		return m, m.setLang(msg)
+	case langSavedMsg:
+		return m, m.langSaved(msg)
 	case refreshPlanMsg:
 		return m, m.planCmd()
 	case planBuiltMsg:

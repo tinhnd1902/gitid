@@ -37,8 +37,8 @@ page never shows a broken image.
 - **Clone and repair:** clone with the right account and a live progress bar, check which identity a repository really uses, and rewrite a wrong remote.
 - **Repo browser:** one screen with a Local tab (every repository under your company folders, the account its remote maps to, and what is wrong), a URL tab (clone) and an Online tab (the repositories each of your accounts can see on GitHub, GitLab, Gitea, Bitbucket Cloud or Azure DevOps, if you have a token for it).
 - **Doctor and import:** diagnose the whole setup with per-check progress, and bootstrap from the `includeIf` entries you already have.
-- **Start menu:** `gitid` opens a numbered menu of the everyday tasks (accounts, clone, check a repo, browse repos, apply, doctor, import); press `1` to `7` to jump straight to one. It also tells you, in one line, when a newer release exists (see [Network](#safety)).
-- **Two languages:** Vietnamese (default) and English, switchable per run.
+- **Start menu:** `gitid` opens a numbered menu of the everyday tasks (accounts, clone, check a repo, browse repos, apply, doctor, import, settings); press `1` to `8` to jump straight to one. It also tells you, in one line, when a newer release exists (see [Network](#safety)).
+- **Two languages:** Vietnamese (default) and English. Switch in Settings (start menu, `8`): the change applies at once and is saved to `settings.language`. `GITID_LANG` still wins when gitid starts.
 
 ## Quick Start
 
@@ -105,7 +105,7 @@ install -m 0755 gitid /usr/local/bin/gitid   # or any directory on your PATH
 **Run:**
 
 ```bash
-gitid            # opens the start menu; press 1-7 to pick a task, ? for the key map, q to quit
+gitid            # opens the start menu; press 1-8 to pick a task, ? for the key map, q to quit
 ```
 
 First run in the TUI: press `1` to open Accounts (the start menu says "Start here: add your first company"), then three steps (the screen shows them too, and the bottom line always marks the next key with `▸`):
@@ -274,7 +274,7 @@ gitid reads and writes one configuration file, and reads one optional file of ke
 | Generated git files   | `<config dir>/git/`                                                          |
 | Backups               | `<config dir>/backups/`                                                      |
 
-Environment variables: `XDG_CONFIG_HOME` (config location, default `~/.config`) and `GITID_LANG` (`vi` or `en`; overrides `settings.language`).
+Environment variables: `XDG_CONFIG_HOME` (config location, default `~/.config`) and `GITID_LANG` (`vi` or `en`; overrides `settings.language` each time gitid starts). The Settings screen (start menu, `8`) changes `settings.language` for you; if `GITID_LANG` is set it says so, and the variable is used again at the next start.
 
 ```yaml
 version: 1
@@ -378,7 +378,7 @@ Press `r` on the list to reload `config.yaml` and `keys.yaml` without leaving th
 
 ### Start menu
 
-`gitid` opens a menu, not the list of accounts. It shows the wordmark, the tagline with the version, an update line when a newer release exists, and seven tasks, each with a number and a one-line description:
+`gitid` opens a menu, not the list of accounts. It shows the wordmark, the tagline with the version, an update line when a newer release exists, and eight tasks, each with a number and a one-line description:
 
 ```text
   1  Accounts        Companies, accounts and SSH keys
@@ -388,9 +388,14 @@ Press `r` on the list to reload `config.yaml` and `keys.yaml` without leaving th
   5  Apply           Preview, then write ~/.gitconfig and ~/.ssh
   6  Doctor          Check git, SSH and the configuration
   7  Import from git Read the includeIf rules already in ~/.gitconfig
+  8  Settings        Interface language
 ```
 
-Press `1` to `7` to open a task at once, or move the `▌` cursor with `↑`/`↓` (`home`/`end` and `pgup`/`pgdn` too; it stops at the ends) and press `enter`. The letters you used on the Accounts screen still work from the menu: `c` clone, `k` check, `p` apply, `D` doctor, `i` import. `q` quits, and `esc` does nothing here; on every other screen `esc` and `q` go back one step, so `esc` on Accounts returns to the menu (a filter you applied is cleared first). Digits are only shortcuts on the menu: in a form, a filter or the `?` overlay they are typed as text. After an apply finishes, `enter` returns to the screen the flow started from (the menu, or Accounts when you started it there). When a newer release exists, one line says so and names the command that fits how gitid was installed (`brew upgrade gitid` for Homebrew, `install.sh` for the install script, or the releases page otherwise); see [Network](#safety) for what the check sends and how to turn it off.
+Press `1` to `8` to open a task at once, or move the `▌` cursor with `↑`/`↓` (`home`/`end` and `pgup`/`pgdn` too; it stops at the ends) and press `enter`. The letters you used on the Accounts screen still work from the menu: `c` clone, `k` check, `p` apply, `D` doctor, `i` import (Settings has no letter: use `8` or `enter`). `q` quits, and `esc` does nothing here; on every other screen `esc` and `q` go back one step, so `esc` on Accounts returns to the menu (a filter you applied is cleared first). Digits are only shortcuts on the menu: in a form, a filter or the `?` overlay they are typed as text. After an apply finishes, `enter` returns to the screen the flow started from (the menu, or Accounts when you started it there). When a newer release exists, one line says so and names the command that fits how gitid was installed (`brew upgrade gitid` for Homebrew, `install.sh` for the install script, or the releases page otherwise); see [Network](#safety) for what the check sends and how to turn it off.
+
+### Settings
+
+`8` on the start menu opens Settings. It has one setting for now, the interface language, shown as a choice: `◉ Tiếng Việt  ○ English`. `←`, `→` and `enter` move to the other language. The change applies at once, on every screen (help bar, `?` overlay, start menu), and gitid saves it to `settings.language` in `config.yaml` in the background, with a backup of the previous file like any other save. It is not a pending change: `apply` has nothing to write for it. If `config.yaml` cannot be read or does not validate, the language still changes for this run and the status line says it could not be saved; the file is left as it was. If the environment variable `GITID_LANG` is set, the screen says so: your choice is saved, but the variable is used again the next time gitid starts. `esc` goes back to the start menu.
 
 ### List
 

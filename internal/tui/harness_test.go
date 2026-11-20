@@ -27,8 +27,15 @@ import (
 func TestMain(m *testing.M) {
 	lipgloss.SetColorProfile(termenv.Ascii)
 	i18n.SetLang("vi")
+	baseLang = i18n.Lang()
 	os.Exit(m.Run())
 }
+
+// baseLang is the language every test starts in (set by TestMain). The
+// harness puts it back when its test ends: a test that switches the language
+// before it builds a harness (or through the Settings screen) must not leak
+// into the next one.
+var baseLang string
 
 // defaultIdle is the idle wait of new harnesses (0: 60ms). Tests run one at a
 // time, so a test that builds many harnesses may shorten it while it runs.
@@ -99,6 +106,9 @@ func newHomeHarness(t *testing.T, cfg *config.Config, keysYAML ...string) *harne
 // before the model starts.
 func buildHarnessOpts(t *testing.T, cfg *config.Config, mutate func(*env.Env), before func(e env.Env), opts Options, tune func(*app.Service)) *harness {
 	t.Helper()
+	// the language is process-global and the Settings screen changes it: put
+	// the starting language back when the test ends
+	t.Cleanup(func() { i18n.SetLang(baseLang) })
 	e := testutil.TempEnv(t)
 	if mutate != nil {
 		mutate(&e)

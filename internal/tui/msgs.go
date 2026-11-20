@@ -60,6 +60,15 @@ type (
 		notice app.UpdateNotice
 		ok     bool
 	}
+	// setLangMsg: the user chose the interface language in Settings. The root
+	// switches the language at once and saves it in the background.
+	setLangMsg struct{ code string }
+	// langSavedMsg is the answer of that save (cfg: what is on disk now).
+	langSavedMsg struct {
+		code string
+		cfg  config.Config
+		err  error
+	}
 	planBuiltMsg struct {
 		seq  int
 		plan plan.Plan

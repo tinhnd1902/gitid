@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Settings screen: the start menu has an eighth row, Settings (`8`), with the
+  interface language as a radio (Tiếng Việt, English). `←`, `→` and `enter`
+  switch it; the whole interface changes at once and the choice is saved to
+  `settings.language` in `config.yaml` (not a pending change for `apply`).
+  When `GITID_LANG` is set, the screen says gitid uses it again at the next
+  start. A new `settings` scope in the key map carries the help, palette and
+  back keys.
+
 ### Changed
 
 - Start menu: the logo is now a six-row block wordmark. It is drawn only when

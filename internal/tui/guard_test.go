@@ -81,7 +81,7 @@ func importTwo(t *testing.T, keysYAML ...string) *harness {
 // grdOverlay are the states whose "?" overlay list is checked too; one state
 // per screen is enough, the help bar of every state is always checked.
 var grdOverlay = map[string]bool{
-	"home": true, "list welcome": true, "list account applied": true, "list pending": true, "detail ssh account": true,
+	"home": true, "settings": true, "settings env note": true, "list welcome": true, "list account applied": true, "list pending": true, "detail ssh account": true,
 	"confirm ready": true, "confirm done": true, "check result": true, "clone pick": true,
 	"key result": true, "doctor": true, "import proposals": true, "delete step 0": true, "keygen mode": true,
 	"repos local list": true, "repos online list": true,
@@ -107,6 +107,8 @@ func grdStates() []grdState {
 			h.send(updateMsg{notice: app.UpdateNotice{Latest: "0.1.9", Method: app.UpdateViaBrew}, ok: true})
 			return h
 		}},
+		{"settings", func(t *testing.T, y string) *harness { return settingsHarnessKeys(t, "", y) }},
+		{"settings env note", func(t *testing.T, y string) *harness { return settingsHarnessKeys(t, "en", y) }},
 		{"list welcome", func(t *testing.T, y string) *harness { return hk(t, nil, []string{y}) }},
 		{"list company without accounts", func(t *testing.T, y string) *harness { return hk(t, emptyCompanyCfg("personal"), []string{y}) }},
 		{"list account applied", func(t *testing.T, y string) *harness {

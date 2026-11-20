@@ -524,6 +524,12 @@ func (f *form) inputRows(ff *formField, focused bool) []string {
 	return rows
 }
 
+// The marks of a radio option (the form and the Settings screen share them).
+const (
+	radioOn  = "◉ "
+	radioOff = "○ "
+)
+
 // optionRows lays the options out as radio marks. Inline options share rows
 // and wrap to the next one when they do not fit; none is ever cut. It
 // returns the rows and the row of the chosen option.
@@ -543,9 +549,9 @@ func (f *form) optionRows(labels []string, cur int, inline, focused bool) ([]str
 		line, lineW = "", 0
 	}
 	for i, label := range labels {
-		mark, style := "○ ", off
+		mark, style := radioOff, off
 		if i == cur {
-			mark, style = "◉ ", on
+			mark, style = radioOn, on
 		}
 		text := mark + label
 		w := lipgloss.Width(text)

@@ -33,6 +33,7 @@ var homeItems = []homeItem{
 	{"apply", func(km *KeyMap) key.Binding { return km.Apply }, func(sh *shared) Screen { return newConfirmScreen(sh, tr("tui.confirm.title_apply")) }},
 	{"doctor", func(km *KeyMap) key.Binding { return km.Doctor }, func(sh *shared) Screen { return newDoctorScreen(sh) }},
 	{"import", func(km *KeyMap) key.Binding { return km.Import }, func(sh *shared) Screen { return newImportScreen(sh) }},
+	{"settings", nil, func(sh *shared) Screen { return newSettingsScreen(sh) }},
 }
 
 // homeJump is the binding of the digits. They are fixed keys (like the

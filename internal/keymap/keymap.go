@@ -68,6 +68,9 @@ const (
 	// ScopeHome is the start menu. Its numbers are fixed keys, like the
 	// arrows.
 	ScopeHome Scope = "home"
+	// ScopeSettings is the Settings screen. It uses no rebindable letters:
+	// only the help, palette and back keys live here.
+	ScopeSettings Scope = "settings"
 )
 
 const (
@@ -86,7 +89,7 @@ const MaxFileSize = maxKeyFileBytes
 
 var scopeOrder = []Scope{
 	ScopeList, ScopeDetail, ScopeApply, ScopeApplyDone, ScopeCheck, ScopeDialog,
-	ScopeClone, ScopeRepos, ScopeKeyResult, ScopeDoctor, ScopeImport, ScopeForm, ScopeHome,
+	ScopeClone, ScopeRepos, ScopeKeyResult, ScopeDoctor, ScopeImport, ScopeForm, ScopeSettings, ScopeHome,
 }
 
 // reserved are the letters a scope uses itself (they are handled inside
@@ -107,7 +110,7 @@ type Def struct {
 
 func (d Def) in(s Scope) bool { return slices.Contains(d.Scopes, s) }
 
-var allScopesButForm = []Scope{ScopeDetail, ScopeApply, ScopeApplyDone, ScopeCheck, ScopeDialog, ScopeClone, ScopeRepos, ScopeKeyResult, ScopeDoctor, ScopeImport}
+var allScopesButForm = []Scope{ScopeDetail, ScopeApply, ScopeApplyDone, ScopeCheck, ScopeDialog, ScopeClone, ScopeRepos, ScopeKeyResult, ScopeDoctor, ScopeImport, ScopeSettings}
 
 func scopes(s ...Scope) []Scope { return s }
 

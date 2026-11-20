@@ -83,11 +83,11 @@ func TestH2DigitsOpenTheItems(t *testing.T) {
 	}
 }
 
-// H3: other keys that look like digits do nothing.
+// H3: other keys that look like digits do nothing (8 is the last item since the Settings screen; 9 is the first one past the menu).
 func TestH3OtherDigitsDoNothing(t *testing.T) {
 	h := newHomeHarness(t, basicCfg())
 	before := h.snapshot()
-	for _, k := range []string{"8", "9", "0", "alt+1", "!", "x"} {
+	for _, k := range []string{"9", "0", "alt+1", "!", "x"} {
 		h.key(k)
 		if h.snapshot() != before {
 			t.Errorf("%q changed the screen", k)
@@ -590,7 +590,7 @@ func TestH16English(t *testing.T) {
 	h := newHomeHarness(t, basicCfg())
 	h.mustContain("The right Git account for every repo.", "Clone a repo", "Import from git")
 	hb := h.helpLine()
-	for _, want := range []string{"enter open", "1-7 jump", "q quit", "all keys"} {
+	for _, want := range []string{"enter open", "1-8 jump", "q quit", "all keys"} {
 		if !strings.Contains(hb, want) {
 			t.Errorf("help bar %q lacks %q", hb, want)
 		}
@@ -605,7 +605,7 @@ func TestHelpBarOfTheMenu(t *testing.T) {
 	if len(rows) != 2 || !strings.HasPrefix(rows[0], "▸ enter mở") {
 		t.Fatalf("rows %q", rows)
 	}
-	want := []string{"1-7 chọn nhanh", "↑↓ di chuyển", "? tất cả phím", "q thoát"}
+	want := []string{"1-8 chọn nhanh", "↑↓ di chuyển", "? tất cả phím", "q thoát"}
 	prev := -1
 	for _, w := range want {
 		i := strings.Index(rows[1], w)
@@ -730,7 +730,7 @@ func TestHomeFrameHasOnlyStyling(t *testing.T) {
 func TestOverlayOnHomeNamesTheItems(t *testing.T) {
 	h := newHomeHarness(t, basicCfg())
 	h.key("?")
-	h.mustContain("1-7", "Clone repo", "Kiểm tra repo", "Áp dụng", "Chẩn đoán", "Nhập từ git")
+	h.mustContain("1-8", "Clone repo", "Kiểm tra repo", "Áp dụng", "Chẩn đoán", "Nhập từ git")
 	h.mustNotContain(tr("tui.key.back_global"))
 }
 

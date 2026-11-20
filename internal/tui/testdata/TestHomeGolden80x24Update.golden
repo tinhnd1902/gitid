@@ -17,8 +17,8 @@
   5  Áp dụng        Xem trước rồi ghi vào ~/.gitconfig và ~/.ssh                
   6  Chẩn đoán      Kiểm tra git, SSH và cấu hình                               
   7  Nhập từ git    Đọc includeIf có sẵn trong ~/.gitconfig                     
-                                                                                
+  8  Cài đặt        Ngôn ngữ giao diện                                          
                                                                                 
                                                      ● 11 thay đổi chưa áp dụng 
  Bước này: ▸ enter mở                                                           
- Luôn có:  1-7 chọn nhanh  ↑↓ di chuyển  ? tất cả phím  q thoát                 
+ Luôn có:  1-8 chọn nhanh  ↑↓ di chuyển  ? tất cả phím  q thoát                 

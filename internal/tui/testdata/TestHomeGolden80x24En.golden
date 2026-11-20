@@ -15,10 +15,10 @@
   5  Apply            Preview, then write ~/.gitconfig and ~/.ssh               
   6  Doctor           Check git, SSH and the configuration                      
   7  Import from git  Read the includeIf rules already in ~/.gitconfig          
-                                                                                
+  8  Settings         Interface language                                        
                                                                                 
                                                                                 
                                                                                 
                                                          ● 11 unapplied changes 
  This step: ▸ enter open                                                        
- Always:    1-7 jump  ↑↓ move  ? all keys  q quit                               
+ Always:    1-8 jump  ↑↓ move  ? all keys  q quit                               
